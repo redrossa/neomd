@@ -29,9 +29,22 @@
 		B049D22B304BF5BC0045E474 /* NeoMDUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NeoMDUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		B0A1E0011A2B3C4D5E6F7081 /* Exceptions for "NeoMD" folder in "NeoMD" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B049D213304BF5BB0045E474 /* NeoMD */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		B049D216304BF5BB0045E474 /* NeoMD */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B0A1E0011A2B3C4D5E6F7081 /* Exceptions for "NeoMD" folder in "NeoMD" target */,
+			);
 			path = NeoMD;
 			sourceTree = "<group>";
 		};
