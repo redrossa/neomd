@@ -162,47 +162,67 @@ final class DocumentOpeningUITests: XCTestCase {
     }
 
     @MainActor
-    private func assertNativeLocation(
+    private func invokeNativeLocationAction(
         of url: URL,
+        excluding otherURL: URL,
         in window: XCUIElement,
         app: XCUIApplication,
         activationOffset: CGVector = CGVector(dx: 0.5, dy: 0.01),
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        let titleBar = window.coordinate(withNormalizedOffset: activationOffset)
-        titleBar.click()
+        window.coordinate(withNormalizedOffset: activationOffset).click()
 
-        let documentActions = window.menuButtons["document actions"]
+        let title = window.staticTexts[url.lastPathComponent]
         XCTAssertTrue(
-            documentActions.waitForExistence(timeout: 5),
-            "The native title area should expose document actions.",
+            title.waitForExistence(timeout: 5),
+            "The native title area should display the filename.",
             file: file,
             line: line
         )
-        documentActions.click()
-
-        let locationLabel = app.descendants(matching: .any).matching(
-            NSPredicate(format: "value == 'Where:'")
-        ).firstMatch
-        XCTAssertTrue(
-            locationLabel.waitForExistence(timeout: 5),
-            "The native document menu should expose the file location.",
-            file: file,
-            line: line
-        )
-        let expectedLocation = url.deletingLastPathComponent().lastPathComponent
-        let location = app.popUpButtons.matching(
-            NSPredicate(format: "value == %@", expectedLocation)
-        ).firstMatch
-        XCTAssertTrue(location.waitForExistence(timeout: 5), file: file, line: line)
-        XCTAssertEqual(location.value as? String, expectedLocation, file: file, line: line)
-
-        app.typeKey(.escape, modifierFlags: [])
-        if locationLabel.exists {
-            app.typeKey(.escape, modifierFlags: [])
+        XCUIElement.perform(withKeyModifiers: .command) {
+            title.click()
         }
-        XCTAssertTrue(locationLabel.waitForNonExistence(timeout: 5), file: file, line: line)
+
+        let expectedLocation = url.deletingLastPathComponent().lastPathComponent
+        let otherLocation = otherURL.deletingLastPathComponent().lastPathComponent
+        let locationItem = app.menuItems[expectedLocation]
+        XCTAssertTrue(
+            locationItem.waitForExistence(timeout: 5),
+            "Command-clicking the title should expose the document's ancestor path.",
+            file: file,
+            line: line
+        )
+        XCTAssertTrue(locationItem.isEnabled, file: file, line: line)
+        XCTAssertFalse(
+            app.menuItems[otherLocation].exists,
+            "The path menu must not report the other same-named document's location.",
+            file: file,
+            line: line
+        )
+
+        locationItem.click()
+
+        let finder = XCUIApplication(bundleIdentifier: "com.apple.finder")
+        let finderWindow = finder.windows[expectedLocation]
+        defer {
+            if finderWindow.exists {
+                finder.activate()
+                let closeButton = finderWindow.buttons.matching(
+                    identifier: "_XCUI:CloseWindow"
+                ).firstMatch
+                if closeButton.exists {
+                    closeButton.click()
+                }
+            }
+            app.activate()
+        }
+        XCTAssertTrue(
+            finderWindow.waitForExistence(timeout: 5),
+            "Choosing the location should open that document's folder in Finder.",
+            file: file,
+            line: line
+        )
     }
 
     @MainActor
@@ -402,12 +422,13 @@ final class DocumentOpeningUITests: XCTestCase {
 
     @MainActor
     func testNativeTitleLocationsDistinguishDocumentsWithTheSameFilename() async throws {
+        let locationToken = UUID().uuidString.prefix(8)
         let firstDirectory = testDirectory.appendingPathComponent(
-            "First Location",
+            "NeoMD First \(locationToken)",
             isDirectory: true
         )
         let secondDirectory = testDirectory.appendingPathComponent(
-            "Second Location",
+            "NeoMD Second \(locationToken)",
             isDirectory: true
         )
         let firstURL = try makeDocument(
@@ -439,10 +460,16 @@ final class DocumentOpeningUITests: XCTestCase {
             "Distinct files should remain in separate filename-titled windows."
         )
 
-        assertNativeLocation(of: firstURL, in: firstWindow, app: app)
+        invokeNativeLocationAction(
+            of: firstURL,
+            excluding: secondURL,
+            in: firstWindow,
+            app: app
+        )
         // The cascaded second window remains exposed at its right title-bar edge.
-        assertNativeLocation(
+        invokeNativeLocationAction(
             of: secondURL,
+            excluding: firstURL,
             in: secondWindow,
             app: app,
             activationOffset: CGVector(dx: 0.99, dy: 0.02)
@@ -657,6 +684,36 @@ final class DocumentOpeningUITests: XCTestCase {
         let after = try snapshot(of: url)
         XCTAssertEqual(after.data, before.data)
         XCTAssertEqual(after.modificationDate, before.modificationDate)
+    }
+
+    @MainActor
+    func testCommandWTargetsTheOpenPanelAndCloseDisablesWithoutWindows() {
+        let app = configuredApplication()
+        app.launch()
+
+        let instruction = app.staticTexts["NoDocumentInstruction"]
+        XCTAssertTrue(instruction.waitForExistence(timeout: 10))
+
+        app.typeKey("o", modifierFlags: .command)
+        let panel = openPanel(in: app)
+        XCTAssertTrue(panel.waitForExistence(timeout: 5))
+        app.typeKey("w", modifierFlags: .command)
+        XCTAssertTrue(
+            panel.waitForNonExistence(timeout: 5),
+            "Command-W should close the native Open panel first."
+        )
+        XCTAssertTrue(instruction.exists, "Closing the panel must not close its reader window.")
+
+        app.typeKey("w", modifierFlags: .command)
+        XCTAssertTrue(app.windows.firstMatch.waitForNonExistence(timeout: 5))
+
+        let fileMenu = app.menuBars.menuBarItems["File"]
+        XCTAssertTrue(fileMenu.waitForExistence(timeout: 5))
+        fileMenu.click()
+
+        let close = app.menuBars.menuItems["Close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        XCTAssertFalse(close.isEnabled, "Close must be disabled when no window can receive it.")
     }
 
     @MainActor
