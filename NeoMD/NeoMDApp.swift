@@ -23,6 +23,7 @@ struct NeoMDApp: App {
                 document: configuration.document,
                 openingCoordinator: applicationDelegate.openingCoordinator
             )
+            .focusedSceneValue(\.closeWindowTargetAvailable, true)
         }
         .defaultSize(width: 900, height: 720)
         // A viewer normally forces an Open panel at launch. The instruction scene is
@@ -32,11 +33,39 @@ struct NeoMDApp: App {
 
         Window("NeoMD", id: DocumentOpeningCoordinator.noDocumentWindowSceneID) {
             NoDocumentView(openingCoordinator: applicationDelegate.openingCoordinator)
+                .focusedSceneValue(\.closeWindowTargetAvailable, true)
         }
         .defaultSize(width: 900, height: 720)
         .defaultLaunchBehavior(.presented)
         .commands {
-            CommandGroup(replacing: .saveItem) { }
+            ReadOnlyFileCommands()
+        }
+    }
+}
+
+private struct CloseWindowTargetKey: FocusedValueKey {
+    typealias Value = Bool
+}
+
+private extension FocusedValues {
+    var closeWindowTargetAvailable: Bool? {
+        get { self[CloseWindowTargetKey.self] }
+        set { self[CloseWindowTargetKey.self] = newValue }
+    }
+}
+
+/// Removes saving while retaining a responder-chain Close command for the focused scene.
+private struct ReadOnlyFileCommands: Commands {
+    @FocusedValue(\.closeWindowTargetAvailable)
+    private var closeWindowTargetAvailable
+
+    var body: some Commands {
+        CommandGroup(replacing: .saveItem) {
+            Button("Close") {
+                NSApp.sendAction(#selector(NSWindow.performClose(_:)), to: nil, from: nil)
+            }
+            .keyboardShortcut("w")
+            .disabled(closeWindowTargetAvailable != true)
         }
     }
 }

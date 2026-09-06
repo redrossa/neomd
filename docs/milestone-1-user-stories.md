@@ -50,7 +50,7 @@ As a reviewer comparing several outputs, I want each document to be identifiable
 Acceptance ideas:
 
 - Display the filename discreetly in the native title area; make its location available through a standard menu action.
-- Proposed default: different files open in separate windows; reopening the same file focuses its existing window.
+- Different files open in separate windows; reopening an already-open file focuses its existing window and preserves its reading position.
 - Two files with identical names in different folders remain distinguishable through their locations.
 - Closing a reading window never asks to save changes.
 
