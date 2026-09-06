@@ -37,13 +37,19 @@ final class AppearanceUITests: XCTestCase {
         XCUIApplication().terminate()
 
         // A test that changed the real system appearance must always put it back,
-        // including when it failed part way through.
+        // including when it failed part way through. Restoration uses every path the
+        // test was allowed to use in the first place — a machine that needed a host
+        // controller or a person to make the change needs the same help to undo it —
+        // and it is only believed once the real setting has been read back. A
+        // restoration that could not be verified is reported, never swallowed.
+        var restorationFailure: (any Error)?
         if let originalSystemDarkMode {
-            self.originalSystemDarkMode = nil
-            try? SystemAppearance.setDarkMode(
-                originalSystemDarkMode,
-                allowingAssistance: false
-            )
+            do {
+                try SystemAppearance.restore(to: originalSystemDarkMode)
+                self.originalSystemDarkMode = nil
+            } catch {
+                restorationFailure = error
+            }
         }
 
         if let testDirectory {
@@ -55,6 +61,10 @@ final class AppearanceUITests: XCTestCase {
                 )
                 try? FileManager.default.removeItem(at: url)
             }
+        }
+
+        if let restorationFailure {
+            throw restorationFailure
         }
     }
 
@@ -361,9 +371,14 @@ final class AppearanceUITests: XCTestCase {
     /// The criterion's own scenario: a real macOS light/dark change, with no appearance
     /// pin, while a document is open.
     ///
-    /// The test runner has to be allowed to drive System Events for this. When it is
-    /// not, the test reports that limitation and skips rather than passing, and the
-    /// criterion has to be verified by hand.
+    /// The test runner has to be able to change the real setting for this, either
+    /// directly or through the host controller described in
+    /// `docs/appearance-ui-tests.md`. When it cannot, the test reports that limitation
+    /// and skips rather than passing, and the criterion has to be verified by hand.
+    ///
+    /// Whatever happens after the first switch — including a failure before the
+    /// switch-back below — `tearDownWithError` restores the appearance this test found
+    /// and fails the test if it cannot verify that it did.
     @MainActor
     func testSystemAppearanceChangeUpdatesTheOpenDocumentInPlace() async throws {
         let startedDark = try requireSystemAppearanceControl()
@@ -376,9 +391,39 @@ final class AppearanceUITests: XCTestCase {
             label: "system"
         ) { dark in
             try SystemAppearance.setDarkMode(dark)
+            try Self.failEarlyIfRehearsingCleanup(afterSwitchingTo: dark, from: startedDark)
         }
+    }
 
-        originalSystemDarkMode = nil
+    /// A deliberate failure immediately after the first real appearance switch.
+    ///
+    /// The cleanup guarantee is itself testable this way: a run started with
+    /// `NEOMD_UI_TEST_APPEARANCE_REHEARSE_CLEANUP=1` stops here, with the Mac already
+    /// switched and the test's own switch-back never reached, so the only thing that
+    /// can restore the appearance is teardown. Ordinary runs never reach it.
+    private static func failEarlyIfRehearsingCleanup(
+        afterSwitchingTo dark: Bool,
+        from original: Bool
+    ) throws {
+        guard dark != original,
+              ProcessInfo.processInfo.environment[
+                "NEOMD_UI_TEST_APPEARANCE_REHEARSE_CLEANUP"
+              ] == "1"
+        else { return }
+
+        XCTFail(
+            """
+            Intentional failure after the first real appearance switch, rehearsing the \
+            restoration this test owes the tester.
+            """
+        )
+        throw RehearsedCleanupFailure()
+    }
+
+    private struct RehearsedCleanupFailure: Error, CustomStringConvertible {
+        var description: String {
+            "Intentional failure after the first real appearance switch."
+        }
     }
 
     /// A repeatable regression for the same repaint on any machine.
@@ -543,62 +588,101 @@ final class AppearanceUITests: XCTestCase {
 
     // MARK: - Criterion 4: distinctions that do not rely on color
 
+    /// A link has to be recognizable without color on an ordinary launch, in both
+    /// appearances: no accessibility setting, no launch environment, nothing the reader
+    /// has to find and switch on first.
+    ///
+    /// Color cannot be argued away from a screenshot, so the underline is measured
+    /// instead: an unbroken horizontal run of marked pixels spanning a whole label,
+    /// including the spaces between its words, is a rule. Letterforms always break, so
+    /// ordinary prose measured the same way scores far lower, and a link inside a
+    /// sentence marks its label without underlining the sentence.
     @MainActor
-    func testDifferentiateWithoutColorUnderlinesLinks() async throws {
-        let url = try makeDocument(named: "link-underline.md", content: Self.coherenceFixture)
-        var coverage: [Bool: CGFloat] = [:]
-
-        for differentiateWithoutColor in [false, true] {
-            let app = configuredApplication(
-                appearance: .light,
-                differentiateWithoutColor: differentiateWithoutColor
+    func testLinksAreUnderlinedByDefaultInLightAndDark() async throws {
+        for appearance in Appearance.allCases {
+            let url = try makeDocument(
+                named: "link-underline-\(appearance.rawValue).md",
+                content: Self.linkFixture
             )
+            let app = configuredApplication(appearance: appearance)
             app.launch()
             try await openWhileRunning(url, in: app)
             let window = app.windows[url.lastPathComponent]
             XCTAssertTrue(window.waitForExistence(timeout: 10))
             let scrollView = window.scrollViews["DocumentReaderScrollView"]
             XCTAssertTrue(scrollView.waitForExistence(timeout: 10))
+
             let link = try element(containing: Self.linkLabel, in: window)
-            let body = staticText(Self.bodyProse, in: window)
-            XCTAssertTrue(link.waitForExistence(timeout: 10))
-            XCTAssertTrue(body.waitForExistence(timeout: 10))
+            let mixed = try element(containing: Self.mixedLinkLabel, in: window)
+            let control = staticText(Self.controlProse, in: window)
+            for element in [link, mixed, control] {
+                XCTAssertTrue(
+                    element.waitForExistence(timeout: 10),
+                    "\(appearance.rawValue): every fixture line should render."
+                )
+            }
 
             let pixels = try XCTUnwrap(WindowPixels(of: window))
             let page = try XCTUnwrap(
-                pixels.medianSample(in: pageBackgroundRect(of: scrollView, avoiding: body))
+                pixels.medianSample(in: pageBackgroundRect(of: scrollView, avoiding: control)),
+                "\(appearance.rawValue): the page background should be samplable."
             )
-            coverage[differentiateWithoutColor] = pixels.maximumContiguousRunFraction(
-                in: link.frame.insetBy(dx: 0, dy: -3),
-                differingFrom: page,
-                byAtLeast: 0.15
+            func longestRun(across element: XCUIElement) -> CGFloat {
+                pixels.maximumContiguousRunFraction(
+                    in: element.frame.insetBy(dx: 0, dy: -3),
+                    differingFrom: page,
+                    byAtLeast: 0.15
+                )
+            }
+            let linkRun = longestRun(across: link)
+            let mixedRun = longestRun(across: mixed)
+            let controlRun = longestRun(across: control)
+
+            attachScreenshot(of: window, named: "Link presentation — \(appearance.rawValue)")
+            attachMeasurements(
+                [
+                    "page gray: \(page.gray)",
+                    "longest unbroken run, link label: \(linkRun)",
+                    "longest unbroken run, link inside a sentence: \(mixedRun)",
+                    "longest unbroken run, ordinary prose: \(controlRun)"
+                ],
+                named: "Link underline evidence — \(appearance.rawValue)"
             )
-            attachScreenshot(
-                of: window,
-                named: "Link presentation — differentiate without color: \(differentiateWithoutColor)"
+
+            XCTAssertGreaterThan(
+                linkRun,
+                0.9,
+                "\(appearance.rawValue): a link should draw an unbroken rule under its label."
+            )
+            XCTAssertLessThan(
+                controlRun,
+                0.5,
+                "\(appearance.rawValue): ordinary prose should stay unmarked letterforms."
+            )
+            XCTAssertGreaterThan(
+                mixedRun,
+                max(0.1, controlRun * 3),
+                """
+                \(appearance.rawValue): a link inside a sentence should be underlined too, \
+                not \(mixedRun) against prose at \(controlRun).
+                """
+            )
+            XCTAssertLessThan(
+                mixedRun,
+                0.9,
+                "\(appearance.rawValue): the underline should mark the link, not the sentence."
+            )
+
+            // The tint is still there; it is simply no longer the only cue.
+            let linkInk = try XCTUnwrap(pixels.ink(in: link.frame, against: page))
+            let controlInk = try XCTUnwrap(pixels.ink(in: control.frame, against: page))
+            XCTAssertGreaterThanOrEqual(
+                linkInk.distance(to: controlInk),
+                0.08,
+                "\(appearance.rawValue): a link should not render as ordinary prose."
             )
             app.terminate()
         }
-
-        let tinted = try XCTUnwrap(coverage[false])
-        let underlined = try XCTUnwrap(coverage[true])
-        attachMeasurements(
-            [
-                "longest unbroken run across the label, tinted: \(tinted)",
-                "longest unbroken run across the label, differentiating: \(underlined)"
-            ],
-            named: "Link underline evidence"
-        )
-        XCTAssertLessThan(
-            tinted,
-            0.5,
-            "By default a link is a tinted label: letterforms leave gaps."
-        )
-        XCTAssertGreaterThan(
-            underlined,
-            0.9,
-            "Differentiating without color should draw one unbroken rule under the label."
-        )
     }
 
     // MARK: - Fixtures
@@ -606,6 +690,22 @@ final class AppearanceUITests: XCTestCase {
     private static let bodyProse =
         "Ordinary paragraph with inline code and BODY PROSE MARKER at the end."
     private static let linkLabel = "RELEASE CHECKLIST LINK"
+    private static let mixedLinkLabel = "MIXED CHECKLIST LINK"
+    private static let controlProse =
+        "Ordinary sentence around plain words and ordinary prose written after them."
+
+    /// Links on their own and inside a sentence, next to prose of the same shape, so an
+    /// underline can be told apart from letterforms and from the line around it.
+    private static let linkFixture = """
+        # Link checks
+
+        [\(linkLabel)](https://example.com/checklist)
+
+        \(controlProse)
+
+        Ordinary sentence around a [\(mixedLinkLabel)](https://example.com/mixed) and \
+        ordinary prose written after it.
+        """
 
     private static let coherenceFixture = """
         # Appearance checks
@@ -637,7 +737,6 @@ final class AppearanceUITests: XCTestCase {
     @MainActor
     private func configuredApplication(
         appearance: Appearance? = nil,
-        differentiateWithoutColor: Bool? = nil,
         appearanceChannel: Bool = false
     ) -> XCUIApplication {
         let app = XCUIApplication()
@@ -647,10 +746,6 @@ final class AppearanceUITests: XCTestCase {
         }
         if appearanceChannel {
             app.launchEnvironment["NEOMD_UI_TEST_APPEARANCE_CHANNEL"] = "1"
-        }
-        if let differentiateWithoutColor {
-            app.launchEnvironment["NEOMD_UI_TEST_DIFFERENTIATE_WITHOUT_COLOR"] =
-                differentiateWithoutColor ? "1" : "0"
         }
         return app
     }
@@ -919,9 +1014,10 @@ final class AppearanceUITests: XCTestCase {
     /// Reads the current system appearance and confirms the test can be driven.
     ///
     /// The test runner needs Automation access to change the setting by itself. Where
-    /// that is unavailable, running with `NEOMD_UI_TEST_ASSISTED_APPEARANCE=1` keeps the
-    /// criterion verifiable: the test waits for a person to switch appearance in System
-    /// Settings and measures the result. Otherwise it reports the limitation and skips,
+    /// that is unavailable, the criterion stays verifiable through assistance:
+    /// `Scripts/appearance-test-host.sh` runs the suite from a terminal that already
+    /// has that access and answers the test's requests, and a person can also make the
+    /// change when prompted. Without either, the test reports the limitation and skips,
     /// which is a recorded gap, never a pass.
     private func requireSystemAppearanceControl() throws -> Bool {
         if SystemAppearance.canChangeAppearanceDirectly() || SystemAppearance.isAssisted {
@@ -932,9 +1028,11 @@ final class AppearanceUITests: XCTestCase {
             This machine did not allow the test runner to change the system appearance, \
             so the real light/dark switch could not be exercised automatically: \
             \(SystemAppearance.lastFailureDescription ?? "Automation was refused"). \
-            Grant the test runner Automation access, or re-run with \
-            TEST_RUNNER_NEOMD_UI_TEST_ASSISTED_APPEARANCE=1 and switch appearance in \
-            System Settings when prompted. Until then this criterion has to be \
+            Run the suite through Scripts/appearance-test-host.sh, which drives the \
+            switches from a terminal that already has Automation access and always \
+            restores the setting, grant the test runner Automation access, or re-run \
+            with TEST_RUNNER_NEOMD_UI_TEST_ASSISTED_APPEARANCE=1 and switch appearance \
+            in System Settings when prompted. Until then this criterion has to be \
             verified by hand.
             """
         )
@@ -965,10 +1063,19 @@ final class AppearanceUITests: XCTestCase {
 // MARK: - System appearance control
 
 /// Reads and writes the real macOS light/dark setting.
+///
+/// A test runner is usually not allowed to send Apple events to System Events, so the
+/// change can also be delegated. `Scripts/appearance-test-host.sh` runs the suite from a
+/// terminal that already has Automation access and answers requests left in a control
+/// directory; without a host controller, a person can make the change when prompted.
+/// The handshake is a pair of files rather than a line in the build log, so neither side
+/// has to guess what was asked for or whether it happened, and no path is trusted until
+/// the real setting has been read back.
 private enum SystemAppearance {
     enum Failure: LocalizedError {
         case notPermitted(String)
         case notObserved(String)
+        case notRestored(String)
 
         var errorDescription: String? {
             switch self {
@@ -976,15 +1083,34 @@ private enum SystemAppearance {
                 "the system appearance could not be changed: \(message)"
             case .notObserved(let message):
                 message
+            case .notRestored(let message):
+                message
             }
         }
     }
 
     static nonisolated(unsafe) private(set) var lastFailureDescription: String?
+    static nonisolated(unsafe) private var requestCount = 0
+
+    /// The directory a host controller watches for appearance requests.
+    static var controlDirectory: URL? {
+        guard let path = ProcessInfo.processInfo.environment[
+            "NEOMD_UI_TEST_APPEARANCE_CONTROL_DIR"
+        ], !path.isEmpty else { return nil }
+        return URL(fileURLWithPath: path, isDirectory: true)
+    }
+
+    /// Whether a host controller is answering this run's requests.
+    static var isHostControlled: Bool { controlDirectory != nil }
 
     static var isAssisted: Bool {
         ProcessInfo.processInfo.environment["NEOMD_UI_TEST_ASSISTED_APPEARANCE"] == "1"
+            || isHostControlled
     }
+
+    /// How long assistance is waited for: a host controller answers in moments, a
+    /// person needs time to find the setting.
+    private static var assistanceTimeout: TimeInterval { isHostControlled ? 120 : 180 }
 
     /// Reading the setting needs no permission: the global domain records it, and an
     /// unset value is the light appearance. The value is re-synchronized on every read
@@ -1010,32 +1136,142 @@ private enum SystemAppearance {
         }
     }
 
-    static func setDarkMode(_ isDark: Bool, allowingAssistance: Bool = true) throws {
+    /// Changes the real setting, and returns only once the change has been read back.
+    static func setDarkMode(_ isDark: Bool) throws {
         guard isDarkMode() != isDark else { return }
+
         do {
             _ = try run(
                 "tell application \"System Events\" to tell appearance preferences to set dark mode to \(isDark)"
             )
-            return
+            if waitForDarkMode(isDark, timeout: 10) { return }
+            lastFailureDescription = """
+                the setting was accepted but never became \(Self.name(isDark))
+                """
         } catch {
             lastFailureDescription = "\(error)"
-            guard isAssisted, allowingAssistance else { throw error }
         }
 
-        // Assisted mode: wait for a person to make the change in System Settings.
-        print(
+        guard isAssisted else {
+            throw Failure.notPermitted(lastFailureDescription ?? "Automation was refused")
+        }
+
+        if let controlDirectory {
+            try requestFromHost(isDark, in: controlDirectory, timeout: assistanceTimeout)
+        } else {
+            // Wait for a person to make the change in System Settings.
+            print(
+                """
+                [NeoMD appearance test] Switch macOS appearance to \
+                \(Self.name(isDark)) in System Settings now.
+                """
+            )
+            _ = waitForDarkMode(isDark, timeout: assistanceTimeout)
+        }
+
+        guard isDarkMode() == isDark else {
+            throw Failure.notObserved(
+                "No system appearance change to \(Self.name(isDark)) was observed."
+            )
+        }
+    }
+
+    /// Puts the setting back to what a test found, and insists on seeing it happen.
+    ///
+    /// A restoration is not optional cleanup: leaving a tester's Mac in the appearance a
+    /// failed test switched it to is a defect of the test. Every path the run was
+    /// allowed to use is tried again here, and an unverified result is an error the
+    /// caller has to surface.
+    static func restore(to original: Bool) throws {
+        guard isDarkMode() != original else { return }
+
+        var underlyingDescription: String?
+        do {
+            try setDarkMode(original)
+        } catch {
+            underlyingDescription = error.localizedDescription
+        }
+
+        guard isDarkMode() != original else { return }
+        throw Failure.notRestored(
             """
-            [NeoMD appearance test] Switch macOS appearance to \
-            \(isDark ? "Dark" : "Light") in System Settings now.
+            This test changed the Mac's appearance to \(name(!original)) and could not \
+            put it back to \(name(original))\(underlyingDescription.map { ": \($0)" } ?? ""). \
+            Set it in System Settings > Appearance.
             """
         )
-        let deadline = Date().addingTimeInterval(180)
-        while Date() < deadline {
-            if isDarkMode() == isDark { return }
-            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+    }
+
+    private static func name(_ isDark: Bool) -> String { isDark ? "Dark" : "Light" }
+
+    /// Polls the real setting until it matches, so a change is never assumed.
+    private static func waitForDarkMode(_ isDark: Bool, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if isDarkMode() == isDark { return true }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        } while Date() < deadline
+        return isDarkMode() == isDark
+    }
+
+    /// Asks the host controller for a change and waits for its explicit answer.
+    ///
+    /// The request is a file the controller polls for, and the answer is a file this
+    /// side polls for, so a run is deterministic: nothing depends on parsing the build
+    /// log, and a controller that reports a failure fails the test immediately instead
+    /// of timing out.
+    private static func requestFromHost(
+        _ isDark: Bool,
+        in directory: URL,
+        timeout: TimeInterval
+    ) throws {
+        requestCount += 1
+        let identifier = requestCount
+        let request = directory.appendingPathComponent("request-\(identifier)")
+        let response = directory.appendingPathComponent("response-\(identifier)")
+
+        print(
+            """
+            [NeoMD appearance test] Asking the host controller for \(name(isDark)) \
+            (request-\(identifier)).
+            """
+        )
+        do {
+            try Data(name(isDark).utf8).write(to: request, options: .atomic)
+        } catch {
+            throw Failure.notPermitted(
+                "the appearance request could not be written to \(request.path): \(error)"
+            )
         }
+
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if let answer = try? String(contentsOf: response, encoding: .utf8)
+                .trimmingCharacters(in: .whitespacesAndNewlines) {
+                guard answer.hasPrefix("ok") else {
+                    throw Failure.notPermitted(
+                        "the host controller could not switch to \(name(isDark)): \(answer)"
+                    )
+                }
+                guard waitForDarkMode(isDark, timeout: 10) else {
+                    throw Failure.notObserved(
+                        """
+                        The host controller answered \(answer) for request-\(identifier), \
+                        but the setting is still \(name(isDarkMode())).
+                        """
+                    )
+                }
+                return
+            }
+            if isDarkMode() == isDark { return }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        } while Date() < deadline
+
         throw Failure.notObserved(
-            "No system appearance change to \(isDark ? "Dark" : "Light") was observed."
+            """
+            The host controller did not answer request-\(identifier) for \
+            \(name(isDark)) within \(Int(timeout))s.
+            """
         )
     }
 

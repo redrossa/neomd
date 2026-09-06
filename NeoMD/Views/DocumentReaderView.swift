@@ -14,8 +14,6 @@ struct DocumentReaderView: View {
     let document: MarkdownDocument
     let openingCoordinator: DocumentOpeningCoordinator?
 
-    @Environment(\.accessibilityDifferentiateWithoutColor)
-    private var differentiateWithoutColor
     @Environment(\.dismissWindow) private var dismissWindow
     @Environment(\.openDocument) private var openDocument
     @Environment(\.openWindow) private var openWindow
@@ -141,29 +139,9 @@ struct DocumentReaderView: View {
     /// The appearance policy the blocks are drawn with.
     ///
     /// Adaptive system styles already follow the Mac's light and dark appearance, so
-    /// the theme only carries what a semantic style cannot express.
-    private var theme: ReaderTheme {
-        ReaderTheme(
-            differentiateWithoutColor: Self.differentiateWithoutColorOverride
-                ?? differentiateWithoutColor
-        )
-    }
-
-    /// Lets a UI test exercise the non-color link affordance without changing the
-    /// user's macOS accessibility settings. Ordinary launches leave this unset.
-    private static let differentiateWithoutColorOverride: Bool? = {
-#if DEBUG
-        switch ProcessInfo.processInfo.environment[
-            "NEOMD_UI_TEST_DIFFERENTIATE_WITHOUT_COLOR"
-        ] {
-        case "1": true
-        case "0": false
-        default: nil
-        }
-#else
-        nil
-#endif
-    }()
+    /// the theme only carries what a semantic style cannot express, and it applies the
+    /// same way to every reader on every Mac.
+    private var theme: ReaderTheme { ReaderTheme() }
 
     private func handleVerticalPageKeyPress(
         _ keyPress: KeyPress

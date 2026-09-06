@@ -25,38 +25,19 @@ import SwiftUI
 /// - Important: No distinction the reader draws depends on color alone. Headings differ
 ///   in size and weight, quotations carry an indent and a leading rule, code keeps a
 ///   monospaced face inside its own container, list items keep literal markers, and a
-///   thematic break is a rule. Links follow the platform and GitHub convention of a
-///   tinted label, and gain an underline when the reader has asked macOS to
-///   differentiate without color.
+///   thematic break is a rule. A link keeps the platform and GitHub convention of a
+///   tinted label and is always underlined as well, so it stays recognizable when the
+///   tint cannot be seen or is not perceived as a difference.
 nonisolated struct ReaderTheme: Equatable, Sendable {
-
-    /// How inline links are distinguished from surrounding prose.
-    nonisolated enum LinkPresentation: Equatable, Sendable {
-        /// A tinted label, matching the platform and GitHub convention.
-        case tint
-        /// A tinted and underlined label, so the link is legible without color.
-        case tintAndUnderline
-    }
-
-    /// Mirrors the macOS "Differentiate without color" accessibility setting.
-    let differentiateWithoutColor: Bool
-
-    init(differentiateWithoutColor: Bool = false) {
-        self.differentiateWithoutColor = differentiateWithoutColor
-    }
-
-    var linkPresentation: LinkPresentation {
-        differentiateWithoutColor ? .tintAndUnderline : .tint
-    }
 
     /// Applies the appearance policy that inline text carries.
     ///
     /// The renderer stays free of presentation concerns, so link runs are given their
-    /// non-color affordance here. Only the underline attribute is added: no color,
+    /// non-color affordance here. Every link is underlined, in every appearance and
+    /// with no accessibility setting required, because the tint alone would make the
+    /// distinction depend on color. Only the underline attribute is added: no color,
     /// font, or character of the document is changed.
     func presentationText(for text: AttributedString) -> AttributedString {
-        guard linkPresentation == .tintAndUnderline else { return text }
-
         var presented = text
         for run in text.runs where run.link != nil {
             presented[run.range].underlineStyle = .single

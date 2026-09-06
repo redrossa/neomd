@@ -78,7 +78,7 @@ Acceptance ideas:
 - The theme foundation does not apply page-wide color inversion or color transforms to document imagery; image rendering and appearance-specific source verification belong to M1-12.
 - Labels and structure keep important distinctions understandable without relying on color alone.
 
-Implemented: the reader draws its surfaces with adaptive system styles rather than a fixed palette, so an appearance change repaints an open document in place instead of re-rendering it. Distinctions carry structure as well as color — headings differ in scale, quotations keep a rule and indent, code keeps a monospaced face in its own container, list items keep their markers — and a link is a tinted label that also gains an underline when the reader turns on the macOS “Differentiate without color” setting.
+Implemented: the reader draws its surfaces with adaptive system styles rather than a fixed palette, so an appearance change repaints an open document in place instead of re-rendering it. Distinctions carry structure as well as color — headings differ in scale, quotations keep a rule and indent, code keeps a monospaced face in its own container, list items keep their markers — and a link is a tinted label that is always underlined, in either appearance and with no accessibility setting to switch on first. `docs/appearance-ui-tests.md` records how the live light/dark switch is exercised and how the tester's own setting is restored.
 
 ### M1-06 — Understand document structure and emphasis · Core
 
