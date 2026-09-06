@@ -65,7 +65,7 @@ struct DocumentReaderView: View {
                 handleScrollPhaseChange(newPhase)
             }
             .onPreferenceChange(DocumentBlockFramePreferenceKey.self) { frames in
-                handleBlockFrames(frames)
+                handleBlockFrames(frames, viewportSize: geometry.size)
             }
         }
         .frame(minWidth: 480, minHeight: 320)
@@ -231,12 +231,19 @@ struct DocumentReaderView: View {
         return .milliseconds(120)
     }
 
-    private func handleBlockFrames(_ frames: [Int: CGRect]) {
+    private func handleBlockFrames(
+        _ frames: [Int: CGRect],
+        viewportSize: CGSize
+    ) {
         guard frames != blockFrames else { return }
         blockFrames = frames
-        if !resizeRestoration.isPending {
-            updateReadingAnchor()
-        }
+
+        // A width change can publish reflowed block frames before ScrollView reports
+        // its new viewport. Keep the last stable semantic anchor until that callback
+        // starts restoration, rather than pairing new frames with stale scroll metrics.
+        guard viewportSize == scrollMetrics.viewportSize,
+              !resizeRestoration.isPending else { return }
+        updateReadingAnchor()
     }
 
     private func updateReadingAnchor() {

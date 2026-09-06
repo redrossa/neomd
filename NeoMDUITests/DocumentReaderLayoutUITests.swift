@@ -572,10 +572,34 @@ final class DocumentReaderLayoutUITests: XCTestCase {
             "The reader should remain at the keyboard-selected position."
         )
 
+        let keyboardSelectedPassage = try passageNearestReadingLine(
+            among: passages[70...90],
+            in: window,
+            scrollView: scrollView
+        )
+        let keyboardSelectedFraction = semanticFractionAtReadingLine(
+            of: keyboardSelectedPassage,
+            in: scrollView
+        )
+        resize(window, to: CGSize(width: 480, height: 700))
+        try await Task.sleep(for: .milliseconds(5_500))
+        assertSemanticReadingPoint(
+            keyboardSelectedFraction,
+            of: keyboardSelectedPassage,
+            in: scrollView,
+            tolerance: 90,
+            message: "A later width reflow should preserve the keyboard-selected reading point."
+        )
+        attachScreenshot(
+            of: window,
+            named: "Reader keyboard-selected position — follow-up resize"
+        )
+
+        resize(window, to: CGSize(width: 480, height: 620))
         centerElement(passage, in: scrollView)
         try await Task.sleep(for: .seconds(1))
         let wheelBaseline = passage.frame.midY - scrollView.frame.midY
-        resize(window, to: CGSize(width: 900, height: 720))
+        resize(window, to: CGSize(width: 480, height: 640))
         scrollView.scroll(byDeltaX: 0, deltaY: -400)
         XCTAssertTrue(
             waitUntil(timeout: 1) {
@@ -597,6 +621,34 @@ final class DocumentReaderLayoutUITests: XCTestCase {
             wheelPosition,
             accuracy: 100,
             "The reader should remain at the wheel-selected position."
+        )
+
+        let wheelSelectedPassage = staticText(passages[78], in: window)
+        XCTAssertTrue(
+            wheelSelectedPassage.waitForExistence(timeout: 5),
+            "The exact fixture should place passage 79 at the new reading point."
+        )
+        XCTAssertLessThanOrEqual(
+            abs(wheelSelectedPassage.frame.minY - scrollView.frame.midY),
+            90,
+            "Wheel input should select the reading point near the start of passage 79."
+        )
+        let wheelSelectedFraction = semanticFractionAtReadingLine(
+            of: wheelSelectedPassage,
+            in: scrollView
+        )
+        resize(window, to: CGSize(width: 1_200, height: 620))
+        try await Task.sleep(for: .milliseconds(5_500))
+        assertSemanticReadingPoint(
+            wheelSelectedFraction,
+            of: wheelSelectedPassage,
+            in: scrollView,
+            tolerance: 90,
+            message: "A later width reflow should preserve the wheel-selected reading point."
+        )
+        attachScreenshot(
+            of: window,
+            named: "Reader wheel-selected position — follow-up resize"
         )
 
         let after = try snapshot(of: url)
@@ -795,6 +847,66 @@ final class DocumentReaderLayoutUITests: XCTestCase {
         let frame = element.frame
         XCTAssertGreaterThan(frame.height, 0)
         return (scrollView.frame.midY - frame.minY) / frame.height
+    }
+
+    @MainActor
+    private func passageNearestReadingLine(
+        among passages: ArraySlice<String>,
+        in window: XCUIElement,
+        scrollView: XCUIElement
+    ) throws -> XCUIElement {
+        let visiblePassages = passages
+            .map { staticText($0, in: window) }
+            .filter { $0.exists && scrollView.frame.intersects($0.frame) }
+        return try XCTUnwrap(
+            visiblePassages.min {
+                abs($0.frame.midY - scrollView.frame.midY)
+                    < abs($1.frame.midY - scrollView.frame.midY)
+            },
+            "Expected a visible passage near the current reading line."
+        )
+    }
+
+    @MainActor
+    private func semanticFractionAtReadingLine(
+        of element: XCUIElement,
+        in scrollView: XCUIElement
+    ) -> CGFloat {
+        let frame = element.frame
+        XCTAssertGreaterThan(frame.height, 0)
+        return min(
+            1,
+            max(0, (scrollView.frame.midY - frame.minY) / frame.height)
+        )
+    }
+
+    @MainActor
+    private func assertSemanticReadingPoint(
+        _ fraction: CGFloat,
+        of element: XCUIElement,
+        in scrollView: XCUIElement,
+        tolerance: CGFloat,
+        message: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertTrue(
+            waitUntil {
+                guard element.exists else { return false }
+                let frame = element.frame
+                let semanticY = frame.minY + (frame.height * fraction)
+                return abs(semanticY - scrollView.frame.midY) <= tolerance
+            },
+            message,
+            file: file,
+            line: line
+        )
+        XCTAssertTrue(
+            scrollView.frame.intersects(element.frame),
+            "The user-selected passage should remain inside the viewport.",
+            file: file,
+            line: line
+        )
     }
 
     @MainActor
