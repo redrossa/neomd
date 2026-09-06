@@ -505,6 +505,106 @@ final class DocumentReaderLayoutUITests: XCTestCase {
     }
 
     @MainActor
+    func testIntentionalKeyboardAndWheelScrollingInterruptResizeRestoration() async throws {
+        let passages = (1...160).map {
+            "Independent passage \($0): "
+                + String(
+                    repeating: "ordinary wrapping prose remains readable ",
+                    count: 12
+                )
+                + "end."
+        }
+        let url = try makeDocument(
+            named: "resize-interruption.md",
+            content: passages.joined(separator: "\n\n")
+        )
+        let before = try snapshot(of: url)
+        let app = configuredApplication(
+            resizeRestorationDelayMilliseconds: 4_000
+        )
+
+        app.launch()
+        try await openWhileRunning(url, in: app)
+        let window = app.windows[url.lastPathComponent]
+        XCTAssertTrue(window.waitForExistence(timeout: 10))
+        let scrollView = window.scrollViews["DocumentReaderScrollView"]
+        XCTAssertTrue(scrollView.waitForExistence(timeout: 10))
+        let passage = staticText(passages[75], in: window)
+        centerElement(passage, in: scrollView)
+        try await Task.sleep(for: .seconds(1))
+
+        scrollView.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)
+        ).click()
+        app.typeKey(.tab, modifierFlags: [.option])
+        let controlY = passage.frame.midY
+        app.typeKey(.pageDown, modifierFlags: [])
+        XCTAssertTrue(
+            waitUntil { passage.frame.midY < controlY - 100 },
+            "The fixture must establish reader focus before testing interruption."
+        )
+        app.typeKey(.pageUp, modifierFlags: [])
+        centerElement(passage, in: scrollView)
+        try await Task.sleep(for: .seconds(1))
+
+        let keyboardBaseline = passage.frame.midY - scrollView.frame.midY
+        resize(window, to: CGSize(width: 900, height: 700))
+        app.typeKey(.pageDown, modifierFlags: [])
+        XCTAssertTrue(
+            waitUntil(timeout: 1) {
+                passage.frame.midY - scrollView.frame.midY
+                    < keyboardBaseline - 300
+            },
+            "Page Down must move while resize restoration is still pending."
+        )
+        let keyboardPosition = passage.frame.midY - scrollView.frame.midY
+        try await Task.sleep(for: .milliseconds(5_500))
+        let settledKeyboardPosition = passage.frame.midY - scrollView.frame.midY
+        XCTAssertLessThan(
+            settledKeyboardPosition,
+            keyboardBaseline - 100,
+            "Delayed restoration must not undo intentional keyboard paging."
+        )
+        XCTAssertEqual(
+            settledKeyboardPosition,
+            keyboardPosition,
+            accuracy: 100,
+            "The reader should remain at the keyboard-selected position."
+        )
+
+        centerElement(passage, in: scrollView)
+        try await Task.sleep(for: .seconds(1))
+        let wheelBaseline = passage.frame.midY - scrollView.frame.midY
+        resize(window, to: CGSize(width: 900, height: 720))
+        scrollView.scroll(byDeltaX: 0, deltaY: -400)
+        XCTAssertTrue(
+            waitUntil(timeout: 1) {
+                passage.frame.midY - scrollView.frame.midY
+                    < wheelBaseline - 200
+            },
+            "Wheel input must move while resize restoration is still pending."
+        )
+        let wheelPosition = passage.frame.midY - scrollView.frame.midY
+        try await Task.sleep(for: .milliseconds(5_500))
+        let settledWheelPosition = passage.frame.midY - scrollView.frame.midY
+        XCTAssertLessThan(
+            settledWheelPosition,
+            wheelBaseline - 100,
+            "Delayed restoration must not undo intentional pointer scrolling."
+        )
+        XCTAssertEqual(
+            settledWheelPosition,
+            wheelPosition,
+            accuracy: 100,
+            "The reader should remain at the wheel-selected position."
+        )
+
+        let after = try snapshot(of: url)
+        XCTAssertEqual(after.data, before.data)
+        XCTAssertEqual(after.modificationDate, before.modificationDate)
+    }
+
+    @MainActor
     func testDarkReaderRemainsUnclutteredAtNarrowWidth() async throws {
         let prose = "DARK PROSE "
             + String(repeating: "readable wrapping words ", count: 35)
@@ -548,11 +648,19 @@ final class DocumentReaderLayoutUITests: XCTestCase {
     }
 
     @MainActor
-    private func configuredApplication(appearance: String? = nil) -> XCUIApplication {
+    private func configuredApplication(
+        appearance: String? = nil,
+        resizeRestorationDelayMilliseconds: Int? = nil
+    ) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-ApplePersistenceIgnoreState", "YES"]
         if let appearance {
             app.launchEnvironment["NEOMD_UI_TEST_APPEARANCE"] = appearance
+        }
+        if let resizeRestorationDelayMilliseconds {
+            app.launchEnvironment[
+                "NEOMD_UI_TEST_RESIZE_RESTORATION_DELAY_MILLISECONDS"
+            ] = String(resizeRestorationDelayMilliseconds)
         }
         return app
     }

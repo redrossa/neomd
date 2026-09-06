@@ -86,4 +86,27 @@ struct DocumentReaderLayoutTests {
             ) == nil
         )
     }
+
+    @Test func userScrollInvalidatesAQueuedResizeRestoration() throws {
+        var restoration = DocumentReaderResizeRestoration()
+        let oldAnchor = DocumentReadingAnchor.block(id: 76, fraction: 0.5)
+        restoration.beginIfNeeded(at: oldAnchor)
+        let scheduledOldGeneration = restoration.schedule()
+        let oldGeneration = try #require(scheduledOldGeneration)
+
+        #expect(restoration.pendingAnchor(for: oldGeneration) == oldAnchor)
+
+        restoration.cancelForUserScroll()
+
+        #expect(!restoration.isPending)
+        #expect(restoration.pendingAnchor(for: oldGeneration) == nil)
+
+        let userAnchor = DocumentReadingAnchor.block(id: 82, fraction: 0.4)
+        restoration.beginIfNeeded(at: userAnchor)
+        let scheduledNewGeneration = restoration.schedule()
+        let newGeneration = try #require(scheduledNewGeneration)
+
+        #expect(newGeneration > oldGeneration)
+        #expect(restoration.pendingAnchor(for: newGeneration) == userAnchor)
+    }
 }

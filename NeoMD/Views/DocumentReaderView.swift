@@ -24,8 +24,7 @@ struct DocumentReaderView: View {
     @State private var scrollMetrics = DocumentReaderScrollMetrics.zero
     @State private var blockFrames: [Int: CGRect] = [:]
     @State private var readingAnchor: DocumentReadingAnchor?
-    @State private var pendingResizeAnchor: DocumentReadingAnchor?
-    @State private var resizeGeneration = 0
+    @State private var resizeRestoration = DocumentReaderResizeRestoration()
     @FocusState private var keyboardFocus: DocumentReaderFocusTarget?
 
     init(
@@ -62,6 +61,9 @@ struct DocumentReaderView: View {
             } action: { oldMetrics, newMetrics in
                 handleScrollGeometryChange(from: oldMetrics, to: newMetrics)
             }
+            .onScrollPhaseChange { _, newPhase in
+                handleScrollPhaseChange(newPhase)
+            }
             .onPreferenceChange(DocumentBlockFramePreferenceKey.self) { frames in
                 handleBlockFrames(frames)
             }
@@ -76,7 +78,7 @@ struct DocumentReaderView: View {
             dismissWindow(id: DocumentOpeningCoordinator.noDocumentWindowSceneID)
         }
         .onDisappear {
-            resizeGeneration += 1
+            resizeRestoration.invalidate()
             guard openingCoordinator?.documentWindowDidDisappear(id: windowID)
                     == .showNoDocumentWindow else { return }
             let openingCoordinator = openingCoordinator
@@ -158,6 +160,7 @@ struct DocumentReaderView: View {
     }
 
     private func scrollReaderPage(_ direction: DocumentReaderPageDirection) {
+        resizeRestoration.cancelForUserScroll()
         let pageDistance = max(40, scrollMetrics.viewportSize.height * 0.9)
         let offset = switch direction {
         case .up:
@@ -185,34 +188,53 @@ struct DocumentReaderView: View {
     ) {
         let viewportChanged = oldMetrics.viewportSize != newMetrics.viewportSize
 
-        if viewportChanged, pendingResizeAnchor == nil {
-            pendingResizeAnchor = readingAnchor
-                ?? DocumentReaderLayout.readingAnchor(
-                    in: blockFrames,
-                    visibleRect: oldMetrics.visibleRect,
-                    isAtTop: oldMetrics.isAtTop,
-                    isAtBottom: oldMetrics.isAtBottom
-                )
+        if viewportChanged, !resizeRestoration.isPending {
+            resizeRestoration.beginIfNeeded(
+                at: readingAnchor
+                    ?? DocumentReaderLayout.readingAnchor(
+                        in: blockFrames,
+                        visibleRect: oldMetrics.visibleRect,
+                        isAtTop: oldMetrics.isAtTop,
+                        isAtBottom: oldMetrics.isAtBottom
+                    )
+            )
         }
 
         scrollMetrics = newMetrics
 
-        if viewportChanged, pendingResizeAnchor != nil {
-            resizeGeneration += 1
-            let generation = resizeGeneration
+        if viewportChanged, let generation = resizeRestoration.schedule() {
             Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(120))
+                try? await Task.sleep(for: Self.resizeRestorationDelay)
                 await restoreReadingPosition(for: generation)
             }
-        } else if pendingResizeAnchor == nil {
+        } else if !resizeRestoration.isPending {
             updateReadingAnchor()
         }
+    }
+
+    private func handleScrollPhaseChange(_ phase: ScrollPhase) {
+        if phase == .interacting {
+            resizeRestoration.cancelForUserScroll()
+        } else if phase == .idle, !resizeRestoration.isPending {
+            updateReadingAnchor()
+        }
+    }
+
+    private static var resizeRestorationDelay: Duration {
+#if DEBUG
+        if let value = ProcessInfo.processInfo.environment[
+            "NEOMD_UI_TEST_RESIZE_RESTORATION_DELAY_MILLISECONDS"
+        ], let milliseconds = Int64(value), milliseconds >= 0 {
+            return .milliseconds(milliseconds)
+        }
+#endif
+        return .milliseconds(120)
     }
 
     private func handleBlockFrames(_ frames: [Int: CGRect]) {
         guard frames != blockFrames else { return }
         blockFrames = frames
-        if pendingResizeAnchor == nil {
+        if !resizeRestoration.isPending {
             updateReadingAnchor()
         }
     }
@@ -229,16 +251,18 @@ struct DocumentReaderView: View {
     /// Repositions the semantic point that was at the middle of the viewport before
     /// a resize. Waiting briefly coalesces live-resize and full-screen animation steps.
     private func restoreReadingPosition(for generation: Int) async {
-        guard generation == resizeGeneration,
-              let anchor = pendingResizeAnchor else { return }
+        guard let anchor = resizeRestoration.pendingAnchor(
+            for: generation
+        ) else { return }
 
         // Lazy stacks initially place a distant target from estimated block heights.
         // Require consecutive measured corrections before accepting that layout as
         // settled, while bounding the work so restoration cannot form a feedback loop.
         var stablePassCount = 0
         for _ in 0..<12 {
-            guard generation == resizeGeneration,
-                  pendingResizeAnchor == anchor else { return }
+            guard resizeRestoration.pendingAnchor(for: generation) == anchor else {
+                return
+            }
 
             switch anchor {
             case .top:
@@ -276,9 +300,10 @@ struct DocumentReaderView: View {
             try? await Task.sleep(for: .milliseconds(50))
         }
 
-        guard generation == resizeGeneration,
-              pendingResizeAnchor == anchor else { return }
-        pendingResizeAnchor = nil
+        guard resizeRestoration.complete(
+            anchor: anchor,
+            for: generation
+        ) else { return }
         updateReadingAnchor()
     }
 }
@@ -362,6 +387,51 @@ nonisolated enum DocumentReadingAnchor: Equatable, Sendable {
     case top
     case bottom
     case block(id: Int, fraction: CGFloat)
+}
+
+/// Tracks one coalesced resize restoration and invalidates stale asynchronous passes.
+nonisolated struct DocumentReaderResizeRestoration: Equatable, Sendable {
+    private(set) var pendingAnchor: DocumentReadingAnchor?
+    private(set) var generation = 0
+
+    var isPending: Bool {
+        pendingAnchor != nil
+    }
+
+    mutating func beginIfNeeded(at anchor: DocumentReadingAnchor?) {
+        guard pendingAnchor == nil else { return }
+        pendingAnchor = anchor
+    }
+
+    mutating func schedule() -> Int? {
+        guard pendingAnchor != nil else { return nil }
+        generation += 1
+        return generation
+    }
+
+    func pendingAnchor(for generation: Int) -> DocumentReadingAnchor? {
+        guard generation == self.generation else { return nil }
+        return pendingAnchor
+    }
+
+    mutating func cancelForUserScroll() {
+        guard isPending else { return }
+        invalidate()
+    }
+
+    mutating func invalidate() {
+        generation += 1
+        pendingAnchor = nil
+    }
+
+    mutating func complete(
+        anchor: DocumentReadingAnchor,
+        for generation: Int
+    ) -> Bool {
+        guard pendingAnchor(for: generation) == anchor else { return false }
+        pendingAnchor = nil
+        return true
+    }
 }
 
 private nonisolated struct DocumentReaderScrollMetrics: Equatable, Sendable {
