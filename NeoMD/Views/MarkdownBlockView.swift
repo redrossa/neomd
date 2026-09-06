@@ -8,6 +8,8 @@ import SwiftUI
 /// Lays out a single rendered Markdown block.
 struct MarkdownBlockView: View {
     let block: MarkdownBlock
+    let keyboardFocus: FocusState<DocumentReaderFocusTarget?>.Binding
+    let pageReader: (DocumentReaderPageDirection) -> Void
 
     var body: some View {
         switch block.kind {
@@ -15,23 +17,23 @@ struct MarkdownBlockView: View {
             Text(block.text)
                 .font(.body)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
         case .heading(let level):
             Text(block.text)
                 .font(Self.headingFont(level: level))
                 .foregroundStyle(level >= 6 ? Color.secondary : Color.primary)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, level <= 2 ? 8 : 4)
                 .accessibilityAddTraits(.isHeader)
 
         case .codeBlock:
-            ScrollView(.horizontal) {
-                Text(block.text)
-                    .font(.system(.callout, design: .monospaced))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(12)
-            }
-            .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 6))
+            MarkdownCodeBlockView(
+                block: block,
+                keyboardFocus: keyboardFocus,
+                pageReader: pageReader
+            )
 
         case .blockQuote:
             HStack(alignment: .top, spacing: 12) {
@@ -42,8 +44,10 @@ struct MarkdownBlockView: View {
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
         case .listItem(let marker, let depth):
             HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -55,7 +59,9 @@ struct MarkdownBlockView: View {
                 Text(block.text)
                     .font(.body)
                     .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, CGFloat(depth - 1) * 22)
 
         case .thematicBreak:
@@ -78,26 +84,174 @@ struct MarkdownBlockView: View {
     }
 }
 
-#Preview {
-    ScrollView {
-        VStack(alignment: .leading, spacing: 16) {
-            ForEach(MarkdownBlockRenderer.blocks(from: """
-                # Release notes
+/// Keeps wide code keyboard-accessible without moving the surrounding reader.
+private struct MarkdownCodeBlockView: View {
+    let block: MarkdownBlock
+    let keyboardFocus: FocusState<DocumentReaderFocusTarget?>.Binding
+    let pageReader: (DocumentReaderPageDirection) -> Void
 
-                A short paragraph with **bold**, *italic*, and `inline code`.
+    @State private var scrollPosition = ScrollPosition(edge: .leading)
+    @State private var scrollMetrics = CodeBlockScrollMetrics.zero
 
-                - First item
-                - Second item
-
-                > A quoted aside.
-
-                ```
-                print("hello")
-                ```
-                """)) { block in
-                MarkdownBlockView(block: block)
-            }
+    var body: some View {
+        ScrollView(.horizontal) {
+            Text(block.text)
+                .font(.system(.callout, design: .monospaced))
+                .fixedSize(horizontal: true, vertical: true)
+                .padding(12)
         }
-        .padding(32)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 6))
+        .accessibilityIdentifier("MarkdownCodeBlock-\(block.id)")
+        .scrollPosition($scrollPosition)
+        .onScrollGeometryChange(for: CodeBlockScrollMetrics.self) { geometry in
+            CodeBlockScrollMetrics(geometry)
+        } action: { oldMetrics, newMetrics in
+            if oldMetrics.canScrollHorizontally,
+               !newMetrics.canScrollHorizontally,
+               keyboardFocus.wrappedValue == .codeBlock(block.id) {
+                keyboardFocus.wrappedValue = .reader
+            }
+            scrollMetrics = newMetrics
+        }
+        .focusable(scrollMetrics.canScrollHorizontally, interactions: .edit)
+        .focused(keyboardFocus, equals: .codeBlock(block.id))
+        .onKeyPress(
+            keys: [
+                .leftArrow,
+                .rightArrow,
+                .home,
+                .end,
+                .pageUp,
+                .pageDown,
+                .escape
+            ]
+        ) { keyPress in
+            handleKeyPress(keyPress)
+        }
     }
+
+    private func handleKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {
+        let selectionModifiers: EventModifiers = [.shift, .control]
+        guard keyPress.modifiers.intersection(selectionModifiers).isEmpty else {
+            return .ignored
+        }
+
+        switch keyPress.key {
+        case .leftArrow:
+            if keyPress.modifiers.contains(.command) {
+                scrollPosition.scrollTo(edge: .leading)
+            } else {
+                scrollPosition.scrollTo(
+                    x: max(0, scrollMetrics.horizontalOffset - scrollIncrement(for: keyPress))
+                )
+            }
+        case .rightArrow:
+            if keyPress.modifiers.contains(.command) {
+                scrollPosition.scrollTo(edge: .trailing)
+            } else {
+                scrollPosition.scrollTo(
+                    x: scrollMetrics.horizontalOffset + scrollIncrement(for: keyPress)
+                )
+            }
+        case .home:
+            scrollPosition.scrollTo(edge: .leading)
+        case .end:
+            scrollPosition.scrollTo(edge: .trailing)
+        case .pageUp:
+            guard hasNoExplicitModifiers(keyPress) else { return .ignored }
+            keyboardFocus.wrappedValue = .reader
+            pageReader(.up)
+        case .pageDown:
+            guard hasNoExplicitModifiers(keyPress) else { return .ignored }
+            keyboardFocus.wrappedValue = .reader
+            pageReader(.down)
+        case .escape:
+            keyboardFocus.wrappedValue = .reader
+        default:
+            return .ignored
+        }
+        return .handled
+    }
+
+    private func hasNoExplicitModifiers(_ keyPress: KeyPress) -> Bool {
+        let explicitModifiers: EventModifiers = [
+            .shift,
+            .control,
+            .command,
+            .option
+        ]
+        return keyPress.modifiers.intersection(explicitModifiers).isEmpty
+    }
+
+    private func scrollIncrement(for keyPress: KeyPress) -> CGFloat {
+        if keyPress.modifiers.contains(.option) {
+            return max(40, scrollMetrics.viewportWidth * 0.8)
+        }
+        return 40
+    }
+}
+
+private nonisolated struct CodeBlockScrollMetrics: Equatable, Sendable {
+    static let zero = CodeBlockScrollMetrics(
+        horizontalOffset: 0,
+        viewportWidth: 0,
+        canScrollHorizontally: false
+    )
+
+    let horizontalOffset: CGFloat
+    let viewportWidth: CGFloat
+    let canScrollHorizontally: Bool
+
+    init(_ geometry: ScrollGeometry) {
+        horizontalOffset = geometry.contentOffset.x
+        viewportWidth = geometry.containerSize.width
+        canScrollHorizontally = geometry.contentSize.width > geometry.containerSize.width + 1
+    }
+
+    private init(
+        horizontalOffset: CGFloat,
+        viewportWidth: CGFloat,
+        canScrollHorizontally: Bool
+    ) {
+        self.horizontalOffset = horizontalOffset
+        self.viewportWidth = viewportWidth
+        self.canScrollHorizontally = canScrollHorizontally
+    }
+}
+
+private struct MarkdownBlockViewPreview: View {
+    @FocusState private var keyboardFocus: DocumentReaderFocusTarget?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                ForEach(MarkdownBlockRenderer.blocks(from: """
+                    # Release notes
+
+                    A short paragraph with **bold**, *italic*, and `inline code`.
+
+                    - First item
+                    - Second item
+
+                    > A quoted aside.
+
+                    ```
+                    print("hello")
+                    ```
+                    """)) { block in
+                    MarkdownBlockView(
+                        block: block,
+                        keyboardFocus: $keyboardFocus,
+                        pageReader: { _ in }
+                    )
+                }
+            }
+            .padding(32)
+        }
+    }
+}
+
+#Preview {
+    MarkdownBlockViewPreview()
 }

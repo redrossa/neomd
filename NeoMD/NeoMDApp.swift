@@ -74,6 +74,21 @@ private struct ReadOnlyFileCommands: Commands {
 final class NeoMDApplicationDelegate: NSObject, NSApplicationDelegate {
     let openingCoordinator = DocumentOpeningCoordinator()
 
+    func applicationWillFinishLaunching(_ notification: Notification) {
+#if DEBUG
+        // Keep visual UI regressions deterministic without changing the user's system
+        // appearance. Ordinary launches leave this unset and continue to follow macOS.
+        switch ProcessInfo.processInfo.environment["NEOMD_UI_TEST_APPEARANCE"] {
+        case "Light":
+            NSApp.appearance = NSAppearance(named: .aqua)
+        case "Dark":
+            NSApp.appearance = NSAppearance(named: .darkAqua)
+        default:
+            break
+        }
+#endif
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         openingCoordinator.applicationWillTerminate()
         return .terminateNow
