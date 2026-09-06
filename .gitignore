@@ -1,0 +1,30 @@
+# macOS Finder metadata.
+.DS_Store
+
+# Xcode per-user state: window layout, breakpoints, scheme ordering, and the
+# last open editor. This is machine- and person-specific and must not be shared.
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+
+# Build output. AGENTS.md builds with -derivedDataPath outside the repository,
+# but Xcode.app defaults to a DerivedData folder that can land here.
+build/
+DerivedData/
+*.xcarchive
+
+# Xcode workspace bookkeeping that Xcode rewrites on its own.
+NeoMD.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+NeoMD.xcodeproj/project.xcworkspace/contents.xcworkspacedata.lock
+
+# Swift Package Manager working state, should the project ever add packages.
+.swiftpm/
+.build/
+Packages/
+
+# Crash and profiling output.
+*.hmap
+*.dSYM.zip
+*.dSYM
+timeline.xctimeline
+*.moved-aside
