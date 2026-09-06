@@ -8,19 +8,25 @@ import SwiftUI
 /// Lays out a single rendered Markdown block.
 struct MarkdownBlockView: View {
     let block: MarkdownBlock
+    let theme: ReaderTheme
     let keyboardFocus: FocusState<DocumentReaderFocusTarget?>.Binding
     let pageReader: (DocumentReaderPageDirection) -> Void
+
+    /// The block's text with the reader's appearance policy applied.
+    private var text: AttributedString {
+        theme.presentationText(for: block.text)
+    }
 
     var body: some View {
         switch block.kind {
         case .paragraph:
-            Text(block.text)
+            Text(text)
                 .font(.body)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
         case .heading(let level):
-            Text(block.text)
+            Text(text)
                 .font(Self.headingFont(level: level))
                 .foregroundStyle(level >= 6 ? Color.secondary : Color.primary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -40,7 +46,7 @@ struct MarkdownBlockView: View {
                 Rectangle()
                     .fill(.tertiary)
                     .frame(width: 3)
-                Text(block.text)
+                Text(text)
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -56,7 +62,7 @@ struct MarkdownBlockView: View {
                     .foregroundStyle(.secondary)
                     .frame(minWidth: 18, alignment: .trailing)
                     .accessibilityHidden(true)
-                Text(block.text)
+                Text(text)
                     .font(.body)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -242,6 +248,7 @@ private struct MarkdownBlockViewPreview: View {
                     """)) { block in
                     MarkdownBlockView(
                         block: block,
+                        theme: ReaderTheme(),
                         keyboardFocus: $keyboardFocus,
                         pageReader: { _ in }
                     )
