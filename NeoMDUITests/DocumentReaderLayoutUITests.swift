@@ -1,0 +1,559 @@
+//
+//  DocumentReaderLayoutUITests.swift
+//  NeoMDUITests
+//
+
+import AppKit
+import XCTest
+
+/// End-to-end coverage for the viewport-constrained reading surface.
+final class DocumentReaderLayoutUITests: XCTestCase {
+    private var testDirectory: URL!
+
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+        testDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("NeoMD-Layout-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: testDirectory,
+            withIntermediateDirectories: true
+        )
+    }
+
+    override func tearDownWithError() throws {
+        XCUIApplication().terminate()
+        if let testDirectory {
+            try? FileManager.default.removeItem(at: testDirectory)
+        }
+    }
+
+    @MainActor
+    func testReadingColumnReflowsAndKeepsCodeOverflowLocal() async throws {
+        let prose = "PROSE START " + String(
+            repeating: "ordinary spaced words make this paragraph reflow naturally ",
+            count: 18
+        ) + "PROSE END"
+        let unbroken = "TOKEN_START_" + String(repeating: "abcdefghij", count: 90) + "_TOKEN_END"
+        let heading = "Heading " + String(repeating: "unbroken", count: 12) + " end"
+        let quote = "QUOTE START " + String(repeating: "quoted wrapping words ", count: 20) + "QUOTE END"
+        let list = "LIST START " + String(repeating: "listed wrapping words ", count: 20) + "LIST END"
+        let code = "CODE_START_" + String(repeating: "0123456789", count: 140) + "_CODE_END"
+        let source = """
+            # Layout checks
+
+            \(prose)
+
+            \(unbroken)
+
+            ## \(heading)
+
+            > \(quote)
+
+            - \(list)
+
+            CODE NEIGHBOR
+
+            ```
+            \(code)
+            ```
+            """
+        let url = try makeDocument(named: "layout.md", content: source)
+        let before = try snapshot(of: url)
+        let app = configuredApplication(appearance: "Light")
+
+        app.launch()
+        try await openWhileRunning(url, in: app)
+        let window = app.windows[url.lastPathComponent]
+        XCTAssertTrue(window.waitForExistence(timeout: 10))
+        let outerScrollView = window.scrollViews["DocumentReaderScrollView"]
+        XCTAssertTrue(outerScrollView.waitForExistence(timeout: 10))
+        let title = app.staticTexts["Layout checks"]
+        XCTAssertTrue(title.waitForExistence(timeout: 10))
+        let proseElement = staticText(prose, in: window)
+        XCTAssertTrue(proseElement.waitForExistence(timeout: 5))
+        XCTAssertGreaterThanOrEqual(title.frame.minY - outerScrollView.frame.minY, 30)
+        assertInsideReadingMargins(title.frame, scrollView: outerScrollView)
+
+        resize(window, to: CGSize(width: 1_200, height: 760))
+        let wideProseFrame = proseElement.frame
+        XCTAssertGreaterThanOrEqual(
+            wideProseFrame.minX - outerScrollView.frame.minX,
+            190,
+            "A wide window should center a readable-width column."
+        )
+        XCTAssertLessThanOrEqual(wideProseFrame.width, 760)
+        XCTAssertTrue(title.isHittable, "Resizing at the top should preserve the top of the document.")
+
+        resize(window, to: CGSize(width: 520, height: 620))
+        XCTAssertTrue(waitUntil { proseElement.isHittable })
+        let narrowProseFrame = proseElement.frame
+        assertInsideReadingMargins(narrowProseFrame, scrollView: outerScrollView)
+        XCTAssertGreaterThan(
+            wideProseFrame.width,
+            narrowProseFrame.width + 250,
+            "The reading column should use substantially more of a wide viewport."
+        )
+        XCTAssertGreaterThan(
+            narrowProseFrame.height,
+            wideProseFrame.height,
+            "Ordinary prose should gain lines rather than truncate in a narrow window."
+        )
+
+        let unbrokenElement = staticText(unbroken, in: window)
+        let headingElement = window.staticTexts[heading]
+        let wideTextElements = [
+            unbrokenElement,
+            headingElement,
+            staticText(quote, in: window),
+            staticText(list, in: window)
+        ]
+        for element in wideTextElements {
+            scrollToElement(element, in: outerScrollView)
+            assertInsideReadingMargins(element.frame, scrollView: outerScrollView)
+        }
+        XCTAssertGreaterThan(
+            unbrokenElement.frame.height,
+            20,
+            "A long token should wrap instead of widening or clipping the page."
+        )
+        XCTAssertGreaterThan(
+            headingElement.frame.height,
+            30,
+            "A long heading should wrap inside the reading column."
+        )
+
+        let neighbor = window.staticTexts["CODE NEIGHBOR"]
+        scrollToElement(neighbor, in: outerScrollView)
+        let codeScrollView = window.scrollViews["MarkdownCodeBlock-7"]
+        XCTAssertTrue(codeScrollView.waitForExistence(timeout: 5))
+        XCTAssertLessThanOrEqual(codeScrollView.frame.width, outerScrollView.frame.width - 78)
+        let codeElement = staticText(code, in: window)
+        XCTAssertTrue(codeElement.waitForExistence(timeout: 5))
+        let neighborX = neighbor.frame.minX
+        let outerFrame = outerScrollView.frame
+        let codeFrameBefore = codeElement.frame
+
+        for _ in 0..<12 {
+            if codeElement.frame.maxX <= codeScrollView.frame.maxX + 2 { break }
+            codeScrollView.scroll(byDeltaX: -2_000, deltaY: 0)
+        }
+        XCTAssertTrue(waitUntil {
+            codeElement.frame.maxX <= codeScrollView.frame.maxX + 2
+        }, "The trailing end of a long code line should be reachable in its own scroller.")
+        XCTAssertLessThan(codeElement.frame.minX, codeFrameBefore.minX)
+        XCTAssertEqual(neighbor.frame.minX, neighborX, accuracy: 1)
+        XCTAssertEqual(outerScrollView.frame, outerFrame)
+
+        let buttonCount = window.buttons.count
+        proseElement.hover()
+        staticText(quote, in: window).hover()
+        staticText(list, in: window).hover()
+        codeScrollView.hover()
+        XCTAssertEqual(window.buttons.count, buttonCount)
+        assertNoEditingControls(in: window)
+
+        let neighborY = neighbor.frame.minY
+        outerScrollView.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)
+        ).click()
+        app.typeKey(.pageUp, modifierFlags: [])
+        XCTAssertTrue(waitUntil {
+            !neighbor.exists || neighbor.frame.minY > neighborY + 100
+        }, "Keyboard paging should continue to scroll the reading surface.")
+
+        attachScreenshot(of: window, named: "Reader layout — Light")
+        let after = try snapshot(of: url)
+        XCTAssertEqual(after.data, before.data)
+        XCTAssertEqual(after.modificationDate, before.modificationDate)
+    }
+
+    @MainActor
+    func testResizeAndFullScreenPreserveMiddleAndTallReadingPositions() async throws {
+        let beforePassage = (1...18).map {
+            "Before paragraph \($0): " + String(
+                repeating: "spaced prose changes height when the reading column reflows ",
+                count: 4
+            )
+        }.joined(separator: "\n\n")
+        let afterPassage = (1...16).map {
+            "After paragraph \($0): " + String(
+                repeating: "more prose keeps this passage in the middle of the document ",
+                count: 4
+            )
+        }.joined(separator: "\n\n")
+        let tallPassage = "TALL PASSAGE START " + String(
+            repeating: "this tall paragraph retains a proportional place through major reflow ",
+            count: 130
+        ) + "TALL PASSAGE END"
+        let source = """
+            # Position checks
+
+            \(beforePassage)
+
+            MIDDLE READING PASSAGE
+
+            \(tallPassage)
+
+            AFTER TALL PASSAGE
+
+            \(afterPassage)
+            """
+        let url = try makeDocument(named: "position-layout.md", content: source)
+        let before = try snapshot(of: url)
+        let app = configuredApplication()
+
+        app.launch()
+        try await openWhileRunning(url, in: app)
+        let window = app.windows[url.lastPathComponent]
+        XCTAssertTrue(window.waitForExistence(timeout: 10))
+        let scrollView = window.scrollViews["DocumentReaderScrollView"]
+        XCTAssertTrue(scrollView.waitForExistence(timeout: 10))
+        let middle = window.staticTexts["MIDDLE READING PASSAGE"]
+        centerElement(middle, in: scrollView)
+
+        resize(window, to: CGSize(width: 520, height: 620))
+        assertNearReadingLine(middle, in: scrollView, tolerance: 130)
+        XCTAssertTrue(window.exists)
+        XCTAssertTrue(window.staticTexts[url.lastPathComponent].exists)
+
+        resize(window, to: CGSize(width: 1_200, height: 760))
+        assertNearReadingLine(middle, in: scrollView, tolerance: 130)
+
+        resize(window, to: CGSize(width: 520, height: 620))
+        let tallElement = staticText(tallPassage, in: window)
+        scrollToElement(tallElement, in: scrollView)
+        place(fraction: 0.68, of: tallElement, atReadingLineIn: scrollView)
+        let fractionBeforeFullScreen = fractionAtReadingLine(of: tallElement, in: scrollView)
+        XCTAssertEqual(fractionBeforeFullScreen, 0.68, accuracy: 0.05)
+
+        let fullScreenButton = window.buttons.matching(
+            identifier: "_XCUI:FullScreenWindow"
+        ).firstMatch
+        XCTAssertTrue(fullScreenButton.waitForExistence(timeout: 5))
+        let windowedSize = window.frame.size
+        fullScreenButton.click()
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            window.frame.width > windowedSize.width + 500
+        }, "The test must exercise an actual native full-screen transition.")
+        assertReadingFraction(
+            fractionBeforeFullScreen,
+            of: tallElement,
+            atReadingLineIn: scrollView,
+            tolerance: 0.1
+        )
+        XCTAssertTrue(window.staticTexts[url.lastPathComponent].exists)
+
+        exitFullScreen(in: app)
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            abs(window.frame.width - windowedSize.width) <= 3
+        }, "The native full-screen exit should restore the windowed size.")
+        assertReadingFraction(
+            fractionBeforeFullScreen,
+            of: tallElement,
+            atReadingLineIn: scrollView,
+            tolerance: 0.1
+        )
+        XCTAssertTrue(window.staticTexts[url.lastPathComponent].exists)
+        attachScreenshot(of: window, named: "Reader position — Full-screen round trip")
+
+        let after = try snapshot(of: url)
+        XCTAssertEqual(after.data, before.data)
+        XCTAssertEqual(after.modificationDate, before.modificationDate)
+    }
+
+    @MainActor
+    func testDarkReaderRemainsUnclutteredAtNarrowWidth() async throws {
+        let prose = "DARK PROSE "
+            + String(repeating: "readable wrapping words ", count: 35)
+            + "DARK PROSE END"
+        let source = """
+            # Dark layout
+
+            \(prose)
+
+            > DARK QUOTE CONTENT
+
+            - DARK LIST CONTENT
+
+            ```
+            DARK_CODE_CONTENT
+            ```
+            """
+        let url = try makeDocument(named: "dark-layout.md", content: source)
+        let before = try snapshot(of: url)
+        let app = configuredApplication(appearance: "Dark")
+
+        app.launch()
+        try await openWhileRunning(url, in: app)
+        let window = app.windows[url.lastPathComponent]
+        XCTAssertTrue(window.waitForExistence(timeout: 10))
+        let scrollView = window.scrollViews["DocumentReaderScrollView"]
+        XCTAssertTrue(scrollView.waitForExistence(timeout: 10))
+        let proseElement = staticText(prose, in: window)
+        XCTAssertTrue(proseElement.waitForExistence(timeout: 10))
+        resize(window, to: CGSize(width: 480, height: 620))
+
+        assertInsideReadingMargins(proseElement.frame, scrollView: scrollView)
+        proseElement.hover()
+        window.staticTexts["DARK QUOTE CONTENT"].hover()
+        assertNoEditingControls(in: window)
+        attachScreenshot(of: window, named: "Reader layout — Dark")
+
+        let after = try snapshot(of: url)
+        XCTAssertEqual(after.data, before.data)
+        XCTAssertEqual(after.modificationDate, before.modificationDate)
+    }
+
+    @MainActor
+    private func configuredApplication(appearance: String? = nil) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ApplePersistenceIgnoreState", "YES"]
+        if let appearance {
+            app.launchEnvironment["NEOMD_UI_TEST_APPEARANCE"] = appearance
+        }
+        return app
+    }
+
+    /// Delivers a native open-document event without relaunching, so the test-only
+    /// appearance override remains in effect for the visual regressions.
+    @MainActor
+    private func openWhileRunning(_ url: URL, in app: XCUIApplication) async throws {
+        app.activate()
+        let runningApplication = try XCTUnwrap(NSWorkspace.shared.frontmostApplication)
+        XCTAssertEqual(runningApplication.bundleIdentifier, "io.neomd.NeoMD")
+        let applicationURL = try XCTUnwrap(runningApplication.bundleURL)
+
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        configuration.allowsRunningApplicationSubstitution = false
+        configuration.createsNewApplicationInstance = false
+        _ = try await NSWorkspace.shared.open(
+            [url],
+            withApplicationAt: applicationURL,
+            configuration: configuration
+        )
+    }
+
+    @discardableResult
+    private func makeDocument(named name: String, content: String) throws -> URL {
+        let url = testDirectory.appendingPathComponent(name)
+        try Data(content.utf8).write(to: url)
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSince1970: 1_700_000_000)],
+            ofItemAtPath: url.path
+        )
+        return url
+    }
+
+    private func snapshot(of url: URL) throws -> (data: Data, modificationDate: Date) {
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        return (
+            try Data(contentsOf: url),
+            try XCTUnwrap(attributes[.modificationDate] as? Date)
+        )
+    }
+
+    @MainActor
+    private func staticText(_ value: String, in container: XCUIElement) -> XCUIElement {
+        container.staticTexts.matching(
+            NSPredicate(format: "value == %@", value)
+        ).firstMatch
+    }
+
+    @MainActor
+    private func resize(_ window: XCUIElement, to size: CGSize) {
+        let currentSize = window.frame.size
+        let corner = window.coordinate(
+            withNormalizedOffset: CGVector(dx: 1, dy: 1)
+        ).withOffset(CGVector(dx: -2, dy: -2))
+        corner.press(
+            forDuration: 0.2,
+            thenDragTo: corner.withOffset(
+                CGVector(
+                    dx: size.width - currentSize.width,
+                    dy: size.height - currentSize.height
+                )
+            )
+        )
+        XCTAssertTrue(waitUntil(timeout: 8) {
+            abs(window.frame.width - size.width) <= 3
+                && abs(window.frame.height - size.height) <= 3
+        }, "The reader window should reach the requested regression-test size.")
+    }
+
+    @MainActor
+    private func exitFullScreen(in app: XCUIApplication) {
+        app.activate()
+        let viewMenu = app.menuBars.menuBarItems["View"]
+        XCTAssertTrue(viewMenu.waitForExistence(timeout: 5))
+        viewMenu.click()
+
+        let toggleFullScreen = app.menuBars.menuItems.matching(
+            identifier: "toggleFullScreen:"
+        ).firstMatch
+        XCTAssertTrue(toggleFullScreen.waitForExistence(timeout: 5))
+        XCTAssertTrue(toggleFullScreen.isEnabled)
+        toggleFullScreen.click()
+    }
+
+    @MainActor
+    private func scrollToElement(_ element: XCUIElement, in scrollView: XCUIElement) {
+        for _ in 0..<35 where !element.exists {
+            scrollView.scroll(byDeltaX: 0, deltaY: -350)
+        }
+        XCTAssertTrue(element.exists, "Expected document content should be reachable.")
+        if !element.isHittable {
+            let adjustment = element.frame.midY - scrollView.frame.midY
+            scrollView.scroll(byDeltaX: 0, deltaY: -adjustment)
+        }
+        XCTAssertTrue(waitUntil { element.isHittable })
+    }
+
+    @MainActor
+    private func centerElement(_ element: XCUIElement, in scrollView: XCUIElement) {
+        scrollToElement(element, in: scrollView)
+        for _ in 0..<3 {
+            let adjustment = element.frame.midY - scrollView.frame.midY
+            if abs(adjustment) <= 4 { break }
+            scrollView.scroll(byDeltaX: 0, deltaY: -adjustment)
+        }
+        assertNearReadingLine(element, in: scrollView, tolerance: 20)
+    }
+
+    @MainActor
+    private func place(
+        fraction: CGFloat,
+        of element: XCUIElement,
+        atReadingLineIn scrollView: XCUIElement
+    ) {
+        for _ in 0..<3 {
+            let frame = element.frame
+            let targetY = frame.minY + (frame.height * fraction)
+            let adjustment = targetY - scrollView.frame.midY
+            if abs(adjustment) <= 4 { break }
+            scrollView.scroll(byDeltaX: 0, deltaY: -adjustment)
+        }
+        XCTAssertTrue(element.isHittable)
+    }
+
+    @MainActor
+    private func fractionAtReadingLine(
+        of element: XCUIElement,
+        in scrollView: XCUIElement
+    ) -> CGFloat {
+        let frame = element.frame
+        XCTAssertGreaterThan(frame.height, 0)
+        return (scrollView.frame.midY - frame.minY) / frame.height
+    }
+
+    @MainActor
+    private func assertNearReadingLine(
+        _ element: XCUIElement,
+        in scrollView: XCUIElement,
+        tolerance: CGFloat,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertTrue(
+            waitUntil {
+                element.exists
+                    && abs(element.frame.midY - scrollView.frame.midY) <= tolerance
+            },
+            "The same reading passage should remain near the viewport reading line.",
+            file: file,
+            line: line
+        )
+        XCTAssertTrue(
+            scrollView.frame.intersects(element.frame),
+            "The preserved passage should remain inside the viewport.",
+            file: file,
+            line: line
+        )
+    }
+
+    @MainActor
+    private func assertReadingFraction(
+        _ expectedFraction: CGFloat,
+        of element: XCUIElement,
+        atReadingLineIn scrollView: XCUIElement,
+        tolerance: CGFloat,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertTrue(
+            waitUntil {
+                element.exists
+                    && abs(
+                        fractionAtReadingLine(of: element, in: scrollView)
+                            - expectedFraction
+                    ) <= tolerance
+            },
+            "The same place within the tall passage should remain at the reading line.",
+            file: file,
+            line: line
+        )
+        XCTAssertTrue(
+            scrollView.frame.intersects(element.frame),
+            "The preserved part of the tall passage should remain visible.",
+            file: file,
+            line: line
+        )
+    }
+
+    private func assertInsideReadingMargins(
+        _ frame: CGRect,
+        scrollView: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertGreaterThanOrEqual(
+            frame.minX,
+            scrollView.frame.minX + 34,
+            file: file,
+            line: line
+        )
+        XCTAssertLessThanOrEqual(
+            frame.maxX,
+            scrollView.frame.maxX - 34,
+            file: file,
+            line: line
+        )
+    }
+
+    @MainActor
+    private func assertNoEditingControls(
+        in window: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        for title in ["Edit", "Copy", "Format", "Bold", "Italic"] {
+            XCTAssertFalse(
+                window.buttons[title].exists,
+                "Hovering document content must not reveal a \(title) button.",
+                file: file,
+                line: line
+            )
+        }
+    }
+
+    @MainActor
+    private func attachScreenshot(of window: XCUIElement, named name: String) {
+        let attachment = XCTAttachment(screenshot: window.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    @MainActor
+    private func waitUntil(
+        timeout: TimeInterval = 5,
+        condition: () -> Bool
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if condition() { return true }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        } while Date() < deadline
+        return condition()
+    }
+}

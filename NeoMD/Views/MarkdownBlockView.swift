@@ -15,12 +15,14 @@ struct MarkdownBlockView: View {
             Text(block.text)
                 .font(.body)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
         case .heading(let level):
             Text(block.text)
                 .font(Self.headingFont(level: level))
                 .foregroundStyle(level >= 6 ? Color.secondary : Color.primary)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, level <= 2 ? 8 : 4)
                 .accessibilityAddTraits(.isHeader)
 
@@ -28,10 +30,12 @@ struct MarkdownBlockView: View {
             ScrollView(.horizontal) {
                 Text(block.text)
                     .font(.system(.callout, design: .monospaced))
-                    .fixedSize(horizontal: false, vertical: true)
+                    .fixedSize(horizontal: true, vertical: true)
                     .padding(12)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 6))
+            .accessibilityIdentifier("MarkdownCodeBlock-\(block.id)")
 
         case .blockQuote:
             HStack(alignment: .top, spacing: 12) {
@@ -42,8 +46,10 @@ struct MarkdownBlockView: View {
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
         case .listItem(let marker, let depth):
             HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -55,7 +61,9 @@ struct MarkdownBlockView: View {
                 Text(block.text)
                     .font(.body)
                     .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, CGFloat(depth - 1) * 22)
 
         case .thematicBreak:
