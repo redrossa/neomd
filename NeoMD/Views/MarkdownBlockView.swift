@@ -8,6 +8,8 @@ import SwiftUI
 /// Lays out a single rendered Markdown block.
 struct MarkdownBlockView: View {
     let block: MarkdownBlock
+    let keyboardFocus: FocusState<DocumentReaderFocusTarget?>.Binding
+    let pageReader: (DocumentReaderPageDirection) -> Void
 
     var body: some View {
         switch block.kind {
@@ -27,7 +29,11 @@ struct MarkdownBlockView: View {
                 .accessibilityAddTraits(.isHeader)
 
         case .codeBlock:
-            MarkdownCodeBlockView(block: block)
+            MarkdownCodeBlockView(
+                block: block,
+                keyboardFocus: keyboardFocus,
+                pageReader: pageReader
+            )
 
         case .blockQuote:
             HStack(alignment: .top, spacing: 12) {
@@ -81,6 +87,8 @@ struct MarkdownBlockView: View {
 /// Keeps wide code keyboard-accessible without moving the surrounding reader.
 private struct MarkdownCodeBlockView: View {
     let block: MarkdownBlock
+    let keyboardFocus: FocusState<DocumentReaderFocusTarget?>.Binding
+    let pageReader: (DocumentReaderPageDirection) -> Void
 
     @State private var scrollPosition = ScrollPosition(edge: .leading)
     @State private var scrollMetrics = CodeBlockScrollMetrics.zero
@@ -98,11 +106,27 @@ private struct MarkdownCodeBlockView: View {
         .scrollPosition($scrollPosition)
         .onScrollGeometryChange(for: CodeBlockScrollMetrics.self) { geometry in
             CodeBlockScrollMetrics(geometry)
-        } action: { _, newMetrics in
+        } action: { oldMetrics, newMetrics in
+            if oldMetrics.canScrollHorizontally,
+               !newMetrics.canScrollHorizontally,
+               keyboardFocus.wrappedValue == .codeBlock(block.id) {
+                keyboardFocus.wrappedValue = .reader
+            }
             scrollMetrics = newMetrics
         }
         .focusable(scrollMetrics.canScrollHorizontally, interactions: .edit)
-        .onKeyPress(keys: [.leftArrow, .rightArrow, .home, .end]) { keyPress in
+        .focused(keyboardFocus, equals: .codeBlock(block.id))
+        .onKeyPress(
+            keys: [
+                .leftArrow,
+                .rightArrow,
+                .home,
+                .end,
+                .pageUp,
+                .pageDown,
+                .escape
+            ]
+        ) { keyPress in
             handleKeyPress(keyPress)
         }
     }
@@ -134,10 +158,30 @@ private struct MarkdownCodeBlockView: View {
             scrollPosition.scrollTo(edge: .leading)
         case .end:
             scrollPosition.scrollTo(edge: .trailing)
+        case .pageUp:
+            guard hasNoExplicitModifiers(keyPress) else { return .ignored }
+            keyboardFocus.wrappedValue = .reader
+            pageReader(.up)
+        case .pageDown:
+            guard hasNoExplicitModifiers(keyPress) else { return .ignored }
+            keyboardFocus.wrappedValue = .reader
+            pageReader(.down)
+        case .escape:
+            keyboardFocus.wrappedValue = .reader
         default:
             return .ignored
         }
         return .handled
+    }
+
+    private func hasNoExplicitModifiers(_ keyPress: KeyPress) -> Bool {
+        let explicitModifiers: EventModifiers = [
+            .shift,
+            .control,
+            .command,
+            .option
+        ]
+        return keyPress.modifiers.intersection(explicitModifiers).isEmpty
     }
 
     private func scrollIncrement(for keyPress: KeyPress) -> CGFloat {
@@ -176,26 +220,38 @@ private nonisolated struct CodeBlockScrollMetrics: Equatable, Sendable {
     }
 }
 
-#Preview {
-    ScrollView {
-        VStack(alignment: .leading, spacing: 16) {
-            ForEach(MarkdownBlockRenderer.blocks(from: """
-                # Release notes
+private struct MarkdownBlockViewPreview: View {
+    @FocusState private var keyboardFocus: DocumentReaderFocusTarget?
 
-                A short paragraph with **bold**, *italic*, and `inline code`.
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                ForEach(MarkdownBlockRenderer.blocks(from: """
+                    # Release notes
 
-                - First item
-                - Second item
+                    A short paragraph with **bold**, *italic*, and `inline code`.
 
-                > A quoted aside.
+                    - First item
+                    - Second item
 
-                ```
-                print("hello")
-                ```
-                """)) { block in
-                MarkdownBlockView(block: block)
+                    > A quoted aside.
+
+                    ```
+                    print("hello")
+                    ```
+                    """)) { block in
+                    MarkdownBlockView(
+                        block: block,
+                        keyboardFocus: $keyboardFocus,
+                        pageReader: { _ in }
+                    )
+                }
             }
+            .padding(32)
         }
-        .padding(32)
     }
+}
+
+#Preview {
+    MarkdownBlockViewPreview()
 }

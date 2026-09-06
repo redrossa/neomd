@@ -26,6 +26,7 @@ struct DocumentReaderView: View {
     @State private var readingAnchor: DocumentReadingAnchor?
     @State private var pendingResizeAnchor: DocumentReadingAnchor?
     @State private var resizeGeneration = 0
+    @FocusState private var keyboardFocus: DocumentReaderFocusTarget?
 
     init(
         document: MarkdownDocument,
@@ -50,7 +51,12 @@ struct DocumentReaderView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
             }
             .accessibilityIdentifier("DocumentReaderScrollView")
+            .focusable(true, interactions: .edit)
+            .focused($keyboardFocus, equals: .reader)
             .scrollPosition($scrollPosition)
+            .onKeyPress(keys: [.pageUp, .pageDown]) { keyPress in
+                handleVerticalPageKeyPress(keyPress)
+            }
             .onScrollGeometryChange(for: DocumentReaderScrollMetrics.self) { geometry in
                 DocumentReaderScrollMetrics(geometry)
             } action: { oldMetrics, newMetrics in
@@ -100,27 +106,66 @@ struct DocumentReaderView: View {
         } else {
             LazyVStack(alignment: .leading, spacing: 16) {
                 ForEach(blocks) { block in
-                    MarkdownBlockView(block: block)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .id(block.id)
-                        .background {
-                            GeometryReader { geometry in
-                                Color.clear.preference(
-                                    key: DocumentBlockFramePreferenceKey.self,
-                                    value: [
-                                        block.id: geometry.frame(
-                                            in: .named(DocumentReaderCoordinateSpace.content)
-                                        )
-                                    ]
-                                )
-                            }
-                            .accessibilityHidden(true)
+                    MarkdownBlockView(
+                        block: block,
+                        keyboardFocus: $keyboardFocus,
+                        pageReader: scrollReaderPage
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .id(block.id)
+                    .background {
+                        GeometryReader { geometry in
+                            Color.clear.preference(
+                                key: DocumentBlockFramePreferenceKey.self,
+                                value: [
+                                    block.id: geometry.frame(
+                                        in: .named(DocumentReaderCoordinateSpace.content)
+                                    )
+                                ]
+                            )
                         }
+                        .accessibilityHidden(true)
+                    }
                 }
             }
             .scrollTargetLayout()
             .textSelection(.enabled)
         }
+    }
+
+    private func handleVerticalPageKeyPress(
+        _ keyPress: KeyPress
+    ) -> KeyPress.Result {
+        let explicitModifiers: EventModifiers = [
+            .shift,
+            .control,
+            .command,
+            .option
+        ]
+        guard keyPress.modifiers.intersection(explicitModifiers).isEmpty else {
+            return .ignored
+        }
+
+        switch keyPress.key {
+        case .pageUp:
+            scrollReaderPage(.up)
+        case .pageDown:
+            scrollReaderPage(.down)
+        default:
+            return .ignored
+        }
+        return .handled
+    }
+
+    private func scrollReaderPage(_ direction: DocumentReaderPageDirection) {
+        let pageDistance = max(40, scrollMetrics.viewportSize.height * 0.9)
+        let offset = switch direction {
+        case .up:
+            scrollMetrics.visibleRect.minY - pageDistance
+        case .down:
+            scrollMetrics.visibleRect.minY + pageDistance
+        }
+        scrollPosition.scrollTo(y: scrollMetrics.clampedVerticalOffset(offset))
     }
 
     /// Renders `source` away from the main actor and publishes the result.
@@ -187,28 +232,52 @@ struct DocumentReaderView: View {
         guard generation == resizeGeneration,
               let anchor = pendingResizeAnchor else { return }
 
-        switch anchor {
-        case .top:
-            scrollPosition.scrollTo(edge: .top)
-        case .bottom:
-            scrollPosition.scrollTo(edge: .bottom)
-        case .block(let id, _):
-            if let frame = blockFrames[id],
-               let offset = DocumentReaderLayout.verticalOffset(
-                   for: anchor,
-                   targetFrame: frame,
-                   viewportHeight: scrollMetrics.viewportSize.height
-               ) {
-                scrollPosition.scrollTo(
-                    y: scrollMetrics.clampedVerticalOffset(offset)
-                )
-            } else {
-                // A large reflow can move a lazy block outside the instantiated range.
-                scrollPosition.scrollTo(id: id, anchor: .center)
+        // Lazy stacks initially place a distant target from estimated block heights.
+        // Require consecutive measured corrections before accepting that layout as
+        // settled, while bounding the work so restoration cannot form a feedback loop.
+        var stablePassCount = 0
+        for _ in 0..<12 {
+            guard generation == resizeGeneration,
+                  pendingResizeAnchor == anchor else { return }
+
+            switch anchor {
+            case .top:
+                scrollPosition.scrollTo(edge: .top)
+                stablePassCount = scrollMetrics.isAtTop ? stablePassCount + 1 : 0
+            case .bottom:
+                scrollPosition.scrollTo(edge: .bottom)
+                stablePassCount = scrollMetrics.isAtBottom ? stablePassCount + 1 : 0
+            case .block(let id, _):
+                guard let frame = blockFrames[id],
+                      let offset = DocumentReaderLayout.verticalOffset(
+                          for: anchor,
+                          targetFrame: frame,
+                          viewportHeight: scrollMetrics.viewportSize.height
+                      ) else {
+                    // First materialize a lazy target, then retain the pending anchor
+                    // until a measured frame can be corrected precisely.
+                    stablePassCount = 0
+                    scrollPosition.scrollTo(id: id, anchor: .center)
+                    try? await Task.sleep(for: .milliseconds(50))
+                    continue
+                }
+
+                let targetOffset = scrollMetrics.clampedVerticalOffset(offset)
+                let error = targetOffset - scrollMetrics.visibleRect.minY
+                if abs(error) <= 1 {
+                    stablePassCount += 1
+                } else {
+                    stablePassCount = 0
+                    scrollPosition.scrollTo(y: targetOffset)
+                }
             }
+
+            if stablePassCount >= 3 { break }
+            try? await Task.sleep(for: .milliseconds(50))
         }
 
-        guard generation == resizeGeneration else { return }
+        guard generation == resizeGeneration,
+              pendingResizeAnchor == anchor else { return }
         pendingResizeAnchor = nil
         updateReadingAnchor()
     }
@@ -277,6 +346,16 @@ nonisolated enum DocumentReaderLayout {
         if point > rect.maxY { return point - rect.maxY }
         return 0
     }
+}
+
+nonisolated enum DocumentReaderFocusTarget: Hashable {
+    case reader
+    case codeBlock(Int)
+}
+
+nonisolated enum DocumentReaderPageDirection {
+    case up
+    case down
 }
 
 nonisolated enum DocumentReadingAnchor: Equatable, Sendable {

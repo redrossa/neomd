@@ -264,6 +264,110 @@ final class DocumentReaderLayoutUITests: XCTestCase {
     }
 
     @MainActor
+    func testKeyboardPagingReturnsToReaderWhenFocusedCodeStopsOverflowing() async throws {
+        let code = "COPY_START "
+            + String(repeating: "abcdefghij ", count: 100)
+            + "COPY_END"
+        let mediumCode = "MEDIUM_"
+            + String(repeating: "abcdefghij", count: 5)
+            + "_END"
+        let paragraphs = (1...40).map {
+            "Paragraph \($0) ordinary words to keep vertical paging available."
+        }.joined(separator: "\n\n")
+        let source = """
+            # Keyboard focus transition
+
+            NEIGHBOR
+
+            ```
+            \(code)
+            ```
+
+            ```
+            \(mediumCode)
+            ```
+
+            \(paragraphs)
+            """
+
+        for appearance in ["Light", "Dark"] {
+            let url = try makeDocument(
+                named: "keyboard-focus-\(appearance).md",
+                content: source
+            )
+            let before = try snapshot(of: url)
+            let app = configuredApplication(appearance: appearance)
+
+            app.launch()
+            try await openWhileRunning(url, in: app)
+            let window = app.windows[url.lastPathComponent]
+            XCTAssertTrue(window.waitForExistence(timeout: 10))
+            resize(window, to: CGSize(width: 480, height: 620))
+
+            let outerScrollView = window.scrollViews["DocumentReaderScrollView"]
+            let mediumScrollView = window.scrollViews["MarkdownCodeBlock-3"]
+            let mediumElement = staticText(mediumCode, in: window)
+            XCTAssertTrue(outerScrollView.waitForExistence(timeout: 10))
+            XCTAssertTrue(mediumScrollView.waitForExistence(timeout: 10))
+            XCTAssertTrue(mediumElement.waitForExistence(timeout: 10))
+
+            let mediumLeadingX = mediumElement.frame.minX
+            var focusedMediumCode = false
+            for _ in 0..<8 {
+                app.typeKey(.tab, modifierFlags: [.option])
+                app.typeKey(.rightArrow, modifierFlags: [])
+                focusedMediumCode = waitUntil(timeout: 0.75) {
+                    mediumElement.frame.minX < mediumLeadingX - 2
+                }
+                if focusedMediumCode { break }
+            }
+            XCTAssertTrue(
+                focusedMediumCode,
+                "Option-Tab should focus the medium overflowing code viewport."
+            )
+            attachScreenshot(
+                of: window,
+                named: "Reader medium code focus — \(appearance)"
+            )
+
+            resize(window, to: CGSize(width: 1_200, height: 760))
+            XCTAssertTrue(
+                waitUntil {
+                    mediumElement.frame.minX >= mediumScrollView.frame.minX
+                        && mediumElement.frame.maxX <= mediumScrollView.frame.maxX
+                },
+                "The medium code line should stop overflowing at the wide size."
+            )
+            let fittedX = mediumElement.frame.minX
+            app.typeKey(.rightArrow, modifierFlags: [])
+            XCTAssertEqual(mediumElement.frame.minX, fittedX, accuracy: 1)
+
+            let firstParagraph = window.staticTexts[
+                "Paragraph 1 ordinary words to keep vertical paging available."
+            ]
+            XCTAssertTrue(firstParagraph.waitForExistence(timeout: 5))
+            let paragraphY = firstParagraph.frame.minY
+            app.typeKey(.pageDown, modifierFlags: [])
+            XCTAssertTrue(
+                waitUntil {
+                    !firstParagraph.exists
+                        || firstParagraph.frame.minY < paragraphY - 100
+                },
+                "Page Down should return to vertical reading after code overflow disappears."
+            )
+            attachScreenshot(
+                of: window,
+                named: "Reader paging after code fits — \(appearance)"
+            )
+
+            let after = try snapshot(of: url)
+            XCTAssertEqual(after.data, before.data)
+            XCTAssertEqual(after.modificationDate, before.modificationDate)
+            app.terminate()
+        }
+    }
+
+    @MainActor
     func testResizeAndFullScreenPreserveMiddleAndTallReadingPositions() async throws {
         let beforePassage = (1...18).map {
             "Before paragraph \($0): " + String(
@@ -351,6 +455,49 @@ final class DocumentReaderLayoutUITests: XCTestCase {
         )
         XCTAssertTrue(window.staticTexts[url.lastPathComponent].exists)
         attachScreenshot(of: window, named: "Reader position — Full-screen round trip")
+
+        let after = try snapshot(of: url)
+        XCTAssertEqual(after.data, before.data)
+        XCTAssertEqual(after.modificationDate, before.modificationDate)
+    }
+
+    @MainActor
+    func testLargeLazyDocumentResizeRoundTripPreservesExactMiddlePassage() async throws {
+        let passages = (1...160).map {
+            "Independent passage \($0): "
+                + String(
+                    repeating: "ordinary wrapping prose remains readable ",
+                    count: 12
+                )
+                + "end."
+        }
+        let url = try makeDocument(
+            named: "large-resize-position.md",
+            content: passages.joined(separator: "\n\n")
+        )
+        let before = try snapshot(of: url)
+        let app = configuredApplication()
+
+        app.launch()
+        try await openWhileRunning(url, in: app)
+        let window = app.windows[url.lastPathComponent]
+        XCTAssertTrue(window.waitForExistence(timeout: 10))
+        XCTAssertEqual(window.frame.width, 900, accuracy: 3)
+        XCTAssertEqual(window.frame.height, 720, accuracy: 3)
+
+        let scrollView = window.scrollViews["DocumentReaderScrollView"]
+        XCTAssertTrue(scrollView.waitForExistence(timeout: 10))
+        let passage = staticText(passages[75], in: window)
+        centerElement(passage, in: scrollView)
+        try await Task.sleep(for: .seconds(2))
+        assertNearReadingLine(passage, in: scrollView, tolerance: 20)
+
+        for width: CGFloat in [480, 1_200, 480] {
+            resize(window, to: CGSize(width: width, height: 620))
+            try await Task.sleep(for: .seconds(2))
+            assertNearReadingLine(passage, in: scrollView, tolerance: 90)
+        }
+        attachScreenshot(of: window, named: "Reader large-document resize round trip")
 
         let after = try snapshot(of: url)
         XCTAssertEqual(after.data, before.data)
