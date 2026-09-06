@@ -27,15 +27,7 @@ struct MarkdownBlockView: View {
                 .accessibilityAddTraits(.isHeader)
 
         case .codeBlock:
-            ScrollView(.horizontal) {
-                Text(block.text)
-                    .font(.system(.callout, design: .monospaced))
-                    .fixedSize(horizontal: true, vertical: true)
-                    .padding(12)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 6))
-            .accessibilityIdentifier("MarkdownCodeBlock-\(block.id)")
+            MarkdownCodeBlockView(block: block)
 
         case .blockQuote:
             HStack(alignment: .top, spacing: 12) {
@@ -83,6 +75,104 @@ struct MarkdownBlockView: View {
         case 5: .system(.headline)
         default: .system(.subheadline, weight: .semibold)
         }
+    }
+}
+
+/// Keeps wide code keyboard-accessible without moving the surrounding reader.
+private struct MarkdownCodeBlockView: View {
+    let block: MarkdownBlock
+
+    @State private var scrollPosition = ScrollPosition(edge: .leading)
+    @State private var scrollMetrics = CodeBlockScrollMetrics.zero
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            Text(block.text)
+                .font(.system(.callout, design: .monospaced))
+                .fixedSize(horizontal: true, vertical: true)
+                .padding(12)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 6))
+        .accessibilityIdentifier("MarkdownCodeBlock-\(block.id)")
+        .scrollPosition($scrollPosition)
+        .onScrollGeometryChange(for: CodeBlockScrollMetrics.self) { geometry in
+            CodeBlockScrollMetrics(geometry)
+        } action: { _, newMetrics in
+            scrollMetrics = newMetrics
+        }
+        .focusable(scrollMetrics.canScrollHorizontally, interactions: .edit)
+        .onKeyPress(keys: [.leftArrow, .rightArrow, .home, .end]) { keyPress in
+            handleKeyPress(keyPress)
+        }
+    }
+
+    private func handleKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {
+        let selectionModifiers: EventModifiers = [.shift, .control]
+        guard keyPress.modifiers.intersection(selectionModifiers).isEmpty else {
+            return .ignored
+        }
+
+        switch keyPress.key {
+        case .leftArrow:
+            if keyPress.modifiers.contains(.command) {
+                scrollPosition.scrollTo(edge: .leading)
+            } else {
+                scrollPosition.scrollTo(
+                    x: max(0, scrollMetrics.horizontalOffset - scrollIncrement(for: keyPress))
+                )
+            }
+        case .rightArrow:
+            if keyPress.modifiers.contains(.command) {
+                scrollPosition.scrollTo(edge: .trailing)
+            } else {
+                scrollPosition.scrollTo(
+                    x: scrollMetrics.horizontalOffset + scrollIncrement(for: keyPress)
+                )
+            }
+        case .home:
+            scrollPosition.scrollTo(edge: .leading)
+        case .end:
+            scrollPosition.scrollTo(edge: .trailing)
+        default:
+            return .ignored
+        }
+        return .handled
+    }
+
+    private func scrollIncrement(for keyPress: KeyPress) -> CGFloat {
+        if keyPress.modifiers.contains(.option) {
+            return max(40, scrollMetrics.viewportWidth * 0.8)
+        }
+        return 40
+    }
+}
+
+private nonisolated struct CodeBlockScrollMetrics: Equatable, Sendable {
+    static let zero = CodeBlockScrollMetrics(
+        horizontalOffset: 0,
+        viewportWidth: 0,
+        canScrollHorizontally: false
+    )
+
+    let horizontalOffset: CGFloat
+    let viewportWidth: CGFloat
+    let canScrollHorizontally: Bool
+
+    init(_ geometry: ScrollGeometry) {
+        horizontalOffset = geometry.contentOffset.x
+        viewportWidth = geometry.containerSize.width
+        canScrollHorizontally = geometry.contentSize.width > geometry.containerSize.width + 1
+    }
+
+    private init(
+        horizontalOffset: CGFloat,
+        viewportWidth: CGFloat,
+        canScrollHorizontally: Bool
+    ) {
+        self.horizontalOffset = horizontalOffset
+        self.viewportWidth = viewportWidth
+        self.canScrollHorizontally = canScrollHorizontally
     }
 }
 

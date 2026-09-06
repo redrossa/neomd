@@ -168,6 +168,102 @@ final class DocumentReaderLayoutUITests: XCTestCase {
     }
 
     @MainActor
+    func testCodeOverflowSupportsKeyboardScrollingAndTextSelection() async throws {
+        let code = "KEYBOARD_CODE_START_"
+            + String(repeating: "abcdefghij", count: 100)
+            + "_KEYBOARD_CODE_END"
+        let source = """
+            # Keyboard code
+
+            ADJACENT PROSE STAYS PUT
+
+            ```
+            \(code)
+            ```
+            """
+        let url = try makeDocument(named: "keyboard-code.md", content: source)
+        let before = try snapshot(of: url)
+        let app = configuredApplication(appearance: "Light")
+
+        app.launch()
+        try await openWhileRunning(url, in: app)
+        let window = app.windows[url.lastPathComponent]
+        XCTAssertTrue(window.waitForExistence(timeout: 10))
+        resize(window, to: CGSize(width: 480, height: 620))
+
+        let outerScrollView = window.scrollViews["DocumentReaderScrollView"]
+        let codeScrollView = window.scrollViews["MarkdownCodeBlock-2"]
+        XCTAssertTrue(outerScrollView.waitForExistence(timeout: 10))
+        XCTAssertTrue(codeScrollView.waitForExistence(timeout: 10))
+        let codeElement = staticText(code, in: window)
+        let neighbor = window.staticTexts["ADJACENT PROSE STAYS PUT"]
+        XCTAssertTrue(codeElement.waitForExistence(timeout: 5))
+        XCTAssertTrue(neighbor.waitForExistence(timeout: 5))
+
+        let leadingCodeX = codeElement.frame.minX
+        let neighborX = neighbor.frame.minX
+        let outerFrame = outerScrollView.frame
+        outerScrollView.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)
+        ).click()
+
+        var keyboardMovedCode = false
+        for _ in 0..<4 {
+            app.typeKey(.tab, modifierFlags: [.option])
+            app.typeKey(.rightArrow, modifierFlags: [])
+            app.typeKey(.rightArrow, modifierFlags: [])
+            keyboardMovedCode = waitUntil(timeout: 0.75) {
+                codeElement.frame.minX < leadingCodeX - 2
+            }
+            if keyboardMovedCode { break }
+        }
+        XCTAssertTrue(
+            keyboardMovedCode,
+            "Option-Tab should focus wide code so Right Arrow scrolls its local viewport."
+        )
+        XCTAssertEqual(neighbor.frame.minX, neighborX, accuracy: 1)
+        XCTAssertEqual(outerScrollView.frame, outerFrame)
+        attachScreenshot(of: window, named: "Reader code keyboard focus — Light")
+
+        app.typeKey(.rightArrow, modifierFlags: [.command])
+        XCTAssertTrue(
+            waitUntil {
+                codeElement.frame.maxX <= codeScrollView.frame.maxX + 2
+            },
+            "Command-Right Arrow should reach the trailing code without pointer scrolling."
+        )
+        XCTAssertLessThan(codeElement.frame.minX, leadingCodeX)
+        XCTAssertEqual(neighbor.frame.minX, neighborX, accuracy: 1)
+        XCTAssertEqual(outerScrollView.frame, outerFrame)
+
+        app.typeKey(.leftArrow, modifierFlags: [.command])
+        XCTAssertTrue(
+            waitUntil {
+                abs(codeElement.frame.minX - leadingCodeX) <= 2
+            },
+            "Command-Left Arrow should return the focused code viewport to its leading edge."
+        )
+        XCTAssertEqual(neighbor.frame.minX, neighborX, accuracy: 1)
+        XCTAssertEqual(outerScrollView.frame, outerFrame)
+
+        codeScrollView.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.18, dy: 0.5)
+        ).doubleClick()
+        app.typeKey(.rightArrow, modifierFlags: [.command, .shift])
+        let editMenu = app.menuBars.menuBarItems["Edit"]
+        XCTAssertTrue(editMenu.waitForExistence(timeout: 5))
+        editMenu.click()
+        let copyItem = app.menuBars.menuItems["Copy"]
+        XCTAssertTrue(copyItem.waitForExistence(timeout: 5))
+        XCTAssertTrue(copyItem.isEnabled, "Keyboard scrolling must preserve native code selection and Copy.")
+        app.typeKey(.escape, modifierFlags: [])
+
+        let after = try snapshot(of: url)
+        XCTAssertEqual(after.data, before.data)
+        XCTAssertEqual(after.modificationDate, before.modificationDate)
+    }
+
+    @MainActor
     func testResizeAndFullScreenPreserveMiddleAndTallReadingPositions() async throws {
         let beforePassage = (1...18).map {
             "Before paragraph \($0): " + String(
