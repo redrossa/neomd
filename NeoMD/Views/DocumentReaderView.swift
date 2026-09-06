@@ -12,9 +12,22 @@ import SwiftUI
 /// document is loading and not if rendering fails.
 struct DocumentReaderView: View {
     let document: MarkdownDocument
+    let openingCoordinator: DocumentOpeningCoordinator?
 
+    @Environment(\.dismissWindow) private var dismissWindow
+    @Environment(\.openDocument) private var openDocument
+    @Environment(\.openWindow) private var openWindow
     @State private var blocks: [MarkdownBlock] = []
     @State private var isRendered = false
+    @State private var windowID = UUID()
+
+    init(
+        document: MarkdownDocument,
+        openingCoordinator: DocumentOpeningCoordinator? = nil
+    ) {
+        self.document = document
+        self.openingCoordinator = openingCoordinator
+    }
 
     var body: some View {
         ScrollView(.vertical) {
@@ -27,6 +40,24 @@ struct DocumentReaderView: View {
         .frame(minWidth: 480, minHeight: 320)
         .task(id: document.text) {
             await render(document.text)
+        }
+        .onAppear {
+            guard openingCoordinator?.documentWindowDidAppear(id: windowID)
+                    == .hideNoDocumentWindow else { return }
+            dismissWindow(id: DocumentOpeningCoordinator.noDocumentWindowSceneID)
+        }
+        .onDisappear {
+            guard openingCoordinator?.documentWindowDidDisappear(id: windowID)
+                    == .showNoDocumentWindow else { return }
+            let openingCoordinator = openingCoordinator
+            Task { @MainActor in
+                await Task.yield()
+                guard openingCoordinator?.shouldShowNoDocumentWindow == true else { return }
+                openWindow(id: DocumentOpeningCoordinator.noDocumentWindowSceneID)
+            }
+        }
+        .markdownFileDropDestination { url in
+            try await openDocument(at: url)
         }
     }
 
