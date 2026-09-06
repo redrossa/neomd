@@ -1111,11 +1111,25 @@ private enum SystemAppearance {
     }
 
     static nonisolated(unsafe) private(set) var lastFailureDescription: String?
-    static nonisolated(unsafe) private var requestCount = 0
 
     /// The line a host controller greps its build output for, followed by the request
-    /// number, `Dark` or `Light`, and a terminator so a half-flushed line cannot match.
+    /// identifier, `Dark` or `Light`, and a terminator so a half-flushed line cannot
+    /// match.
     static let requestMarker = "NEOMD-APPEARANCE-REQUEST"
+
+    /// A fresh identity for one request, unique across runner processes.
+    ///
+    /// A counter cannot be used. Xcode starts a new runner process for every repetition
+    /// of a test, so a per-process counter restarts at 1, while the controller keeps the
+    /// answers it has already written for the whole `xcodebuild` invocation and treats an
+    /// existing one as a request it has already served. The second repetition would then
+    /// read the first repetition's stale answer. A compact random identifier cannot
+    /// collide with one from an earlier process, so every request is answered on its own
+    /// terms. It is lowercase hexadecimal, which is all the controller accepts and is
+    /// safe as the name of the answer file.
+    private static func newRequestIdentifier() -> String {
+        UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(16).lowercased()
+    }
 
     /// The directory a host controller leaves its answers in.
     static var controlDirectory: URL? {
@@ -1244,25 +1258,30 @@ private enum SystemAppearance {
     ///
     /// The request is a single marker line on standard output, because this runner is
     /// sandboxed and cannot write into the controller's directory. It is not free-form
-    /// prose: the controller matches the marker, a request number and a terminator, so a
-    /// partially flushed line is never acted on and the wording of the surrounding log
-    /// does not matter. The answer comes back as a file, which the runner is allowed to
-    /// read, so a controller that reports a failure fails the test immediately instead
+    /// prose: the controller matches the marker, a request identifier and a terminator,
+    /// so a partially flushed line is never acted on and the wording of the surrounding
+    /// log does not matter. The answer comes back as a file, which the runner is allowed
+    /// to read, so a controller that reports a failure fails the test immediately instead
     /// of timing out.
+    ///
+    /// Nothing is taken on trust. The identifier is unique across runner processes, so an
+    /// answer written for an earlier process cannot be mistaken for this one's; the
+    /// answer has to name the appearance that was actually asked for; and the real
+    /// setting is still read back before the change is believed.
     private static func requestFromHost(
         _ isDark: Bool,
         in directory: URL,
         timeout: TimeInterval
     ) throws {
-        requestCount += 1
-        let identifier = requestCount
+        let identifier = newRequestIdentifier()
+        let target = name(isDark)
         let response = directory.appendingPathComponent("response-\(identifier)")
 
         print(
             """
-            [NeoMD appearance test] Asking the host controller for \(name(isDark)) \
+            [NeoMD appearance test] Asking the host controller for \(target) \
             (request-\(identifier)).
-            \(requestMarker) \(identifier) \(name(isDark)) END
+            \(requestMarker) \(identifier) \(target) END
             """
         )
         fflush(stdout)
@@ -1271,9 +1290,18 @@ private enum SystemAppearance {
         repeat {
             if let answer = try? String(contentsOf: response, encoding: .utf8)
                 .trimmingCharacters(in: .whitespacesAndNewlines) {
-                guard answer.hasPrefix("ok") else {
+                let fields = answer.split(separator: " ", maxSplits: 1).map(String.init)
+                guard fields.first == "ok" else {
                     throw Failure.notPermitted(
-                        "the host controller could not switch to \(name(isDark)): \(answer)"
+                        "the host controller could not switch to \(target): \(answer)"
+                    )
+                }
+                guard fields.count == 2, fields[1] == target else {
+                    throw Failure.notObserved(
+                        """
+                        The host controller answered \(answer) for request-\(identifier), \
+                        which is not the \(target) it was asked for.
+                        """
                     )
                 }
                 guard waitForDarkMode(isDark, timeout: 10) else {
@@ -1293,7 +1321,7 @@ private enum SystemAppearance {
         throw Failure.notObserved(
             """
             The host controller did not answer request-\(identifier) for \
-            \(name(isDark)) within \(Int(timeout))s.
+            \(target) within \(Int(timeout))s.
             """
         )
     }

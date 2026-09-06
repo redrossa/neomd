@@ -20,11 +20,22 @@ Scripts/appearance-test-host.sh -only-testing:NeoMDUITests/AppearanceUITests
 
 # Prove the cleanup: the live test fails on purpose after its first real switch.
 Scripts/appearance-test-host.sh --rehearse-cleanup
+
+# Check the controller itself, against stubs. Needs no Xcode, no graphical session, no
+# Automation access, and never touches the real setting.
+Scripts/appearance-test-host-tests.sh
 ```
 
 Further arguments are passed to `xcodebuild`. `NEOMD_DERIVED_DATA` and
 `NEOMD_RESULT_BUNDLE` override the derived data and result bundle paths, which default
 to locations outside the repository.
+
+The controller's exit status is the run's own status, including a failed launch of
+`xcodebuild`. Otherwise it is `130` for `SIGINT`, `143` for `SIGTERM`, `69` when the
+terminal cannot read the appearance at all, `70` when the appearance could not be
+restored, `71` when something the run owned could not be stopped, and `72` if it somehow
+exited before the run produced a status. **`0` means the run finished and said so; it is
+never what an interrupted run reports.**
 
 A plain `xcodebuild … test` still runs everything else. Without assistance the live
 appearance test reports its limitation and **skips**, which is a recorded gap rather than
@@ -44,14 +55,22 @@ its own container. It therefore asks on standard output and is answered with a f
 | Step | Who | What |
 | --- | --- | --- |
 | 1 | host | Records the current setting, creates the control directory, exports it to the runner as `NEOMD_UI_TEST_APPEARANCE_CONTROL_DIR` |
-| 2 | test | Prints `NEOMD-APPEARANCE-REQUEST <n> <Dark\|Light> END` |
-| 3 | host | Matches that exact shape in the build output, applies it with System Events, reads the real setting back, writes `response-<n>` containing `ok <value>` or `error <reason>` |
-| 4 | test | Reads the response file, and accepts the change only after reading the real setting back itself; an `error` fails the test immediately instead of timing out |
+| 2 | test | Prints `NEOMD-APPEARANCE-REQUEST <id> <Dark\|Light> END`, where `<id>` is a fresh 16-character lowercase-hex token |
+| 3 | host | Matches that exact shape in the build output, applies it with System Events, reads the real setting back, writes `response-<id>` containing `ok <value>` or `error <reason>` |
+| 4 | test | Reads the response file, checks that it names the appearance the test asked for, and accepts the change only after reading the real setting back itself; an `error` fails the test immediately instead of timing out |
 
 Only the request travels through the output stream, and it is matched by a marker,
-number and terminator rather than by prose, so a half-written line is never acted on and
-the surrounding log wording does not matter. A run either completes the switch or fails
-with the reason.
+identifier and terminator rather than by prose, so a half-written line is never acted on
+and the surrounding log wording does not matter. A run either completes the switch or
+fails with the reason.
+
+The identifier is random rather than counted, because Xcode starts a **new runner
+process** for every repetition of a test. A per-process counter restarts at 1 there,
+while the controller keeps the answers it has already written for the whole `xcodebuild`
+invocation and treats an existing one as a request it has already served — so a second
+repetition would silently read the first one's answer. A fresh identifier per request
+cannot collide with one from an earlier process, and the test additionally refuses an
+answer that does not name the appearance it asked for.
 
 A person can also assist without the script: run with
 `TEST_RUNNER_NEOMD_UI_TEST_ASSISTED_APPEARANCE=1` and change the appearance in System
@@ -76,10 +95,23 @@ a defect of the test:
 2. **The host controller's trap.** The script restores the setting on a normal exit, a
    failed run, and `Ctrl-C`/`SIGTERM`, and it exits non-zero if it could not read the
    restored value back. This covers a test process that dies without running teardown.
-   It stops the run and removes the control directory *before* restoring, so a test
-   process that somehow outlived the run cannot have another switch served to it
-   afterwards — the runner has no Automation access of its own, which is why it has to
-   ask in the first place.
+
+   It stops the run *before* restoring, and it stops the run itself rather than its
+   leader. `xcodebuild` is started in a process group of its own, but the group leader
+   exiting proves nothing: a descendant can ignore `SIGTERM` and outlive it, and macOS
+   starts the UI test runner reparented to launchd in a **group of its own**, so it was
+   never in that group to begin with. The controller therefore re-checks what it owns —
+   members of that process group, and processes running out of this run's build products
+   — until nothing is left, escalating from `SIGTERM` to `SIGKILL` and finally reporting
+   `71` rather than restoring over a survivor in silence. Ownership is decided by a
+   process group this run created and by this run's derived data path, so a separate
+   Xcode or app session is never signalled.
+
+   The control directory is removed before the restore as well, so nothing can have
+   another switch *served* to it afterwards. That is a guarantee about the controller,
+   not about the runner: on a host where the runner has Automation access it changes the
+   setting directly, which is exactly why the run is stopped first rather than merely cut
+   off from the handshake.
 
 Neither can help if the script itself is `SIGKILL`ed or the machine loses power. In that
 case, set the appearance in System Settings > Appearance.
@@ -87,6 +119,16 @@ case, set the appearance in System Settings > Appearance.
 `--rehearse-cleanup` exercises the first mechanism deliberately: the test fails
 immediately after its first real switch, with the switch-back never reached, so the run
 ends with a failed test and a restored appearance.
+
+`Scripts/appearance-test-host-tests.sh` exercises the second one, and the paths a real
+run does not reach. It runs the checked-in controller unmodified against a stubbed
+`osascript` that keeps the "appearance" in a file and a stubbed `xcodebuild` that plays
+one scenario, so the real setting is never touched: a passing run, a failing run, a run
+that could not be launched, `SIGINT` and `SIGTERM` mid-run, a descendant that ignores
+`SIGTERM`, a runner outside the process group, requests from separate runner processes, a
+refused restoration, and requests that are not the agreed shape. Each scenario checks
+both the status reported and the state left behind, because either one alone can hide a
+defect.
 
 ## What the tests measure
 
