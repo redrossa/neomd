@@ -99,6 +99,113 @@ final class DocumentOpeningUITests: XCTestCase {
     }
 
     @MainActor
+    private func openFromNativePanel(_ url: URL, in app: XCUIApplication) {
+        invokeMenuOpen(in: app)
+
+        let panel = openPanel(in: app)
+        XCTAssertTrue(panel.waitForExistence(timeout: 5))
+        app.typeKey("g", modifierFlags: [.command, .shift])
+
+        let pathField = app.textFields["PathTextField"]
+        XCTAssertTrue(pathField.waitForExistence(timeout: 5))
+        pathField.typeKey("a", modifierFlags: .command)
+        pathField.typeText(url.path)
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(
+            pathField.waitForNonExistence(timeout: 5),
+            "Go to Folder should select the requested document."
+        )
+
+        let openButton = panel.buttons["Open"]
+        XCTAssertTrue(openButton.waitForExistence(timeout: 5))
+        XCTAssertTrue(openButton.isEnabled)
+        openButton.click()
+        XCTAssertTrue(panel.waitForNonExistence(timeout: 10))
+    }
+
+    @MainActor
+    private func readerWindow(containing text: String, in app: XCUIApplication) -> XCUIElement {
+        app.windows.containing(.staticText, identifier: text).firstMatch
+    }
+
+    @MainActor
+    private func assertFrontmost(
+        named title: String,
+        in app: XCUIApplication,
+        timeout: TimeInterval = 10,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let frontmostTitle = app.windows.firstMatch.staticTexts[title]
+        XCTAssertTrue(
+            frontmostTitle.waitForExistence(timeout: timeout),
+            "The expected reader should become the frontmost window.",
+            file: file,
+            line: line
+        )
+    }
+
+    @MainActor
+    private func focusWindow(named title: String, in app: XCUIApplication) {
+        let windowMenu = app.menuBars.menuBarItems["Window"]
+        XCTAssertTrue(windowMenu.waitForExistence(timeout: 5))
+        windowMenu.click()
+
+        let predicate = NSPredicate(
+            format: "identifier == 'makeKeyAndOrderFront:' AND title == %@",
+            title
+        )
+        let windowItem = app.menuBars.menuItems.matching(predicate).firstMatch
+        XCTAssertTrue(windowItem.waitForExistence(timeout: 5))
+        windowItem.click()
+        assertFrontmost(named: title, in: app)
+    }
+
+    @MainActor
+    private func assertNativeLocation(
+        of url: URL,
+        in window: XCUIElement,
+        app: XCUIApplication,
+        activationOffset: CGVector = CGVector(dx: 0.5, dy: 0.01),
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let titleBar = window.coordinate(withNormalizedOffset: activationOffset)
+        titleBar.click()
+
+        let documentActions = window.menuButtons["document actions"]
+        XCTAssertTrue(
+            documentActions.waitForExistence(timeout: 5),
+            "The native title area should expose document actions.",
+            file: file,
+            line: line
+        )
+        documentActions.click()
+
+        let locationLabel = app.descendants(matching: .any).matching(
+            NSPredicate(format: "value == 'Where:'")
+        ).firstMatch
+        XCTAssertTrue(
+            locationLabel.waitForExistence(timeout: 5),
+            "The native document menu should expose the file location.",
+            file: file,
+            line: line
+        )
+        let expectedLocation = url.deletingLastPathComponent().lastPathComponent
+        let location = app.popUpButtons.matching(
+            NSPredicate(format: "value == %@", expectedLocation)
+        ).firstMatch
+        XCTAssertTrue(location.waitForExistence(timeout: 5), file: file, line: line)
+        XCTAssertEqual(location.value as? String, expectedLocation, file: file, line: line)
+
+        app.typeKey(.escape, modifierFlags: [])
+        if locationLabel.exists {
+            app.typeKey(.escape, modifierFlags: [])
+        }
+        XCTAssertTrue(locationLabel.waitForNonExistence(timeout: 5), file: file, line: line)
+    }
+
+    @MainActor
     private func closeWindow(_ window: XCUIElement) {
         let closeButton = window.buttons.matching(identifier: "_XCUI:CloseWindow").firstMatch
         XCTAssertTrue(closeButton.waitForExistence(timeout: 5))
@@ -106,8 +213,17 @@ final class DocumentOpeningUITests: XCTestCase {
     }
 
     @discardableResult
-    private func makeDocument(named name: String, content: String) throws -> URL {
-        let url = testDirectory.appendingPathComponent(name)
+    private func makeDocument(
+        named name: String,
+        in directory: URL? = nil,
+        content: String
+    ) throws -> URL {
+        let directory = directory ?? testDirectory!
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        let url = directory.appendingPathComponent(name)
         try Data(content.utf8).write(to: url)
         try FileManager.default.setAttributes(
             [.modificationDate: Date(timeIntervalSince1970: 1_700_000_000)],
@@ -285,6 +401,177 @@ final class DocumentOpeningUITests: XCTestCase {
     }
 
     @MainActor
+    func testNativeTitleLocationsDistinguishDocumentsWithTheSameFilename() async throws {
+        let firstDirectory = testDirectory.appendingPathComponent(
+            "First Location",
+            isDirectory: true
+        )
+        let secondDirectory = testDirectory.appendingPathComponent(
+            "Second Location",
+            isDirectory: true
+        )
+        let firstURL = try makeDocument(
+            named: "shared.md",
+            in: firstDirectory,
+            content: "FIRST SHARED DOCUMENT"
+        )
+        let secondURL = try makeDocument(
+            named: "shared.md",
+            in: secondDirectory,
+            content: "SECOND SHARED DOCUMENT"
+        )
+        let firstBefore = try snapshot(of: firstURL)
+        let secondBefore = try snapshot(of: secondURL)
+        let app = configuredApplication()
+
+        app.open(firstURL)
+        XCTAssertTrue(app.staticTexts["FIRST SHARED DOCUMENT"].waitForExistence(timeout: 10))
+        try await openWhileRunning(secondURL, in: app)
+        XCTAssertTrue(app.staticTexts["SECOND SHARED DOCUMENT"].waitForExistence(timeout: 10))
+
+        let firstWindow = readerWindow(containing: "FIRST SHARED DOCUMENT", in: app)
+        let secondWindow = readerWindow(containing: "SECOND SHARED DOCUMENT", in: app)
+        XCTAssertTrue(firstWindow.waitForExistence(timeout: 5))
+        XCTAssertTrue(secondWindow.waitForExistence(timeout: 5))
+        XCTAssertEqual(
+            app.windows.matching(identifier: firstURL.lastPathComponent).count,
+            2,
+            "Distinct files should remain in separate filename-titled windows."
+        )
+
+        assertNativeLocation(of: firstURL, in: firstWindow, app: app)
+        // The cascaded second window remains exposed at its right title-bar edge.
+        assertNativeLocation(
+            of: secondURL,
+            in: secondWindow,
+            app: app,
+            activationOffset: CGVector(dx: 0.99, dy: 0.02)
+        )
+
+        let firstAfter = try snapshot(of: firstURL)
+        let secondAfter = try snapshot(of: secondURL)
+        XCTAssertEqual(firstAfter.data, firstBefore.data)
+        XCTAssertEqual(firstAfter.modificationDate, firstBefore.modificationDate)
+        XCTAssertEqual(secondAfter.data, secondBefore.data)
+        XCTAssertEqual(secondAfter.modificationDate, secondBefore.modificationDate)
+    }
+
+    @MainActor
+    func testReopeningSameDocumentThroughNativePathsRefocusesExistingReader() async throws {
+        let paragraphs = (1...90)
+            .map { "Identity paragraph \($0) keeps the first reader scrollable." }
+            .joined(separator: "\n\n")
+        let firstURL = try makeDocument(
+            named: "same-file.md",
+            content: "SAME FILE START\n\n\(paragraphs)\n\nSAME FILE POSITION"
+        )
+        let secondURL = try makeDocument(
+            named: "other-file.md",
+            content: "OTHER READER SURVIVES"
+        )
+        let firstBefore = try snapshot(of: firstURL)
+        let secondBefore = try snapshot(of: secondURL)
+        let app = configuredApplication()
+
+        app.open(firstURL)
+        XCTAssertTrue(app.staticTexts["SAME FILE START"].waitForExistence(timeout: 10))
+        let firstWindow = app.windows[firstURL.lastPathComponent]
+        let position = app.staticTexts["SAME FILE POSITION"]
+        scrollToElement(position, in: firstWindow.scrollViews.firstMatch)
+        let positionYBeforeReopening = position.frame.minY
+
+        try await openWhileRunning(secondURL, in: app)
+        XCTAssertTrue(app.staticTexts["OTHER READER SURVIVES"].waitForExistence(timeout: 10))
+        let secondWindow = app.windows[secondURL.lastPathComponent]
+        XCTAssertTrue(secondWindow.waitForExistence(timeout: 5))
+        assertFrontmost(named: secondURL.lastPathComponent, in: app)
+
+        // File > Open uses the native picker and should select the existing reader.
+        openFromNativePanel(firstURL, in: app)
+        assertFrontmost(named: firstURL.lastPathComponent, in: app)
+        assertExistingScrolledReader(
+            firstWindow,
+            position: position,
+            positionY: positionYBeforeReopening,
+            otherWindow: secondWindow,
+            firstURL: firstURL,
+            secondURL: secondURL,
+            app: app
+        )
+
+        // This is the same Open Documents event delivered by Finder and Dock while running.
+        focusWindow(named: secondURL.lastPathComponent, in: app)
+        try await openWhileRunning(firstURL, in: app)
+        assertFrontmost(named: firstURL.lastPathComponent, in: app)
+        assertExistingScrolledReader(
+            firstWindow,
+            position: position,
+            positionY: positionYBeforeReopening,
+            otherWindow: secondWindow,
+            firstURL: firstURL,
+            secondURL: secondURL,
+            app: app
+        )
+
+        // A same-file drop on another occupied reader follows the same native identity path.
+        focusWindow(named: secondURL.lastPathComponent, in: app)
+        dragFromFinder(firstURL, to: secondWindow)
+        assertFrontmost(named: firstURL.lastPathComponent, in: app, timeout: 15)
+        assertExistingScrolledReader(
+            firstWindow,
+            position: position,
+            positionY: positionYBeforeReopening,
+            otherWindow: secondWindow,
+            firstURL: firstURL,
+            secondURL: secondURL,
+            app: app
+        )
+
+        let firstAfter = try snapshot(of: firstURL)
+        let secondAfter = try snapshot(of: secondURL)
+        XCTAssertEqual(firstAfter.data, firstBefore.data)
+        XCTAssertEqual(firstAfter.modificationDate, firstBefore.modificationDate)
+        XCTAssertEqual(secondAfter.data, secondBefore.data)
+        XCTAssertEqual(secondAfter.modificationDate, secondBefore.modificationDate)
+    }
+
+    @MainActor
+    private func assertExistingScrolledReader(
+        _ firstWindow: XCUIElement,
+        position: XCUIElement,
+        positionY: CGFloat,
+        otherWindow: XCUIElement,
+        firstURL: URL,
+        secondURL: URL,
+        app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(
+            app.windows.matching(identifier: firstURL.lastPathComponent).count,
+            1,
+            "Reopening must not create a duplicate reader.",
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            app.windows.matching(identifier: secondURL.lastPathComponent).count,
+            1,
+            file: file,
+            line: line
+        )
+        XCTAssertTrue(
+            app.windows.firstMatch.staticTexts[firstURL.lastPathComponent].exists,
+            file: file,
+            line: line
+        )
+        XCTAssertTrue(position.isHittable, file: file, line: line)
+        XCTAssertEqual(position.frame.minY, positionY, accuracy: 1, file: file, line: line)
+        XCTAssertTrue(otherWindow.exists, file: file, line: line)
+        XCTAssertFalse(app.staticTexts["NoDocumentInstruction"].exists, file: file, line: line)
+    }
+
+    @MainActor
     func testDroppingOnNoFileWindowOpensTheDocument() throws {
         let url = try makeDocument(named: "drop-empty.md", content: "EMPTY DROP CONTENT")
         let before = try snapshot(of: url)
@@ -342,6 +629,34 @@ final class DocumentOpeningUITests: XCTestCase {
         XCTAssertEqual(firstAfter.modificationDate, firstBefore.modificationDate)
         XCTAssertEqual(secondAfter.data, secondBefore.data)
         XCTAssertEqual(secondAfter.modificationDate, secondBefore.modificationDate)
+    }
+
+    @MainActor
+    func testCommandWClosesReaderWithoutPromptOrSourceChange() throws {
+        let url = try makeDocument(
+            named: "close-without-save.md",
+            content: "CLOSE WITHOUT SAVE PROMPT"
+        )
+        let before = try snapshot(of: url)
+        let app = configuredApplication()
+
+        app.open(url)
+        let content = app.staticTexts["CLOSE WITHOUT SAVE PROMPT"]
+        XCTAssertTrue(content.waitForExistence(timeout: 10))
+        let reader = app.windows[url.lastPathComponent]
+        XCTAssertTrue(reader.waitForExistence(timeout: 5))
+
+        app.activate()
+        app.typeKey("w", modifierFlags: .command)
+
+        XCTAssertTrue(content.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["NoDocumentInstruction"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.sheets.firstMatch.exists, "Closing must not present a save sheet.")
+        XCTAssertFalse(app.dialogs.firstMatch.exists, "Closing must not present a save dialog.")
+
+        let after = try snapshot(of: url)
+        XCTAssertEqual(after.data, before.data)
+        XCTAssertEqual(after.modificationDate, before.modificationDate)
     }
 
     @MainActor

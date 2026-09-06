@@ -36,7 +36,13 @@ struct NeoMDApp: App {
         .defaultSize(width: 900, height: 720)
         .defaultLaunchBehavior(.presented)
         .commands {
-            CommandGroup(replacing: .saveItem) { }
+            // Replacing the save group also removes the standard close command.
+            CommandGroup(replacing: .saveItem) {
+                Button("Close") {
+                    NSApp.keyWindow?.performClose(nil)
+                }
+                .keyboardShortcut("w")
+            }
         }
     }
 }
