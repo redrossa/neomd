@@ -64,6 +64,23 @@ final class AppearanceUITests: XCTestCase {
         }
 
         if let restorationFailure {
+            // Throwing alone is not enough to reach the tester. XCTest stops recording
+            // failures for a test that has already failed with `continueAfterFailure`
+            // off, and a restoration can only fail on a run that failed already — a run
+            // whose own switches all worked leaves nothing to restore. So the
+            // instruction is printed and attached, which always surfaces, and the throw
+            // is what would still turn an otherwise-passing run red. Recording a failure
+            // here as well would only make XCTest run this teardown a second time and
+            // wait out the same restoration timeout again.
+            let message = """
+                [NeoMD appearance test] \(restorationFailure.localizedDescription)
+                """
+            print(message)
+            fflush(stdout)
+            let attachment = XCTAttachment(string: message)
+            attachment.name = "System appearance restoration failed"
+            attachment.lifetime = .keepAlways
+            add(attachment)
             throw restorationFailure
         }
     }
@@ -1066,11 +1083,15 @@ final class AppearanceUITests: XCTestCase {
 ///
 /// A test runner is usually not allowed to send Apple events to System Events, so the
 /// change can also be delegated. `Scripts/appearance-test-host.sh` runs the suite from a
-/// terminal that already has Automation access and answers requests left in a control
-/// directory; without a host controller, a person can make the change when prompted.
-/// The handshake is a pair of files rather than a line in the build log, so neither side
-/// has to guess what was asked for or whether it happened, and no path is trusted until
-/// the real setting has been read back.
+/// terminal that already has Automation access and answers this runner's requests;
+/// without a host controller, a person can make the change when prompted.
+///
+/// The handshake is deliberately asymmetric, because the UI test runner is sandboxed: it
+/// carries a read-only exception for the file system and can write only inside its own
+/// container, so it *asks* on standard output with a marker line the controller greps
+/// for, and the controller *answers* with a file this side only has to read. Neither
+/// side has to guess what was asked for or whether it happened, and no path is trusted
+/// until the real setting has been read back.
 private enum SystemAppearance {
     enum Failure: LocalizedError {
         case notPermitted(String)
@@ -1092,7 +1113,11 @@ private enum SystemAppearance {
     static nonisolated(unsafe) private(set) var lastFailureDescription: String?
     static nonisolated(unsafe) private var requestCount = 0
 
-    /// The directory a host controller watches for appearance requests.
+    /// The line a host controller greps its build output for, followed by the request
+    /// number, `Dark` or `Light`, and a terminator so a half-flushed line cannot match.
+    static let requestMarker = "NEOMD-APPEARANCE-REQUEST"
+
+    /// The directory a host controller leaves its answers in.
     static var controlDirectory: URL? {
         guard let path = ProcessInfo.processInfo.environment[
             "NEOMD_UI_TEST_APPEARANCE_CONTROL_DIR"
@@ -1190,6 +1215,7 @@ private enum SystemAppearance {
             try setDarkMode(original)
         } catch {
             underlyingDescription = error.localizedDescription
+                .trimmingCharacters(in: CharacterSet(charactersIn: ". "))
         }
 
         guard isDarkMode() != original else { return }
@@ -1216,9 +1242,12 @@ private enum SystemAppearance {
 
     /// Asks the host controller for a change and waits for its explicit answer.
     ///
-    /// The request is a file the controller polls for, and the answer is a file this
-    /// side polls for, so a run is deterministic: nothing depends on parsing the build
-    /// log, and a controller that reports a failure fails the test immediately instead
+    /// The request is a single marker line on standard output, because this runner is
+    /// sandboxed and cannot write into the controller's directory. It is not free-form
+    /// prose: the controller matches the marker, a request number and a terminator, so a
+    /// partially flushed line is never acted on and the wording of the surrounding log
+    /// does not matter. The answer comes back as a file, which the runner is allowed to
+    /// read, so a controller that reports a failure fails the test immediately instead
     /// of timing out.
     private static func requestFromHost(
         _ isDark: Bool,
@@ -1227,22 +1256,16 @@ private enum SystemAppearance {
     ) throws {
         requestCount += 1
         let identifier = requestCount
-        let request = directory.appendingPathComponent("request-\(identifier)")
         let response = directory.appendingPathComponent("response-\(identifier)")
 
         print(
             """
             [NeoMD appearance test] Asking the host controller for \(name(isDark)) \
             (request-\(identifier)).
+            \(requestMarker) \(identifier) \(name(isDark)) END
             """
         )
-        do {
-            try Data(name(isDark).utf8).write(to: request, options: .atomic)
-        } catch {
-            throw Failure.notPermitted(
-                "the appearance request could not be written to \(request.path): \(error)"
-            )
-        }
+        fflush(stdout)
 
         let deadline = Date().addingTimeInterval(timeout)
         repeat {

@@ -37,17 +37,21 @@ so it cannot change the appearance by itself. A terminal that already has Automa
 access for System Events can. `Scripts/appearance-test-host.sh` is that terminal: it
 starts `xcodebuild`, answers the test's requests, and restores the appearance afterwards.
 
-The two sides talk through files in a control directory, not through the build log:
+The handshake is asymmetric, because the UI test runner is sandboxed: it is signed with a
+read-only exception for the file system, so it can read anything but write only inside
+its own container. It therefore asks on standard output and is answered with a file:
 
 | Step | Who | What |
 | --- | --- | --- |
 | 1 | host | Records the current setting, creates the control directory, exports it to the runner as `NEOMD_UI_TEST_APPEARANCE_CONTROL_DIR` |
-| 2 | test | Writes `request-<n>` containing `Dark` or `Light` |
-| 3 | host | Applies it with System Events, reads the real setting back, writes `response-<n>` containing `ok <value>` or `error <reason>` |
-| 4 | test | Accepts the change only after reading the setting back itself; an `error` fails the test immediately instead of timing out |
+| 2 | test | Prints `NEOMD-APPEARANCE-REQUEST <n> <Dark\|Light> END` |
+| 3 | host | Matches that exact shape in the build output, applies it with System Events, reads the real setting back, writes `response-<n>` containing `ok <value>` or `error <reason>` |
+| 4 | test | Reads the response file, and accepts the change only after reading the real setting back itself; an `error` fails the test immediately instead of timing out |
 
-Nothing in this handshake depends on log formatting or timing guesses, so a run either
-completes the switch or fails with the reason.
+Only the request travels through the output stream, and it is matched by a marker,
+number and terminator rather than by prose, so a half-written line is never acted on and
+the surrounding log wording does not matter. A run either completes the switch or fails
+with the reason.
 
 A person can also assist without the script: run with
 `TEST_RUNNER_NEOMD_UI_TEST_ASSISTED_APPEARANCE=1` and change the appearance in System
@@ -60,12 +64,22 @@ a defect of the test:
 
 1. **The test's teardown.** `tearDownWithError` restores the setting the test found,
    using the same assistance the run was given, and only believes it after reading the
-   real setting back. A restoration it cannot verify is thrown, so the test fails with
-   an explanation instead of finishing quietly. This covers a failure at any point after
-   the first switch, including one that never reaches the test's own switch-back.
+   real setting back. It runs after the test method whatever happened inside it, so it
+   covers a failure at any point after the first switch, including one that never
+   reaches the test's own switch-back.
+
+   A restoration it cannot verify is **printed and attached to the results** with the
+   appearance to set by hand, and thrown. The printing is the part that matters in
+   practice: XCTest stops recording failures for a test that has already failed, and a
+   restoration can only fail on a run that failed already — a run whose own switches all
+   worked has nothing left to restore. Either way the instruction is never swallowed.
 2. **The host controller's trap.** The script restores the setting on a normal exit, a
    failed run, and `Ctrl-C`/`SIGTERM`, and it exits non-zero if it could not read the
    restored value back. This covers a test process that dies without running teardown.
+   It stops the run and removes the control directory *before* restoring, so a test
+   process that somehow outlived the run cannot have another switch served to it
+   afterwards — the runner has no Automation access of its own, which is why it has to
+   ask in the first place.
 
 Neither can help if the script itself is `SIGKILL`ed or the machine loses power. In that
 case, set the appearance in System Settings > Appearance.

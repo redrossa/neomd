@@ -10,13 +10,18 @@
 # the test's switch requests, and restores the appearance it found — after the suite
 # passes, after it fails, and after it is interrupted with Ctrl-C.
 #
-# Protocol (a file handshake, so neither side has to parse the build log):
+# Protocol. The UI test runner is sandboxed: it is signed with a read-only exception for
+# the file system, so it can read anything but write only inside its own container. The
+# handshake is therefore asymmetric — the test asks on standard output, and this script
+# answers with a file the test only has to read.
 #
 #   1. This script records the current setting and creates a control directory, passed
 #      to the test runner as NEOMD_UI_TEST_APPEARANCE_CONTROL_DIR.
-#   2. The test writes `request-<n>` containing `Dark` or `Light`.
+#   2. The test prints `NEOMD-APPEARANCE-REQUEST <n> <Dark|Light> END`. The request is
+#      matched by that exact shape, not by the prose around it, and the terminator means
+#      a half-written line is never acted on.
 #   3. This script applies it, reads the real setting back, and writes `response-<n>`
-#      containing `ok <value>` or `error <reason>`.
+#      containing `ok <value>` or `error <reason>` into the control directory.
 #   4. The test accepts the change only after reading the setting back itself, and
 #      fails immediately on `error`.
 #
@@ -43,6 +48,8 @@ PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 DERIVED_DATA=${NEOMD_DERIVED_DATA:-/tmp/NeoMD-DerivedData}
 RESULT_BUNDLE=${NEOMD_RESULT_BUNDLE:-}
 CONTROL_DIR=$(mktemp -d "${TMPDIR:-/tmp}/neomd-appearance-control.XXXXXX")
+STREAM_LOG="$CONTROL_DIR/xcodebuild-output.log"
+REQUEST_MARKER='NEOMD-APPEARANCE-REQUEST'
 ORIGINAL=""
 XCODEBUILD_PID=""
 EXIT_STATUS=0
@@ -76,15 +83,17 @@ observe_dark_mode() {
     return 1
 }
 
+# Reads the requests the test printed and answers each one exactly once. An already
+# written response is the record of having served a request, so re-reading the whole
+# stream every pass is harmless.
 serve_requests() {
-    local identifier request response value target observed message
-    for identifier in $(ls "$CONTROL_DIR" 2>/dev/null | sed -n 's/^request-//p' | sort -n); do
-        request="$CONTROL_DIR/request-$identifier"
+    local identifier response value target observed message
+    [ -f "$STREAM_LOG" ] || return 0
+    while read -r identifier value; do
+        [ -n "$identifier" ] || continue
         response="$CONTROL_DIR/response-$identifier"
-        [ -e "$request" ] || continue
         [ -e "$response" ] && continue
 
-        value=$(tr -d '[:space:]' < "$request")
         case "$value" in
             Dark) target=true ;;
             Light) target=false ;;
@@ -111,7 +120,10 @@ serve_requests() {
             printf 'error the setting stayed %s' "$observed" > "$response.tmp"
         fi
         mv "$response.tmp" "$response"
-    done
+    done < <(
+        sed -n "s/.*$REQUEST_MARKER \([0-9][0-9]*\) \([A-Za-z][A-Za-z]*\) END.*/\1 \2/p" \
+            "$STREAM_LOG" | sort -n -u
+    )
 }
 
 restore_appearance() {
@@ -139,15 +151,35 @@ restore_appearance() {
     return 1
 }
 
+# Stops the run before anything is restored. xcodebuild is started in its own process
+# group so its test processes go with it rather than outliving the controller.
+stop_xcodebuild() {
+    local attempt
+    [ -n "$XCODEBUILD_PID" ] || return 0
+    kill -0 "$XCODEBUILD_PID" 2>/dev/null || return 0
+
+    log "stopping xcodebuild ($XCODEBUILD_PID) and its test processes"
+    kill -TERM "-$XCODEBUILD_PID" 2>/dev/null || kill -TERM "$XCODEBUILD_PID" 2>/dev/null
+    for attempt in $(seq 1 40); do
+        kill -0 "$XCODEBUILD_PID" 2>/dev/null || break
+        sleep 0.25
+    done
+    if kill -0 "$XCODEBUILD_PID" 2>/dev/null; then
+        log "xcodebuild did not stop in time; killing it"
+        kill -KILL "-$XCODEBUILD_PID" 2>/dev/null || kill -KILL "$XCODEBUILD_PID" 2>/dev/null
+    fi
+    wait "$XCODEBUILD_PID" 2>/dev/null
+}
+
 cleanup() {
     trap - EXIT INT TERM
-    if [ -n "$XCODEBUILD_PID" ] && kill -0 "$XCODEBUILD_PID" 2>/dev/null; then
-        log "stopping xcodebuild ($XCODEBUILD_PID)"
-        kill "$XCODEBUILD_PID" 2>/dev/null
-        wait "$XCODEBUILD_PID" 2>/dev/null
-    fi
-    [ -n "$ORIGINAL" ] && restore_appearance
+    stop_xcodebuild
+    # Stop answering before restoring. A test process that somehow outlived the run can
+    # no longer have a switch served to it, so nothing can change the appearance behind
+    # this restore — the runner has no Automation access of its own, which is the whole
+    # reason it has to ask.
     rm -rf "$CONTROL_DIR"
+    [ -n "$ORIGINAL" ] && restore_appearance
     if [ "$RESTORE_STATUS" -ne 0 ]; then
         exit "$RESTORE_STATUS"
     fi
@@ -199,8 +231,12 @@ COMMAND+=(${ARGUMENTS[@]+"${ARGUMENTS[@]}"})
 
 log "running: ${COMMAND[*]}"
 cd "$PROJECT_DIR" || exit 1
-NSUnbufferedIO=YES "${COMMAND[@]}" &
+# Job control puts xcodebuild in its own process group, so cleanup can stop the whole
+# run. Its output is echoed as usual and copied where serve_requests can read it.
+set -m
+NSUnbufferedIO=YES "${COMMAND[@]}" < /dev/null > >(tee "$STREAM_LOG") 2>&1 &
 XCODEBUILD_PID=$!
+set +m
 
 while kill -0 "$XCODEBUILD_PID" 2>/dev/null; do
     serve_requests

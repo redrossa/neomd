@@ -64,6 +64,43 @@ struct ReaderThemeTests {
         #expect(presented.runs.allSatisfy { $0.link != nil || $0.underlineStyle == nil })
     }
 
+    /// A link whose label is only partly emphasized still carries one continuous rule.
+    ///
+    /// The underline is applied per run, so a label split across several runs would be a
+    /// gapped rule. `AttributedString`'s full Markdown syntax happens to collapse
+    /// emphasis inside a link label into a single run today, which is why this asserts
+    /// the outcome — every character of the label underlined — rather than a run count:
+    /// the rule stays continuous whether or not a future parser splits the label.
+    @Test func aPartlyEmphasizedLinkLabelIsUnderlinedFromEndToEnd() throws {
+        let text = MarkdownBlockRenderer.blocks(
+            from: "Read the [**release** checklist](https://example.com/checklist) before shipping."
+        )[0].text
+        let presented = ReaderTheme().presentationText(for: text)
+
+        let labelRuns = presented.runs.filter { $0.link != nil }
+        #expect(!labelRuns.isEmpty, "The fixture should render a link.")
+        #expect(labelRuns.allSatisfy { $0.underlineStyle == .single })
+
+        let label = try #require(labelRuns.first).range.lowerBound
+            ..< (try #require(labelRuns.last).range.upperBound)
+        #expect(String(presented[label].characters) == "release checklist")
+
+        // No character between the label's first and last run may miss the rule, or the
+        // underline would break exactly where the emphasis does.
+        let underlined = presented.runs
+            .filter { $0.underlineStyle == .single }
+            .map(\.range)
+        for index in presented.characters[label].indices {
+            #expect(
+                underlined.contains { $0.contains(index) },
+                "The underline breaks inside the link label."
+            )
+        }
+
+        #expect(presented.runs.allSatisfy { $0.link != nil || $0.underlineStyle == nil })
+        #expect(String(presented.characters) == String(text.characters))
+    }
+
     @Test func linksInEveryBlockKindKeepTheirUnderline() {
         let blocks = MarkdownBlockRenderer.blocks(
             from: """
