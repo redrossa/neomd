@@ -203,7 +203,7 @@ final class DocumentReaderLayoutUITests: XCTestCase {
 
         let neighbor = window.staticTexts["CODE NEIGHBOR"]
         scrollToElement(neighbor, in: outerScrollView)
-        let codeScrollView = window.scrollViews["MarkdownCodeBlock-7"]
+        let codeScrollView = window.scrollViews["MarkdownCodeBlock-9"]
         XCTAssertTrue(codeScrollView.waitForExistence(timeout: 5))
         XCTAssertLessThanOrEqual(codeScrollView.frame.width, outerScrollView.frame.width - 78)
         let codeElement = staticText(code, in: window)
@@ -325,9 +325,10 @@ final class DocumentReaderLayoutUITests: XCTestCase {
         XCTAssertEqual(neighbor.frame.minX, neighborX, accuracy: 1)
         XCTAssertEqual(outerScrollView.frame, outerFrame)
 
+        // Click the content line, not the parser-preserved terminal newline below it.
         codeScrollView.coordinate(
-            withNormalizedOffset: CGVector(dx: 0.18, dy: 0.5)
-        ).doubleClick()
+            withNormalizedOffset: CGVector(dx: 0.18, dy: 0)
+        ).withOffset(CGVector(dx: 0, dy: 18)).doubleClick()
         app.typeKey(.rightArrow, modifierFlags: [.command, .shift])
         let editMenu = app.menuBars.menuBarItems["Edit"]
         XCTAssertTrue(editMenu.waitForExistence(timeout: 5))
@@ -779,6 +780,104 @@ final class DocumentReaderLayoutUITests: XCTestCase {
     }
 
     @MainActor
+    func testNestedQuotationsAndHighlightedCodeInBothAppearances() async throws {
+        let longCode = "let  wide = \"" + String(repeating: "abcdefghij", count: 100) + "\"\n"
+        let exactCode = "\n    let  x = 1  \n\tprint(x)\n\n"
+        let source = "> OUTER QUOTE\n>\n> > INNER QUOTE\n>\n> BACK TO OUTER\n>\n> ```swift\n> "
+            + longCode + "> ```\n\nInline `a  b` stays literal.\n\n```swift\n" + exactCode
+            + "```\n\n```unknownlang\nplain fallback\n```\n\n"
+            + "```python\ndef answer():\n    return 42 # comment\n```\n\n"
+            + "```json\n{\"key\": \"value\", \"number\": 42}\n```\n\n"
+            + "- > LIST QUOTE\n  >\n  > ```ts\n  > const x = 2\n  > ```\n\n"
+            + "> - QUOTED LIST\n>\n>   ```sh\n>   if true; then echo \"yes\"; fi\n>   ```"
+        let url = try makeDocument(named: "quotations-code.md", content: source)
+        let before = try snapshot(of: url)
+        for appearance in ["Light", "Dark"] {
+            let app = configuredApplication(appearance: appearance)
+            app.launch()
+            try await openWhileRunning(url, in: app)
+            let window = app.windows[url.lastPathComponent]
+            XCTAssertTrue(window.waitForExistence(timeout: 10))
+            resize(window, to: CGSize(width: 700, height: 900))
+            let reader = window.scrollViews["DocumentReaderScrollView"]
+            let outer = staticText("OUTER QUOTE", in: window)
+            let inner = staticText("INNER QUOTE", in: window)
+            XCTAssertTrue(inner.waitForExistence(timeout: 5))
+            XCTAssertEqual(inner.frame.minX - outer.frame.minX, 15, accuracy: 2)
+            XCTAssertEqual(staticText("BACK TO OUTER", in: window).frame.minX, outer.frame.minX, accuracy: 1)
+            XCTAssertTrue(window.descendants(matching: .any)["MarkdownBlockQuote-0"].exists)
+            let code = window.staticTexts.matching(NSPredicate(format: "value == %@", exactCode)).firstMatch
+            XCTAssertTrue(code.waitForExistence(timeout: 5), "Boundary blank lines, indentation, tabs and trailing spaces must survive into Text.")
+            XCTAssertTrue(staticText("Inline a  b stays literal.", in: window).exists)
+            XCTAssertTrue(staticText("plain fallback\n", in: window).exists)
+            XCTAssertEqual(window.staticTexts.matching(NSPredicate(format: "value CONTAINS %@ OR value CONTAINS %@", "```", "unknownlang")).count, 0)
+            attachScreenshot(of: window, named: "Nested quotations and code — \(appearance)")
+
+            let scroller = window.scrollViews["MarkdownCodeBlock-5"]
+            let longText = staticText(longCode, in: window)
+            XCTAssertTrue(scroller.waitForExistence(timeout: 5))
+            XCTAssertLessThan(scroller.frame.width, reader.frame.width - 80)
+            let initialX = longText.frame.minX
+            let outerX = outer.frame.minX
+            let readerFrame = reader.frame
+            reader.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.1)).click()
+            var moved = false
+            for _ in 0..<8 {
+                app.typeKey(.tab, modifierFlags: [.option])
+                app.typeKey(.rightArrow, modifierFlags: [])
+                moved = waitUntil(timeout: 0.5) { longText.frame.minX < initialX - 2 }
+                if moved { break }
+            }
+            XCTAssertTrue(moved, "Nested code must keep keyboard focus and local scrolling.")
+            app.typeKey(.rightArrow, modifierFlags: [.command])
+            XCTAssertTrue(waitUntil { longText.frame.maxX <= scroller.frame.maxX + 2 })
+            XCTAssertEqual(outer.frame.minX, outerX, accuracy: 1)
+            XCTAssertEqual(reader.frame, readerFrame)
+            app.typeKey(.leftArrow, modifierFlags: [.command])
+            XCTAssertTrue(waitUntil { abs(longText.frame.minX - initialX) <= 2 })
+            scroller.scroll(byDeltaX: -500, deltaY: 0)
+            XCTAssertTrue(waitUntil { longText.frame.minX < initialX - 20 })
+            XCTAssertEqual(outer.frame.minX, outerX, accuracy: 1)
+            attachScreenshot(of: window, named: "Nested code local scrolling — \(appearance)")
+            app.typeKey(.escape, modifierFlags: [])
+            scrollToElement(staticText("QUOTED LIST", in: window), in: reader)
+            attachScreenshot(of: window, named: "Quote and list ancestry — \(appearance)")
+            app.terminate()
+        }
+        let after = try snapshot(of: url)
+        XCTAssertEqual(after.data, before.data)
+        XCTAssertEqual(after.modificationDate, before.modificationDate)
+    }
+
+    @MainActor
+    func testNestedQuoteLeafReadingPointSurvivesLazyResize() async throws {
+        let before = (1...80).map { "Before \($0) " + String(repeating: "wrapping prose ", count: 20) }.joined(separator: "\n\n")
+        let passages = (1...40).map { "Nested passage \($0) " + String(repeating: "quoted wrapping prose ", count: 30) + "end." }
+        let quote = passages.map { "> > " + $0 }.joined(separator: "\n> >\n")
+        let after = (1...80).map { "After \($0) " + String(repeating: "wrapping prose ", count: 20) }.joined(separator: "\n\n")
+        let url = try makeDocument(named: "nested-resize.md", content: before + "\n\n" + quote + "\n\n" + after)
+        let original = try snapshot(of: url)
+        let app = configuredApplication()
+        app.launch()
+        try await openWhileRunning(url, in: app)
+        let window = app.windows[url.lastPathComponent]
+        XCTAssertTrue(window.waitForExistence(timeout: 10))
+        let reader = window.scrollViews["DocumentReaderScrollView"]
+        let passage = staticText(passages[25], in: window)
+        // Materialize a far-off lazy ancestor, then choose a leaf deep inside it.
+        for _ in 0..<100 where !passage.exists { reader.scroll(byDeltaX: 0, deltaY: -600) }
+        centerElement(passage, in: reader)
+        for width: CGFloat in [480, 1200, 480] {
+            resize(window, to: CGSize(width: width, height: 620))
+            assertNearReadingLine(passage, in: reader, tolerance: 90)
+        }
+        attachScreenshot(of: window, named: "Nested leaf fractional resize restoration")
+        let final = try snapshot(of: url)
+        XCTAssertEqual(final.data, original.data)
+        XCTAssertEqual(final.modificationDate, original.modificationDate)
+    }
+
+    @MainActor
     private func configuredApplication(
         appearance: String? = nil,
         resizeRestorationDelayMilliseconds: Int? = nil
@@ -838,7 +937,7 @@ final class DocumentReaderLayoutUITests: XCTestCase {
     @MainActor
     private func staticText(_ value: String, in container: XCUIElement) -> XCUIElement {
         container.staticTexts.matching(
-            NSPredicate(format: "value == %@", value)
+            NSPredicate(format: "value == %@ OR value == %@", value, value + "\n")
         ).firstMatch
     }
 

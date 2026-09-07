@@ -32,7 +32,7 @@ struct MarkdownBlockRendererTests {
         ]
         for (label, expected, style) in cases {
             let source = "- [\(label)](https://example.com)"
-            let text = try #require(MarkdownBlockRenderer.blocks(from: source).first).text
+            let text = try #require(MarkdownBlockRenderer.blocks(from: source).flatMap(\.leaves).first).text
             #expect(text.unicodeScalars.elementsEqual(expected.unicodeScalars))
             #expect(text.runs.allSatisfy { $0.link == URL(string: "https://example.com") })
             #expect(text.runs.contains { $0.markdownInlineStyle == style })
@@ -113,7 +113,7 @@ struct MarkdownBlockRendererTests {
         for prefix in ["", "# ", "- ", "> "] {
             let block = try #require(MarkdownBlockRenderer.blocks(
                 from: prefix + "H<sub class=\"a\">2</sub>O x<SUP>3</SUP> <ins>under</ins>"
-            ).first)
+            ).flatMap(\.leaves).first)
             #expect(plainText(block) == "H2O x3 under")
             for (word, style): (String, MarkdownInlineStyle) in [
                 ("2", .subscriptText), ("3", .superscriptText), ("under", .underline)
@@ -145,7 +145,8 @@ struct MarkdownBlockRendererTests {
         ] {
             let blocks = MarkdownBlockRenderer.blocks(from: source)
             let rendered = blocks.map(plainText).joined(separator: "\n")
-            #expect(rendered == source.replacingOccurrences(of: "```\n", with: "").replacingOccurrences(of: "\n```", with: "").replacingOccurrences(of: "`", with: ""))
+            let expected = source.replacingOccurrences(of: "```\n", with: "").replacingOccurrences(of: "\n```", with: "").replacingOccurrences(of: "`", with: "")
+            #expect(rendered == expected + (source.hasPrefix("```") ? "\n" : ""))
             #expect(blocks.allSatisfy { $0.text.runs.allSatisfy { $0.markdownInlineStyle == nil } })
         }
         let escaped = try #require(MarkdownBlockRenderer.blocks(from: #"\<sub>x\</sub>"#).first)
@@ -157,12 +158,16 @@ struct MarkdownBlockRendererTests {
 
     @Test func listIdentityDistinguishesContinuationsAndSeparateLists() {
         let loose = MarkdownBlockRenderer.blocks(from: "- a\n\n  more\n- b")
-        #expect(loose.map(\.kind) == [.listItem(marker: "•", depth: 1), .listItem(marker: "", depth: 1), .listItem(marker: "•", depth: 1)])
-        #expect(loose.map(plainText) == ["a", "more", "b"])
+        #expect(loose.map(\.kind) == [.listItem(marker: "•", depth: 1), .listItem(marker: "•", depth: 1)])
+        #expect(loose.flatMap(\.leaves).map(plainText) == ["a", "more", "b"])
+        #expect(loose[0].children.count == 2)
         let adjacent = MarkdownBlockRenderer.blocks(from: "- a\n\n* b")
         #expect(adjacent.map(\.kind) == Array(repeating: .listItem(marker: "•", depth: 1), count: 2))
         let nested = MarkdownBlockRenderer.blocks(from: "- outer\n\n  5. inner\n     - deep\n\n  after")
-        #expect(nested.map(\.kind) == [.listItem(marker: "•", depth: 1), .listItem(marker: "5.", depth: 2), .listItem(marker: "▪", depth: 3), .listItem(marker: "", depth: 1)])
+        #expect(nested.count == 1)
+        #expect(nested[0].children[1].kind == .listItem(marker: "5.", depth: 2))
+        #expect(nested[0].children[1].children[1].kind == .listItem(marker: "▪", depth: 3))
+        #expect(nested.flatMap(\.leaves).map(plainText) == ["outer", "inner", "deep", "after"])
         let ordered = MarkdownBlockRenderer.blocks(from: "9. nine\n10. ten")
         #expect(ordered.map(\.kind) == [.listItem(marker: "9.", depth: 1), .listItem(marker: "10.", depth: 1)])
     }
@@ -178,9 +183,10 @@ struct MarkdownBlockRendererTests {
     @Test func mixedListContentRetainsLinkAndEmphasis() throws {
         let block = try #require(MarkdownBlockRenderer.blocks(from: "- see [site](https://example.com) **now**").first)
         #expect(block.kind == .listItem(marker: "•", depth: 1))
-        #expect(plainText(block) == "see site now")
-        #expect(block.text.runs.contains { $0.link == URL(string: "https://example.com") })
-        #expect(block.text.runs.contains { $0.inlinePresentationIntent == .stronglyEmphasized })
+        let text = try #require(block.children.first).text
+        #expect(String(text.characters) == "see site now")
+        #expect(text.runs.contains { $0.link == URL(string: "https://example.com") })
+        #expect(text.runs.contains { $0.inlinePresentationIntent == .stronglyEmphasized })
     }
 
     @Test func rendersNothingForEmptySource() {
@@ -212,8 +218,8 @@ struct MarkdownBlockRendererTests {
         let blocks = MarkdownBlockRenderer.blocks(from: "- First\n- Second")
         let items = blocks.filter { if case .listItem = $0.kind { true } else { false } }
         #expect(items.count == 2)
-        #expect(plainText(items[0]) == "First")
-        #expect(plainText(items[1]) == "Second")
+        #expect(items[0].leaves.map(plainText) == ["First"])
+        #expect(items[1].leaves.map(plainText) == ["Second"])
         if case .listItem(let marker, let depth) = items[0].kind {
             #expect(marker == "\u{2022}")
             #expect(depth == 1)
@@ -235,7 +241,7 @@ struct MarkdownBlockRendererTests {
             ```
             """
         let code = try #require(MarkdownBlockRenderer.blocks(from: source).first)
-        #expect(code.kind == .codeBlock)
+        #expect(code.kind == .codeBlock(language: "swift"))
         #expect(plainText(code).contains("let greeting"))
         #expect(!plainText(code).contains("```"))
     }
@@ -243,7 +249,7 @@ struct MarkdownBlockRendererTests {
     @Test func rendersBlockQuotes() throws {
         let quote = try #require(MarkdownBlockRenderer.blocks(from: "> Quoted aside").first)
         #expect(quote.kind == .blockQuote)
-        #expect(plainText(quote) == "Quoted aside")
+        #expect(quote.children.map(plainText) == ["Quoted aside"])
     }
 
     @Test func assignsStableIdentifiersInDocumentOrder() {

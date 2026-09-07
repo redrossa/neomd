@@ -18,6 +18,7 @@ struct DocumentReaderView: View {
     @Environment(\.openDocument) private var openDocument
     @Environment(\.openWindow) private var openWindow
     @State private var blocks: [MarkdownBlock] = []
+    @State private var lazyAncestors: [Int: Int] = [:]
     @State private var isRendered = false
     @State private var windowID = UUID()
     @State private var scrollPosition = ScrollPosition(idType: Int.self)
@@ -116,19 +117,6 @@ struct DocumentReaderView: View {
                     )
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .id(block.id)
-                    .background {
-                        GeometryReader { geometry in
-                            Color.clear.preference(
-                                key: DocumentBlockFramePreferenceKey.self,
-                                value: [
-                                    block.id: geometry.frame(
-                                        in: .named(DocumentReaderCoordinateSpace.content)
-                                    )
-                                ]
-                            )
-                        }
-                        .accessibilityHidden(true)
-                    }
                 }
             }
             .scrollTargetLayout()
@@ -187,6 +175,7 @@ struct DocumentReaderView: View {
         }.value
         guard !Task.isCancelled else { return }
         blocks = rendered
+        lazyAncestors = MarkdownBlock.lazyAncestors(in: rendered)
         isRendered = true
     }
 
@@ -296,7 +285,7 @@ struct DocumentReaderView: View {
                     // First materialize a lazy target, then retain the pending anchor
                     // until a measured frame can be corrected precisely.
                     stablePassCount = 0
-                    scrollPosition.scrollTo(id: id, anchor: .center)
+                    scrollPosition.scrollTo(id: lazyAncestors[id] ?? id, anchor: .center)
                     try? await Task.sleep(for: .milliseconds(50))
                     continue
                 }
@@ -506,11 +495,11 @@ private nonisolated struct DocumentReaderScrollMetrics: Equatable, Sendable {
     }
 }
 
-private enum DocumentReaderCoordinateSpace {
+enum DocumentReaderCoordinateSpace {
     static let content = "DocumentReaderContent"
 }
 
-private struct DocumentBlockFramePreferenceKey: PreferenceKey {
+struct DocumentBlockFramePreferenceKey: PreferenceKey {
     static let defaultValue: [Int: CGRect] = [:]
 
     static func reduce(

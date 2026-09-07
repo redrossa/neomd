@@ -108,6 +108,8 @@ Acceptance ideas:
 
 Syntax highlighting is a proposed implementation baseline inspired by GitHub's [code-block guidance](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-and-highlighting-code-blocks), not a promise to support every language GitHub recognizes.
 
+Implemented: quotations and list items retain their ordered hierarchy, with continuous nested quote rules. Inline code is monospaced with an adaptive background; code blocks preserve parser-provided whitespace (including boundary blank lines) and scroll horizontally. Supplementary local syntax colors cover Swift, Python (`py`), JavaScript (`js`), TypeScript (`ts`), JSON, shell (`sh`, `bash`, `zsh`), and Markdown (`md`), using the lowercased first info-string word. Unknown/absent languages remain plain. This is a small lexical baseline, not full compiler grammars. Blocks above 262,144 Unicode scalars skip tokenization without dropping content; empty fences produce no Foundation text run and no fabricated block.
+
 ### M1-08 — See checklist progress without changing it · Core
 
 As someone reviewing an agent's task plan, I want to distinguish completed and unfinished work so that I can assess progress.
