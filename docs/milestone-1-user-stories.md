@@ -69,12 +69,16 @@ Acceptance ideas:
 
 As a reader, I want NeoMD to match the system theme so that it feels comfortable alongside my other apps.
 
+Approved scope split, recorded during implementation: M1-05 is the theme foundation for content and surfaces that already exist, the live appearance switch that keeps the reading position, and the absence of color transforms on document imagery. Image-specific theme acceptance belongs to M1-12 and alert-specific theme acceptance to M1-13. Story order is unchanged.
+
 Acceptance ideas:
 
-- Opening in either light or dark mode produces a coherent page, including code, links, quotes, alerts, selection, and empty/error states.
+- Opening in either light or dark mode produces a coherent page for existing rendered content, including code, links, quotes, selection, and existing empty/error states.
 - A system appearance change updates an open document without reopening it or losing my place.
-- Document images retain their original colors; theme-specific image sources may choose the matching asset.
+- The theme foundation does not apply page-wide color inversion or color transforms to document imagery; image rendering and appearance-specific source verification belong to M1-12.
 - Labels and structure keep important distinctions understandable without relying on color alone.
+
+Implemented: the reader draws its surfaces with adaptive system styles rather than a fixed palette, so an appearance change repaints an open document in place instead of re-rendering it. Distinctions carry structure as well as color — headings differ in scale, quotations keep a rule and indent, code keeps a monospaced face in its own container, list items keep their markers — and a link is a tinted label that is always underlined, in either appearance and with no accessibility setting to switch on first. `docs/appearance-ui-tests.md` records how the live light/dark switch is exercised and how the tester's own setting is restored.
 
 ### M1-06 — Understand document structure and emphasis · Core
 
@@ -161,6 +165,7 @@ Acceptance ideas:
 
 - Display supported local and HTTP(S) images with preserved aspect ratios and sensible sizing.
 - Support the documented picture-element use case, including appearance-specific sources and an image fallback.
+- Document images retain their original colors in both themes; appearance-specific sources choose the matching asset and update when system appearance changes. (Moved here from M1-05 by the approved scope split.)
 - Missing, inaccessible, or offline images show meaningful alternative text or a quiet placeholder without blocking the rest of the document.
 - Opening text remains responsive while remote images load.
 - Existing links to uploaded assets remain usable; uploading new assets is outside this reading milestone.
@@ -172,6 +177,7 @@ As a reader skimming an agent's output, I want visual cues to communicate meanin
 Acceptance ideas:
 
 - Distinguish NOTE, TIP, IMPORTANT, WARNING, and CAUTION alerts in both themes using labels and visual treatment.
+- Alerts remain coherent with the page when opening in either theme and when system appearance changes; labels and structure communicate their distinctions without relying on color alone. (Moved here from M1-05 by the approved scope split.)
 - Display Unicode emoji and recognized GitHub emoji shortcodes; leave unknown shortcodes readable.
 - Display valid HEX, RGB, and HSL inline-code color references with a small noninteractive swatch and their text value. Invalid values remain ordinary code.
 - Keep cues aligned with text and accessible at larger reading sizes.

@@ -74,6 +74,13 @@ private struct ReadOnlyFileCommands: Commands {
 final class NeoMDApplicationDelegate: NSObject, NSApplicationDelegate {
     let openingCoordinator = DocumentOpeningCoordinator()
 
+#if DEBUG
+    /// The channel a UI test uses to change this app's appearance while it runs.
+    static let uiTestAppearanceNotification = Notification.Name("io.neomd.uitest.setAppearance")
+
+    private var uiTestAppearanceObserver: (any NSObjectProtocol)?
+#endif
+
     func applicationWillFinishLaunching(_ notification: Notification) {
 #if DEBUG
         // Keep visual UI regressions deterministic without changing the user's system
@@ -86,8 +93,39 @@ final class NeoMDApplicationDelegate: NSObject, NSApplicationDelegate {
         default:
             break
         }
+        observeUITestAppearanceChanges()
 #endif
     }
+
+#if DEBUG
+    /// Lets a UI test repaint this app for a different appearance while a document is
+    /// open, on machines where the test runner is not permitted to change the real
+    /// system setting. It exercises the same repaint macOS triggers, but it is not
+    /// evidence that the app follows the system: only an unpinned launch under a real
+    /// system change shows that. The observer is never installed unless a test asks
+    /// for it, and does not exist in a release build.
+    private func observeUITestAppearanceChanges() {
+        guard ProcessInfo.processInfo.environment["NEOMD_UI_TEST_APPEARANCE_CHANNEL"] == "1"
+        else { return }
+
+        uiTestAppearanceObserver = DistributedNotificationCenter.default().addObserver(
+            forName: Self.uiTestAppearanceNotification,
+            object: nil,
+            queue: .main
+        ) { notification in
+            MainActor.assumeIsolated {
+                switch notification.object as? String {
+                case "Light":
+                    NSApp.appearance = NSAppearance(named: .aqua)
+                case "Dark":
+                    NSApp.appearance = NSAppearance(named: .darkAqua)
+                default:
+                    NSApp.appearance = nil
+                }
+            }
+        }
+    }
+#endif
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         openingCoordinator.applicationWillTerminate()

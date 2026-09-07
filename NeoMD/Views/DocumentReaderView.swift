@@ -110,6 +110,7 @@ struct DocumentReaderView: View {
                 ForEach(blocks) { block in
                     MarkdownBlockView(
                         block: block,
+                        theme: theme,
                         keyboardFocus: $keyboardFocus,
                         pageReader: scrollReaderPage
                     )
@@ -134,6 +135,13 @@ struct DocumentReaderView: View {
             .textSelection(.enabled)
         }
     }
+
+    /// The appearance policy the blocks are drawn with.
+    ///
+    /// Adaptive system styles already follow the Mac's light and dark appearance, so
+    /// the theme only carries what a semantic style cannot express, and it applies the
+    /// same way to every reader on every Mac.
+    private var theme: ReaderTheme { ReaderTheme() }
 
     private func handleVerticalPageKeyPress(
         _ keyPress: KeyPress
