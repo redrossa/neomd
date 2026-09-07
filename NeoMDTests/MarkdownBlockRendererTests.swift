@@ -43,15 +43,35 @@ struct MarkdownBlockRendererTests {
     @Test func sourcePositionsHandleRepeatedMultilineAndUnicodeLabels() throws {
         let source = "日本語 👩🏽‍💻\n\n[H<sub>2</sub>O](https://one.example) [H<sub>2</sub>O](https://two.example)\n\n[字\nx<sup>2</sup>][ref]\n\n[ref]: https://three.example"
         let blocks = MarkdownBlockRenderer.blocks(from: source)
-        // Foundation removes the label newline, while standalone inline parsing preserves
-        // it. Exact-scalar mismatch must retain the original rather than guess offsets.
-        #expect(blocks.map(plainText) == ["日本語 👩🏽‍💻", "H2O H2O", "字x<sup>2</sup>"])
+        #expect(blocks.map(plainText) == ["日本語 👩🏽‍💻", "H2O H2O", "字x2"])
         let links = blocks.flatMap { $0.text.runs.compactMap { $0.link?.absoluteString } }
         for url in ["https://one.example", "https://two.example", "https://three.example"] {
             #expect(links.contains(url))
         }
         #expect(blocks[1].text.runs.filter { $0.markdownInlineStyle == .subscriptText }.count == 2)
-        #expect(blocks[2].text.runs.allSatisfy { $0.markdownInlineStyle == nil })
+        let styled = blocks[2].text.runs.filter { $0.markdownInlineStyle == .superscriptText }
+            .flatMap { Array(blocks[2].text.unicodeScalars[$0.range]) }
+        #expect(styled == Array("2".unicodeScalars))
+    }
+
+    @Test func multilineLinkBreaksPreserveHTMLProvenanceAndLiteralControls() throws {
+        for (label, expected, styled) in [
+            ("字\nx<sup>2</sup>", "字x2", "2"),
+            ("字  \nx<sup>2</sup>", "字x2", "2"),
+            ("字\\\nx<sup>2</sup>", "字x2", "2"),
+            ("`字\nx<sup>2</sup>`", "字 x<sup>2</sup>", ""),
+            ("字\nx\\<sup>2\\</sup>", "字x<sup>2</sup>", "")
+        ] {
+            let blocks = MarkdownBlockRenderer.blocks(from: "[\(label)](https://example.com)")
+            #expect(blocks.count == 1)
+            let text = try #require(blocks.first).text
+            #expect(text.unicodeScalars.elementsEqual(expected.unicodeScalars))
+            #expect(text.runs.allSatisfy { $0.link == URL(string: "https://example.com") })
+            let scalars = text.runs.filter { $0.markdownInlineStyle == .superscriptText }
+                .flatMap { Array(text.unicodeScalars[$0.range]) }
+            #expect(scalars == Array(styled.unicodeScalars))
+            if styled.isEmpty { #expect(text.runs.allSatisfy { $0.markdownInlineStyle == nil }) }
+        }
     }
 
     @Test func scalarBoundariesPreserveContentAndExactStyleRanges() throws {

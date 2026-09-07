@@ -119,10 +119,24 @@ nonisolated enum MarkdownBlockRenderer {
             while range.upperBound < source.endIndex, source[range.upperBound] == "`" {
                 range = range.lowerBound..<source.index(after: range.upperBound)
             }
-            guard let label = try? AttributedString(
+            guard var label = try? AttributedString(
                 markdown: String(source[range]),
                 options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-            ), label.unicodeScalars.elementsEqual(parsed.unicodeScalars[run.range]) else { continue }
+            ) else { continue }
+            if !label.unicodeScalars.elementsEqual(parsed.unicodeScalars[run.range]) {
+                guard var candidate = try? AttributedString(
+                    markdown: String(source[range]), options: .init(interpretedSyntax: .full)
+                ) else { continue }
+                // Full link parsing omits semantic breaks, but preserves code-span spaces.
+                // Normalize only the temporary parser-marked provenance candidate.
+                let breaks = candidate.runs.filter {
+                    $0.inlinePresentationIntent?.contains(.softBreak) == true ||
+                    $0.inlinePresentationIntent?.contains(.lineBreak) == true
+                }.map(\.range)
+                for range in breaks.reversed() { candidate.removeSubrange(range) }
+                label = candidate
+            }
+            guard label.unicodeScalars.elementsEqual(parsed.unicodeScalars[run.range]) else { continue }
             for token in label.runs where token.inlinePresentationIntent?.contains(.inlineHTML) == true {
                 let lower = parsed.unicodeScalars.index(run.range.lowerBound, offsetBy:
                     label.unicodeScalars.distance(from: label.startIndex, to: token.range.lowerBound))
