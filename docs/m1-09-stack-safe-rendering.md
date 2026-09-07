@@ -1,10 +1,30 @@
 # M1-09 R3 — stack-safe rendering (ready for independent review)
 
-**Latest:** implementation and worker repair review complete; refreshed build, full units, 21 isolated lifecycle cases, three separately invoked native hosts, vendoring and 13 targeted UI methods pass. Independent exact-head review remains required. Only selected manual VoiceOver spoken order/duplication/context-exit validation is deferred to human milestone acceptance by [explicit user amendment](https://github.com/redrossa/neomd/issues/9#issuecomment-5576035842), not verified or waived. Earlier blockers below are retained as dated history.
+**Latest:** implementation and worker repair review complete; refreshed build, full units, 21 isolated lifecycle cases, four separately invoked native host/registry cases (including the R3-H1 mixed/storage correction below), vendoring and 13 targeted UI methods pass. Independent exact-head review remains required. Only selected manual VoiceOver spoken order/duplication/context-exit validation is deferred to human milestone acceptance by [explicit user amendment](https://github.com/redrossa/neomd/issues/9#issuecomment-5576035842), not verified or waived. Earlier blockers below are retained as dated history.
 
 [Issue #9](https://github.com/redrossa/neomd/issues/9) · [PR #33](https://github.com/redrossa/neomd/pull/33) · [preserved R3 plan](https://github.com/redrossa/neomd/issues/9#issuecomment-5574780958) · [binding approval](https://github.com/redrossa/neomd/issues/9#issuecomment-5574783050).
 
-The reviewer reproduced recursive destruction of the old `[MarkdownBlock]` children at 50,000 nested quotes. Iterative parsing/traversal alone was insufficient. R3 replaces ownership, not Markdown semantics. This note records current work, **not a completed repair or independent acceptance**.
+The reviewer reproduced recursive destruction of the old `[MarkdownBlock]` children at 50,000 nested quotes. Iterative parsing/traversal alone was insufficient. R3 replaces ownership, not Markdown semantics. This note records worker implementation/evidence, **not independent acceptance**.
+
+## R3-H1 — mixed native ownership coverage correction
+
+[Independent finding](https://github.com/redrossa/neomd/pull/33#issuecomment-5576201960) on `dd358a268367efaa7301273f330c764eed98e726` correctly identified missing approved step6 evidence, not a demonstrated production leak/crash. Earlier worker completeness claims below did not establish mixed native host/storage release. Coordinator authorized this correction within the existing plan; no scope revision or additional deferral.
+
+Only `NeoMDTests/MarkdownContainerHostingTests.swift` and supporting docs change. New `testMixedContainerHostRelease` parses practical20-level quote ancestry in both body and structured footnote; verifies40 quote records, ordered markers7/8 and bullet, one complete/two incomplete tasks, footnote container, exact nine leaf strings and target anchor. Test hosting now renders every actual root through production `MarkdownContainerView` (rather than root0 only), including the footnote and adjacent paragraphs.
+
+All three lifecycle cases now traverse the actual native hierarchy, observe one `QuotePathView` per root and its actual `MarkdownQuoteDecoration` storage via weak references, and require nonempty real rule geometry. They draw at320, resize/draw at760 across an asserted compression-count decrease, retain the same observed surface/storage pairing, replace with empty, remove/close and release the host. The mixed host's1600pt bitmap contains all nine leaves (vertical bounds asserted), so the footnote is not merely constructed offscreen. No copied renderer, fake presentation model, production hook or depth cap.
+
+A factory creates each snapshot inside the async exercise scope. Only weak ownership evidence returns; the document, native hierarchy traversal, images and window scope end before at most40×50ms main-actor suspension/cleanup checks. Host plus every actual surface and storage must be nil before `NATIVE_HOST_RELEASED` is emitted. This is native deallocation evidence, not app-process termination. The existing unhosted21 matrix still independently covers snapshot destruction. Registry generation/negative lookup/cleanup assertions remain intact.
+
+Fresh worker evidence on the corrected source (only docs edited afterward):
+- Each of `testMixedContainerHostRelease`, `testDeepQuoteHostRelease`, `testDeepBranchingHostRelease`, `testLiveMarkerIdentityAcrossCompressionAndGenerations` ran in a separate serialized `xcodebuild` invocation. `/tmp/neomd-h1-<method>.xcresult` and `.log`: **1/1 each**, exit0, no skips/failures/restarts. Three lifecycle methods contain the post-release sentinel; the registry method retains its own assertions rather than claiming that sentinel.
+- `python3 Scripts/test-render-lifecycle.py --output /tmp/neomd-h1-lifecycle`: **21/21 plus rejected negative control**, `results.json`/outer `.log`.
+- Vendoring and explicit Debug build pass: `/tmp/neomd-h1-vendor.log`, `/tmp/neomd-h1-build.log`.
+- Full units + unchanged13 targeted UI selectors: `/tmp/neomd-h1-matrix.xcresult`, **119 methods /179 expanded runs** (102 Swift Testing/162 runs +4 host/registry +13 UI), no failures/skips/restarts. Same serialized commands as below with updated result path; exact isolated reproduction command is in the cumulative catalog.
+- Primary LSP clean for changed Swift file; session diagnostics and repair diff-check clear. Full correction diff reviewed; no production or original UI assertions changed.
+- Refreshed images inspected in `/tmp/neomd-h1-attachments`: mixed480Dark `E5940082-A59B-425C-B339-D4DA23822551.png`,900Light `45B42162-82BD-4C7F-815F-5665FCA82C57.png`; deep480Dark `B096355F-A740-41F7-81BA-5FD63C013B6A.png`,Light `DAA47BF1-0D5B-4FDC-BA4A-689E55221226.png`. Retained captions/unique markers/text and shallow context exit remain visible; screenshots do not prove ownership or speech.
+
+Mapping: repairs R3 step6/7 coverage, protecting C1–C3 anchor/container ownership and C5 native controls; all original criterion and steps1–5 mappings below remain unchanged. The only deferred check remains manual VoiceOver spoken order/duplication/context exit at human milestone acceptance, explicitly unverified. Independent exact-head re-review is required; no merge/acceptance/closure.
 
 ## Plan mapping and invariants
 

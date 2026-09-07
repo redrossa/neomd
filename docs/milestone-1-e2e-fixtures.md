@@ -284,6 +284,35 @@ Status: **NOT PERFORMED / NOT VERIFIED; user-deferred, not waived.** Owner: user
 5. Repeat selected traversal after a width change and in the other appearance. Activate the native heading/reference/return links using VoiceOver's normal action and confirm continued usability; existing automated tests remain the distant-landing/Return/Space evidence.
 6. Restore the prior VoiceOver/appearance state. Recheck SHA256 and `st_mtime_ns` against step1; both must be unchanged. Record any failure as a defect for user-agreed milestone handling; the deferral does not authorize ignoring it. Remove only the owned temporary fixture when done.
 
+### R3-H1 native mixed host/storage release (review correction)
+
+[Finding5576201960](https://github.com/redrossa/neomd/pull/33#issuecomment-5576201960) identified missing approved step6 coverage, not a reproduced leak. Earlier three-host evidence above checked quotes/paragraphs and weak host only; it did not prove mixed presentation-storage teardown. The new coverage supplements, not replaces, actual-file UI and21 isolated model cases.
+
+Reproducible fixture lives in `MarkdownContainerHostingTests.testMixedContainerHostRelease`: build `q = "> "` repeated20, then the method's exact `lines` array. Unlike the40-depth UI fixture,20 crosses from compressed at320 to ordinary at760. It includes `q + "7. [x] Mixed completed [jump](#target)"`, a quoted adjacent paragraph and incomplete item8; `# Target`, `Reference[^m].`, and note `m` with first paragraph,20 quotes containing an incomplete task/adjacent paragraph, then shallow final paragraph. Assertions verify40 quotes, exact7./8./bullet markers, task states, one footnote, nine exact leaf strings and anchor. No file is written by this native host fixture.
+
+Actions/expected outcomes (R3 steps6/7; C1–C3/C5 ownership/control protection):
+1. Host **all actual document roots**, including footnote, with production `MarkdownContainerView`; no copied renderer/test-only semantic type.
+2. At320×1600, assert all nine mixed leaves are present, ≥192pt wide, and vertically inside the native bitmap. Traverse actual AppKit descendants to weakly observe one production `QuotePathView` and its real `MarkdownQuoteDecoration` per root; require real nonempty quote bars.
+3. Draw, resize to760 with fewer compressed records, draw again, and assert observed surface/storage pairs survive. Deep quote and branching cases use the same ownership checks, retaining their original sizes/depths.
+4. Replace with empty, remove/close/release; let the async snapshot-owning exercise scope return. Permit bounded main-runloop cleanup (up to40×50ms suspensions). Assert nil host and **each actual** surface/storage before the completion sentinel. An app kill is not this assertion.
+5. Retain existing live registry resize/generation/unresolved lookup/cleanup checks as the fourth separately invoked method.
+
+Run each method separately, serially from the repository root:
+```sh
+for method in testMixedContainerHostRelease testDeepQuoteHostRelease testDeepBranchingHostRelease testLiveMarkerIdentityAcrossCompressionAndGenerations; do
+  xcodebuild -project NeoMD.xcodeproj -scheme NeoMD -destination 'platform=macOS' \
+    -derivedDataPath /tmp/NeoMD-DerivedData -parallel-testing-enabled NO \
+    -only-testing:NeoMDTests/MarkdownContainerHostingTests/$method \
+    -resultBundlePath /tmp/neomd-h1-$method.xcresult test \
+    > /tmp/neomd-h1-$method.log 2>&1 || exit $?
+done
+```
+Use fresh artifact paths on reruns. Inspect each xcresult summary: require actual passedTests=1, failedTests=0, skippedTests=0, exit0 and no restart/crash in logs; require `NATIVE_HOST_RELEASED` for the three lifecycle methods. All four final invocations pass those checks. First mixed probe `/tmp/neomd-h1-mixed1.xcresult` also passed; the final run additionally asserts all mixed leaves lie inside the bitmap and captures one surface per root.
+
+Final corrected-source refresh: `/tmp/neomd-h1-lifecycle/results.json`21/21 plus rejected negative control; `...h1-vendor.log`/`...h1-build.log` pass; `...h1-matrix.xcresult`119 methods/179 expanded runs (102 Swift Testing/162 +4 host/registry + unchanged13 UI), zero failures/skips/restarts. Full units preserve negative bridge ownership/cleanup tests. LSP/session diagnostics and repair diff-check clear. Selected refreshed deep/mixed Light/Dark images inspected; full filenames/mapping in `docs/m1-09-stack-safe-rendering.md`.
+
+No production, UI selection, read-only policy or VoiceOver setting changed. Only manual spoken order/duplicate speech/context exit remains unverified and user-deferred as above; this host gate is **not deferred**. Worker correction is ready for independent exact-head review, not acceptance or merge.
+
 ## Future story entry template
 
 Copy and complete in every subsequent story PR; do not replace prior entries.
