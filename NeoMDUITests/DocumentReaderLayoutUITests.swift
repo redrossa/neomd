@@ -780,6 +780,33 @@ final class DocumentReaderLayoutUITests: XCTestCase {
     }
 
     @MainActor
+    func testInlineCodeBoundaryAndAllSpaceTextInEveryContext() async throws {
+        for (index, prefix) in ["", "# ", "> ", "- "].enumerated() {
+            let source = ["`  x  `", "`   `", "`  x  ` after", "before `  x  `", "before `  x  ` after"]
+                .map { prefix + $0 }.joined(separator: "\n\n")
+            let url = try makeDocument(named: "inline-boundaries-\(index).md", content: source)
+            let before = try snapshot(of: url)
+            let app = configuredApplication()
+            app.launch()
+            try await openWhileRunning(url, in: app)
+            let window = app.windows[url.lastPathComponent]
+            XCTAssertTrue(window.waitForExistence(timeout: 10))
+            resize(window, to: CGSize(width: 700, height: 900))
+            for expected in [" x ", "   ", " x  after", "before  x ", "before  x  after"] {
+                // Native heading traits expose Text as a heading rather than staticText.
+                let text = window.descendants(matching: .any).matching(NSPredicate(format: "value == %@ OR label == %@", expected, expected)).firstMatch
+                XCTAssertTrue(text.waitForExistence(timeout: 5), "Exact Text/AX scalars missing in context \(prefix): \(expected.debugDescription)")
+                XCTAssertGreaterThan(text.frame.height, 0)
+            }
+            attachScreenshot(of: window, named: "Inline boundary and all-space code — context \(index)")
+            app.terminate()
+            let after = try snapshot(of: url)
+            XCTAssertEqual(after.data, before.data)
+            XCTAssertEqual(after.modificationDate, before.modificationDate)
+        }
+    }
+
+    @MainActor
     func testNestedQuotationsAndHighlightedCodeInBothAppearances() async throws {
         let longCode = "let  wide = \"" + String(repeating: "abcdefghij", count: 100) + "\"\n"
         let exactCode = "\n    let  x = 1  \n\tprint(x)\n\n"

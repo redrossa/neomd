@@ -56,6 +56,25 @@ struct QuotationsAndCodeTests {
         }
     }
 
+    @Test func inlineCodeBoundaryScalarsSurviveInEveryLeafContext() throws {
+        for prefix in ["", "# ", "> ", "- "] {
+            for (source, expected) in [
+                ("`  x  `", " x "), ("`   `", "   "),
+                ("`  x  ` after", " x  after"), ("before `  x  `", "before  x "),
+                ("before `  x  ` after", "before  x  after"),
+                ("ordinary prose   ", "ordinary prose")
+            ] {
+                let leaves = MarkdownBlockRenderer.blocks(from: prefix + source).flatMap(\.leaves)
+                #expect(leaves.count == 1)
+                let leaf = try #require(leaves.first)
+                #expect(leaf.text.unicodeScalars.elementsEqual(expected.unicodeScalars))
+                if source == "`   `" {
+                    #expect(leaf.text.runs.allSatisfy { $0.inlinePresentationIntent?.contains(.code) == true })
+                }
+            }
+        }
+    }
+
     @Test func fencesAndLanguageHintsAreNotDocumentSyntax() throws {
         for (source, hint, expected): (String, String?, String) in [
             ("~~~python extra info\nx = 1\n~~~", "python", "x = 1\n"),

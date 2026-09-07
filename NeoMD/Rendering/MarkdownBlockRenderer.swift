@@ -349,7 +349,7 @@ nonisolated enum MarkdownBlockRenderer {
 
     /// Removes the blank space blocks pick up from their separators.
     ///
-    /// Code blocks keep leading indentation, which is part of their content.
+    /// Inline code keeps every parser-normalized scalar, including boundary spaces.
     private static func trimmed(_ text: AttributedString, keepingIndentation: Bool) -> AttributedString {
         var text = text
         let isTrimmable: (Character) -> Bool = keepingIndentation
@@ -357,10 +357,14 @@ nonisolated enum MarkdownBlockRenderer {
             : { $0.isWhitespace }
 
         while let first = text.characters.first, isTrimmable(first) {
-            text.removeSubrange(text.startIndex..<text.characters.index(after: text.startIndex))
+            let range = text.startIndex..<text.characters.index(after: text.startIndex)
+            guard !text[range].runs.contains(where: { $0.inlinePresentationIntent?.contains(.code) == true }) else { break }
+            text.removeSubrange(range)
         }
         while let last = text.characters.last, last.isNewline || (!keepingIndentation && last.isWhitespace) {
-            text.removeSubrange(text.characters.index(text.endIndex, offsetBy: -1)..<text.endIndex)
+            let range = text.characters.index(text.endIndex, offsetBy: -1)..<text.endIndex
+            guard !text[range].runs.contains(where: { $0.inlinePresentationIntent?.contains(.code) == true }) else { break }
+            text.removeSubrange(range)
         }
         return text
     }
