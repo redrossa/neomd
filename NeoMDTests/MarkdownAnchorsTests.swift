@@ -34,10 +34,12 @@ struct MarkdownAnchorsTests {
     }
 
     @Test func authoredDestinationsKeepPreorderFirstWins() {
-        let blocks = [MarkdownBlock(id: 0, kind: .blockQuote, text: AttributedString(), children: [
-            MarkdownBlock(id: 1, kind: .paragraph, text: AttributedString("first"), anchors: ["same"])
-        ]), MarkdownBlock(id: 2, kind: .paragraph, text: AttributedString("second"), anchors: ["same"])]
-        #expect(MarkdownBlock.anchorTargets(in: blocks)["same"] == 1)
-        #expect(MarkdownBlock.lazyAncestors(in: blocks)[1] == 0)
+        let document = MarkdownRenderDocument(nodes: [
+            MarkdownBlock(id: 0, kind: .blockQuote, text: AttributedString(), childIDs: [1]),
+            MarkdownBlock(id: 1, kind: .paragraph, text: AttributedString("first"), parentID: 0, anchors: ["same"]),
+            MarkdownBlock(id: 2, kind: .paragraph, text: AttributedString("second"), anchors: ["same"])
+        ], rootIDs: [0, 2])
+        #expect(document.anchorTargets["same"] == 1)
+        #expect(document.lazyRootIDs[1] == 0)
     }
 }

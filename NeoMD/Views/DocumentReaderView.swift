@@ -17,9 +17,7 @@ struct DocumentReaderView: View {
     @Environment(\.dismissWindow) private var dismissWindow
     @Environment(\.openDocument) private var openDocument
     @Environment(\.openWindow) private var openWindow
-    @State private var blocks: [MarkdownBlock] = []
-    @State private var lazyAncestors: [Int: Int] = [:]
-    @State private var anchorTargets: [String: Int] = [:]
+    @State private var renderedDocument = MarkdownRenderDocument.empty
     @State private var linkNotice: String?
     @State private var noticeGeneration = 0
     @State private var navigationGeneration = 0
@@ -45,7 +43,7 @@ struct DocumentReaderView: View {
     var body: some View {
         GeometryReader { geometry in
             ScrollView(.vertical) {
-                content
+                content(width: DocumentReaderLayout.columnWidth(for: geometry.size.width))
                     .frame(
                         width: DocumentReaderLayout.columnWidth(
                             for: geometry.size.width
@@ -123,7 +121,8 @@ struct DocumentReaderView: View {
     }
 
     @ViewBuilder
-    private var content: some View {
+    private func content(width: CGFloat) -> some View {
+        let blocks = renderedDocument.roots
         if !isRendered {
             // Deliberately blank: a document's first visible content is its rendered
             // form, never its source.
@@ -146,8 +145,10 @@ struct DocumentReaderView: View {
             LazyVStack(alignment: .leading, spacing: 16) {
                 ForEach(blocks) { block in
                     if case .footnote(ordinal: 1) = block.kind { Divider() }
-                    MarkdownBlockView(
-                        block: block,
+                    MarkdownContainerView(
+                        document: renderedDocument,
+                        rootID: block.id,
+                        width: width,
                         theme: theme,
                         keyboardFocus: $keyboardFocus,
                         pageReader: scrollReaderPage
@@ -215,12 +216,10 @@ struct DocumentReaderView: View {
         noticeGeneration += 1
         linkNotice = nil
         let rendered = await Task.detached(priority: .userInitiated) {
-            MarkdownBlockRenderer.blocks(from: source)
+            MarkdownBlockRenderer.render(from: source)
         }.value
         guard !Task.isCancelled else { return }
-        blocks = rendered
-        lazyAncestors = MarkdownBlock.lazyAncestors(in: rendered)
-        anchorTargets = MarkdownBlock.anchorTargets(in: rendered)
+        renderedDocument = rendered
         isRendered = true
     }
 
@@ -269,7 +268,7 @@ struct DocumentReaderView: View {
     }
 
     private func handleLink(_ url: URL, keyboardDriven: Bool = false) -> OpenURLAction.Result {
-        switch DocumentLinkDestination.resolve(url: url, anchors: anchorTargets) {
+        switch DocumentLinkDestination.resolve(url: url, anchors: renderedDocument.anchorTargets) {
         case .external: return .systemAction
         case .missing(let name):
             let message = "No “\(name)” destination in this document"
@@ -296,7 +295,7 @@ struct DocumentReaderView: View {
         keyboardFocus = .reader
         Task { @MainActor in
             guard generation == navigationGeneration else { return }
-            if let id { scrollPosition.scrollTo(id: lazyAncestors[id] ?? id, anchor: .top) }
+            if let id { scrollPosition.scrollTo(id: lazyRoot(for: id), anchor: .top) }
             else { scrollPosition.scrollTo(edge: .top) }
             try? await Task.sleep(for: .milliseconds(100))
             var stablePasses = 0
@@ -313,10 +312,15 @@ struct DocumentReaderView: View {
             // A Tab press can already have moved focus while lazy layout settles.
             // Never overwrite that newer user choice with the initial reader focus.
             if keyboardDriven, keyboardFocus == .reader,
-               let id, blocks.flatMap(\.leaves).contains(where: {
-                   $0.id == id && $0.text.runs.contains(where: { $0.link != nil })
-               }) { keyboardFocus = .links(id) }
+               let id, renderedDocument.nodes.indices.contains(id), renderedDocument[id].isLeaf,
+               renderedDocument[id].text.runs.contains(where: { $0.link != nil }) {
+                keyboardFocus = .links(id)
+            }
         }
+    }
+
+    private func lazyRoot(for id: Int) -> Int {
+        renderedDocument.nodes.indices.contains(id) ? renderedDocument.lazyRootIDs[id] : id
     }
 
     private static var resizeRestorationDelay: Duration {
@@ -387,7 +391,7 @@ struct DocumentReaderView: View {
                     // First materialize a lazy target, then retain the pending anchor
                     // until a measured frame can be corrected precisely.
                     stablePassCount = 0
-                    scrollPosition.scrollTo(id: lazyAncestors[id] ?? id, anchor: .center)
+                    scrollPosition.scrollTo(id: lazyRoot(for: id), anchor: .center)
                     try? await Task.sleep(for: .milliseconds(50))
                     continue
                 }

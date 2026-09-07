@@ -52,7 +52,7 @@ struct MarkdownBlockView: View {
                         .allowsHitTesting(false)
                 }
             }
-            .modifier(MarkdownLinkFocus(enabled: !links.isEmpty && block.children.isEmpty,
+            .modifier(MarkdownLinkFocus(enabled: !links.isEmpty && block.isLeaf,
                 id: block.id, keyboardFocus: keyboardFocus, handleKeyPress: handleLinkKeyPress))
             .overlay {
                 if keyboardFocus.wrappedValue == .links(block.id), !links.isEmpty {
@@ -65,7 +65,7 @@ struct MarkdownBlockView: View {
                 value: links.isEmpty ? nil : "Link \(selectedLink % links.count + 1) of \(links.count): \(links[selectedLink % links.count].label)"
             ))
             .background {
-                if block.children.isEmpty {
+                if block.isLeaf {
                     GeometryReader { geometry in
                         Color.clear.preference(key: DocumentBlockFramePreferenceKey.self, value: [
                             block.id: geometry.frame(in: .named(DocumentReaderCoordinateSpace.content))
@@ -114,37 +114,9 @@ struct MarkdownBlockView: View {
                 pageReader: pageReader
             )
 
-        case .blockQuote:
-            HStack(alignment: .top, spacing: 12) {
-                Rectangle()
-                    .fill(.tertiary)
-                    .frame(width: 3)
-                children
-                    .foregroundStyle(.secondary)
-            }
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("MarkdownBlockQuote-\(block.id)")
-
-        case .listItem(let marker, _):
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                listMarker(marker)
-                    .frame(width: 28, alignment: .trailing)
-                children
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-        case .footnote(let ordinal):
-            HStack(alignment: .top, spacing: 8) {
-                Text("\(ordinal).")
-                    .accessibilityHidden(true)
-                    .frame(width: 28, alignment: .trailing)
-                children
-            }
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel("Footnote \(ordinal)")
-            .accessibilityIdentifier("MarkdownFootnote-\(block.id)")
+        case .blockQuote, .listItem, .footnote:
+            // Container geometry/semantics are emitted by the flat root host.
+            EmptyView()
 
         case .anchor:
             Color.clear.frame(height: 0).accessibilityHidden(true)
@@ -154,42 +126,6 @@ struct MarkdownBlockView: View {
                 .padding(.vertical, 8)
                 .accessibilityHidden(true)
         }
-    }
-
-    @ViewBuilder
-    private func listMarker(_ marker: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
-            if block.task == nil || marker.hasSuffix(".") {
-                Text(marker)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-            }
-            if let task = block.task {
-                // Shape and label carry status; this is deliberately not a control.
-                Image(systemName: task == .complete ? "checkmark.square.fill" : "square")
-                    .foregroundStyle(.primary)
-                    .accessibilityLabel(task == .complete ? "Completed task" : "Incomplete task")
-                    .accessibilityIdentifier("MarkdownTaskMarker-\(block.id)")
-            }
-        }
-        .fixedSize()
-    }
-
-    private var children: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            ForEach(block.children) { child in
-                MarkdownBlockView(block: child, theme: theme,
-                                  keyboardFocus: keyboardFocus, pageReader: pageReader)
-                    .padding(.leading, nestedListAdjustment(child))
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func nestedListAdjustment(_ child: MarkdownBlock) -> CGFloat {
-        if case .listItem = block.kind, case .listItem = child.kind { return -14 }
-        return 0
     }
 
     /// The type scale used for each heading level.
@@ -379,9 +315,7 @@ private struct MarkdownBlockViewPreview: View {
     @FocusState private var keyboardFocus: DocumentReaderFocusTarget?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                ForEach(MarkdownBlockRenderer.blocks(from: """
+        let document = MarkdownBlockRenderer.render(from: """
                     # Release notes
 
                     A short paragraph with **bold**, *italic*, and `inline code`.
@@ -401,9 +335,14 @@ private struct MarkdownBlockViewPreview: View {
                     ```swift
                     print("hello")
                     ```
-                    """)) { block in
-                    MarkdownBlockView(
-                        block: block,
+                    """)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                ForEach(document.roots) { block in
+                    MarkdownContainerView(
+                        document: document,
+                        rootID: block.id,
+                        width: 640,
                         theme: ReaderTheme(),
                         keyboardFocus: $keyboardFocus,
                         pageReader: { _ in }

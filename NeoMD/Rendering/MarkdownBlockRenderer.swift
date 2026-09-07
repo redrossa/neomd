@@ -65,50 +65,24 @@ nonisolated struct MarkdownBlock: Identifiable, Sendable {
     let kind: Kind
     /// The block's text with inline formatting applied and Markdown syntax removed.
     let text: AttributedString
-    var children: [MarkdownBlock] = []
+    let childIDs: [Int]
+    let parentID: Int?
     let task: MarkdownTaskState?
-    var anchors: [String]
+    let anchors: [String]
 
     init(id: Int, kind: Kind, text: AttributedString,
-         children: [MarkdownBlock] = [], task: MarkdownTaskState? = nil, anchors: [String] = []) {
+         childIDs: [Int] = [], parentID: Int? = nil,
+         task: MarkdownTaskState? = nil, anchors: [String] = []) {
         self.id = id
         self.kind = kind
         self.text = text
-        self.children = children
+        self.childIDs = childIDs
+        self.parentID = parentID
         self.task = task
         self.anchors = anchors
     }
 
-    var leaves: [MarkdownBlock] {
-        var result: [MarkdownBlock] = []
-        var stack = [self]
-        while let block = stack.popLast() {
-            if block.children.isEmpty { result.append(block) }
-            else { stack.append(contentsOf: block.children.reversed()) }
-        }
-        return result
-    }
-
-    static func anchorTargets(in blocks: [MarkdownBlock]) -> [String: Int] {
-        var result: [String: Int] = [:]
-        var stack = Array(blocks.reversed())
-        while let block = stack.popLast() {
-            for anchor in block.anchors where result[anchor] == nil { result[anchor] = block.id }
-            stack.append(contentsOf: block.children.reversed())
-        }
-        return result
-    }
-
-    /// Every descendant resolves to the directly addressable lazy-stack target.
-    static func lazyAncestors(in blocks: [MarkdownBlock]) -> [Int: Int] {
-        var result: [Int: Int] = [:]
-        var stack = blocks.reversed().map { ($0, $0.id) }
-        while let (block, ancestor) = stack.popLast() {
-            result[block.id] = ancestor
-            stack.append(contentsOf: block.children.reversed().map { ($0, ancestor) })
-        }
-        return result
-    }
+    var isLeaf: Bool { childIDs.isEmpty }
 }
 
 /// Converts Markdown source into presentable blocks.
@@ -124,11 +98,11 @@ nonisolated enum MarkdownBlockRenderer {
     /// Renders `markdown` into blocks, in document order.
     ///
     /// Malformed syntax remains readable according to cmark-gfm's recovery rules.
-    static func blocks(from markdown: String) -> [MarkdownBlock] {
-        guard !markdown.isEmpty else { return [] }
+    static func render(from markdown: String) -> MarkdownRenderDocument {
+        guard !markdown.isEmpty else { return .empty }
 
         let document = CMarkDocument(markdown: markdown)
-        return CMarkBlockAdapter(document: document).blocks()
+        return CMarkBlockAdapter(document: document).render()
     }
 
 

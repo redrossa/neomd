@@ -135,6 +135,184 @@ final class DocumentLinkNavigationUITests: XCTestCase {
         XCTAssertTrue(landed, window.debugDescription, file: file, line: line)
     }
 
+    @MainActor private func replaceFixture(_ source: String) throws {
+        originalData = Data(source.utf8)
+        try originalData.write(to: documentURL)
+        try FileManager.default.setAttributes([.modificationDate: originalDate!], ofItemAtPath: documentURL.path)
+    }
+
+    @MainActor private func resize(_ window: XCUIElement, to size: CGSize) {
+        let current = window.frame.size
+        let corner = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 1))
+            .withOffset(CGVector(dx: -2, dy: -2))
+        corner.press(forDuration: 0.2, thenDragTo: corner.withOffset(
+            CGVector(dx: size.width - current.width, dy: size.height - current.height)))
+        XCTAssertTrue(wait { abs(window.frame.width - size.width) <= 3 && abs(window.frame.height - size.height) <= 3 })
+    }
+
+    @MainActor private func capture(_ window: XCUIElement, name: String) {
+        let attachment = XCTAttachment(screenshot: window.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    /// Actual file, actual cmark nesting, normal document opening and native events.
+    /// Window-relative coordinates avoid XCUIApplication's nonfinite AX frame.
+    @MainActor func testDeepQuoteFileNavigationResizeAndReadOnly() async throws {
+        let source = String(repeating: "> ", count: 50000)
+            + "<a id='deep'></a>Deep retained [Jump target](#target)\n\n"
+            + (1...30).map { "Deep spacer \($0)." }.joined(separator: "\n\n")
+            + "\n\n# Target\n\n[Back deep](#deep)\n\n"
+            + (1...20).map { "Target spacer \($0)." }.joined(separator: "\n\n")
+        try replaceFixture(source)
+        for appearance in ["Light", "Dark"] {
+            let (app, window) = try await open(appearance: appearance, firstLink: "Jump target")
+            for width in [900.0, 480.0, 900.0] {
+                resize(window, to: CGSize(width: width, height: 760))
+                // Resize restoration preserves a reading fraction, not necessarily
+                // the first line. Use a real reader scroll interaction to return
+                // to the top; Command-Home can be consumed by native Text focus.
+                let scroll = window.scrollViews["DocumentReaderScrollView"]
+                scroll.scroll(byDeltaX: 0, deltaY: 10000)
+                let link = window.links["Jump target"]
+                let leaf = text("Deep retained Jump target", in: window)
+                XCTAssertTrue(wait { leaf.exists && link.frame.minY >= scroll.frame.minY - 1
+                    && link.frame.maxY < scroll.frame.maxY }, "Deep link must be visible before mouse dispatch: link=\(link.frame), viewport=\(scroll.frame)")
+                // AX Text bounds measure glyphs, not the proposed reading column.
+                // The hosting/numeric tests assert the >=R column-width contract.
+                XCTAssertGreaterThan(leaf.frame.width, 0)
+                XCTAssertGreaterThanOrEqual(leaf.frame.minX, scroll.frame.minX)
+                XCTAssertLessThanOrEqual(leaf.frame.maxX, scroll.frame.maxX)
+                XCTAssertTrue(window.descendants(matching: .any).matching(
+                    NSPredicate(format: "label CONTAINS %@", "50000 · quote indentation compressed")).firstMatch.exists,
+                    window.debugDescription)
+                capture(window, name: "Actual 50000 quotes — \(appearance) — \(Int(width))")
+                // Clear focus, then dispatch a real mouse event at the visible link.
+                scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.1)).click()
+                let frame = link.frame
+                window.coordinate(withNormalizedOffset: .zero).withOffset(
+                    CGVector(dx: frame.midX - window.frame.minX, dy: frame.midY - window.frame.minY)).click()
+                assertAtTop(window.staticTexts["Target"], window: window)
+                window.links["Back deep"].click()
+                // Native Text's glyph AX rectangle extends one point above its marker.
+                XCTAssertTrue(wait { link.frame.minY >= scroll.frame.minY - 1 && link.frame.maxY < scroll.frame.maxY },
+                              "Backlink must land on the actual deep paragraph: link=\(link.frame), viewport=\(scroll.frame)")
+            }
+            for key in [XCUIKeyboardKey.return, .space] {
+                let scroll = window.scrollViews["DocumentReaderScrollView"]
+                scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.1)).click()
+                let block = window.descendants(matching: .any)["MarkdownLinkBlock-50000"]
+                var selected = false
+                for _ in 0..<5 {
+                    app.typeKey(.tab, modifierFlags: [.option])
+                    selected = block.label == "Link 1 of 1: Jump target"
+                    if selected { break }
+                }
+                XCTAssertTrue(selected, window.debugDescription)
+                app.typeKey(key, modifierFlags: [])
+                assertAtTop(window.staticTexts["Target"], window: window)
+                app.typeKey(.escape, modifierFlags: [])
+                window.links["Back deep"].click()
+            }
+            XCTAssertEqual(try Data(contentsOf: documentURL), originalData)
+            XCTAssertEqual(try FileManager.default.attributesOfItem(atPath: documentURL.path)[.modificationDate] as? Date, originalDate)
+            app.terminate()
+        }
+    }
+
+    /// Mixed cmark input opened from disk, not an injected render arena.
+    @MainActor func testMixedContainerFileAXOrderAndNativeActions() async throws {
+        let quote = String(repeating: "> ", count: 40)
+        let source = [
+            quote + "7. [x] Mixed completed [Mixed jump](#mixed-target)",
+            quote,
+            quote + "   Mixed adjacent continuation.",
+            quote,
+            quote + "8. [ ] Mixed pending.",
+            "", "# Mixed target", "", "Mixed reference[^m].", "",
+            "[^m]: Mixed note first.", "",
+            "    " + quote + "- [ ] Mixed note task.",
+            "    " + quote,
+            "    " + quote + "  Mixed note adjacent.",
+            "", "    Mixed note last."
+        ].joined(separator: "\n")
+        try replaceFixture(source)
+        for appearance in ["Light", "Dark"] {
+            let (app, window) = try await open(appearance: appearance, firstLink: "Mixed jump")
+            for width in [900.0, 480.0] {
+                resize(window, to: CGSize(width: width, height: 760))
+                let scroll = window.scrollViews["DocumentReaderScrollView"]
+                scroll.scroll(byDeltaX: 0, deltaY: 10000)
+                let orderedText = ["Mixed completed Mixed jump", "Mixed adjacent continuation.", "Mixed pending.",
+                                   "Mixed reference1.", "Mixed note first.", "Mixed note task.",
+                                   "Mixed note adjacent.", "Mixed note last. ↩"]
+                let hierarchy = XCTAttachment(string: window.debugDescription)
+                hierarchy.name = "Mixed native AX hierarchy — \(appearance) — \(Int(width))"
+                hierarchy.lifetime = .keepAlways
+                add(hierarchy)
+                // Descendant queries group native link-bearing Text at a deeper
+                // AX level. Walk immediate children in tree order instead of
+                // treating the flat query's bound indexes as reading order.
+                var pending = [window]
+                var snapshot: [XCUIElement] = []
+                while let element = pending.popLast() {
+                    if element.elementType == .staticText { snapshot.append(element) }
+                    pending.append(contentsOf: element.children(matching: .any).allElementsBoundByIndex.reversed())
+                }
+                var previousIndex = -1
+                var previousBottom = -CGFloat.infinity
+                for value in orderedText {
+                    let matches = snapshot.enumerated().filter {
+                        ($0.element.value as? String)?.trimmingCharacters(in: .newlines) == value
+                    }
+                    XCTAssertEqual(matches.count, 1, "Exactly one native AX leaf for \(value): \(window.debugDescription)")
+                    let match = try XCTUnwrap(matches.first)
+                    XCTAssertGreaterThan(match.offset, previousIndex, "AX source order")
+                    guard match.offset > previousIndex else { throw NSError(domain: "MixedAXOrder", code: 1) }
+                    XCTAssertGreaterThanOrEqual(match.element.frame.minY, previousBottom, "Spatial source order")
+                    XCTAssertGreaterThanOrEqual(match.element.frame.minX, scroll.frame.minX)
+                    XCTAssertLessThanOrEqual(match.element.frame.maxX, scroll.frame.maxX)
+                    previousIndex = match.offset
+                    previousBottom = match.element.frame.maxY
+                }
+                XCTAssertEqual(window.images.matching(NSPredicate(format: "label == %@", "Completed task")).count, 1)
+                XCTAssertEqual(window.images.matching(NSPredicate(format: "label == %@", "Incomplete task")).count, 2)
+                for (id, value) in [(40, "Mixed completed Mixed jump"), (43, "Mixed pending."), (89, "Mixed note task.")] {
+                    let marker = window.images["MarkdownTaskMarker-\(id)"]
+                    XCTAssertEqual(window.images.matching(identifier: "MarkdownTaskMarker-\(id)").count, 1)
+                    XCTAssertLessThan(marker.frame.maxY, text(value, in: window).frame.minY)
+                }
+                let context = window.staticTexts.matching(NSPredicate(
+                    format: "value == %@ OR value == %@", "Depth 41 · list item · indentation compressed",
+                    "Depth 41 · list item · indentation compressed\n"))
+                XCTAssertEqual(context.count, 2, window.debugDescription)
+                XCTAssertTrue(window.descendants(matching: .any).matching(NSPredicate(
+                    format: "label CONTAINS %@", "–40 · quote indentation compressed")).firstMatch.exists)
+                capture(window, name: "Actual mixed source order — \(appearance) — \(Int(width))")
+                let link = window.links["Mixed jump"]
+                XCTAssertTrue(wait { link.frame.minY >= scroll.frame.minY - 1 && link.frame.maxY < scroll.frame.maxY })
+                scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.1)).click()
+                let frame = link.frame
+                window.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+                    dx: frame.midX - window.frame.minX, dy: frame.midY - window.frame.minY)).click()
+                XCTAssertTrue(wait { self.text("Mixed reference1.", in: window).isHittable })
+                window.links["1"].click()
+                XCTAssertTrue(wait { window.links["↩"].exists })
+                let noteValues = ["Mixed note first.", "Mixed note task.", "Mixed note adjacent.", "Mixed note last. ↩"]
+                for value in noteValues { XCTAssertTrue(text(value, in: window).exists, window.debugDescription) }
+                XCTAssertTrue(window.descendants(matching: .any).matching(NSPredicate(
+                    format: "label == %@", "Footnote 1")).firstMatch.exists)
+                capture(window, name: "Actual mixed footnote — \(appearance) — \(Int(width))")
+                window.links["↩"].click()
+                XCTAssertTrue(wait { self.text("Mixed reference1.", in: window).isHittable })
+            }
+            XCTAssertEqual(try Data(contentsOf: documentURL), originalData)
+            XCTAssertEqual(try FileManager.default.attributesOfItem(atPath: documentURL.path)[.modificationDate] as? Date, originalDate)
+            app.terminate()
+        }
+    }
+
     @MainActor func testHeadingLinksReachDuplicateFormattedAndUnicodeSections() async throws {
         let (_, window) = try await open()
         for (link, heading, back) in [("First", "Duplicate", "Back first"), ("Second", "Duplicate", "Back second"), ("Formatted", "Bold code", "Back formatted"), ("Unicode", "Café 日本語", "Back Unicode")] {

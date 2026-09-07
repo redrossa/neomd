@@ -4,7 +4,7 @@ import Testing
 
 struct CMarkParityTests {
     @Test func supportedExtensionsAndFlattenedPresentation() throws {
-        let blocks = MarkdownBlockRenderer.blocks(from: """
+        let document = MarkdownBlockRenderer.render(from: """
         https://example.com www.example.com user@example.com ~single~ &amp; \\*
 
         | A | B |
@@ -17,6 +17,7 @@ struct CMarkParityTests {
 
         <div>literal</div>
         """)
+        let blocks = document.roots
         #expect(blocks.map { String($0.text.characters) } == [
             "https://example.com www.example.com user@example.com single & *", "A", "B", "C", "D", "image alt", "empty", "<div>literal</div>"
         ])
@@ -36,7 +37,8 @@ struct CMarkParityTests {
                     await Task.detached {
                         var mismatches = 0
                         for _ in 0..<40 {
-                            let blocks = MarkdownBlockRenderer.blocks(from: source)
+                            let document = MarkdownBlockRenderer.render(from: source)
+                            let blocks = document.roots
                             if blocks.count != 200 || blocks.contains(where: {
                                 String($0.text.characters) != "single"
                                     || $0.text.inlinePresentationIntent != .strikethrough
@@ -54,25 +56,26 @@ struct CMarkParityTests {
     }
 
     @Test func emptyContainersAndCodeBoundaries() throws {
-        #expect(MarkdownBlockRenderer.blocks(from: ">\n\n- \n\n```\n```\n\n> [^unused]: hidden").isEmpty)
-        let code = try #require(MarkdownBlockRenderer.blocks(from: "```python extra\r\n\r\n\tx  =  1\r\n```").first)
+        #expect(MarkdownBlockRenderer.render(from: ">\n\n- \n\n```\n```\n\n> [^unused]: hidden").roots.isEmpty)
+        let code = try #require(MarkdownBlockRenderer.render(from: "```python extra\r\n\r\n\tx  =  1\r\n```").roots.first)
         #expect(code.kind == .codeBlock(language: "python"))
         #expect(String(code.text.characters) == "\n\tx  =  1\n")
     }
 
     @Test func deeplyNestedInputUsesIterativeTraversal() throws {
         let source = String(repeating: "> ", count: 1000) + "deep **text**[^x]\n\n[^x]: note"
-        let blocks = MarkdownBlockRenderer.blocks(from: source)
-        #expect(blocks.first?.leaves.first.map { String($0.text.characters) } == "deep text1")
-        let ancestors = MarkdownBlock.lazyAncestors(in: blocks)
+        let document = MarkdownBlockRenderer.render(from: source)
+        let blocks = document.roots
+        #expect(blocks.first.flatMap { document.leaves(in: $0.id).first }.map { String($0.text.characters) } == "deep text1")
+        let ancestors = document.lazyRootIDs
         #expect(ancestors.count >= 1002)
-        #expect(MarkdownBlock.anchorTargets(in: blocks).count == 2)
+        #expect(document.anchorTargets.count == 2)
     }
 
     @Test(arguments: ["<a href id='x'>text</a>", "<a href='u' id='x'>text</a>", "<a id='x'>", "`<a id='x'></a>`", "\\<a id='x'>\\</a>"])
     func nonAnchorMarkupRemainsLiteral(_ source: String) {
-        let blocks = MarkdownBlockRenderer.blocks(from: source)
-        #expect(MarkdownBlock.anchorTargets(in: blocks).isEmpty)
-        #expect(blocks.flatMap(\.leaves).contains { String($0.text.characters).contains("<a") })
+        let document = MarkdownBlockRenderer.render(from: source)
+        #expect(document.anchorTargets.isEmpty)
+        #expect(document.leaves.contains { String($0.text.characters).contains("<a") })
     }
 }

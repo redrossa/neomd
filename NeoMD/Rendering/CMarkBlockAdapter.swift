@@ -27,7 +27,7 @@ nonisolated final class CMarkBlockAdapter {
 
     init(document: CMarkDocument) { self.document = document }
 
-    func blocks() -> [MarkdownBlock] {
+    func render() -> MarkdownRenderDocument {
         discoverFootnotes()
         appendBlocks(CMarkDocument.children(document.root).filter {
             CMarkDocument.typeName($0) != "footnote_definition"
@@ -254,7 +254,7 @@ nonisolated final class CMarkBlockAdapter {
         }
     }
 
-    private func materialize() -> [MarkdownBlock] {
+    private func materialize() -> MarkdownRenderDocument {
         // Remove empty containers/leaves before assigning contiguous pre-order IDs.
         var keep = Set<Int>()
         for index in drafts.indices.reversed() {
@@ -288,13 +288,19 @@ nonisolated final class CMarkBlockAdapter {
             order.append(index)
         }
         let ids = Dictionary(uniqueKeysWithValues: order.enumerated().map { ($0.element, $0.offset) })
-        var built: [Int: MarkdownBlock] = [:]
-        for index in order.reversed() {
-            let draft = drafts[index]
-            built[index] = MarkdownBlock(id: ids[index]!, kind: draft.kind, text: draft.text,
-                children: draft.children.compactMap { built.removeValue(forKey: $0) }, task: draft.task, anchors: draft.anchors)
+        var parents = [Int?](repeating: nil, count: order.count)
+        for index in order {
+            for child in drafts[index].children {
+                if let childID = ids[child] { parents[childID] = ids[index] }
+            }
         }
-        return roots.compactMap { built.removeValue(forKey: $0) }
+        let nodes = order.enumerated().map { id, index in
+            let draft = drafts[index]
+            return MarkdownBlock(id: id, kind: draft.kind, text: draft.text,
+                childIDs: draft.children.compactMap { ids[$0] }, parentID: parents[id],
+                task: draft.task, anchors: draft.anchors)
+        }
+        return MarkdownRenderDocument(nodes: nodes, rootIDs: roots.compactMap { ids[$0] })
     }
 
 }
