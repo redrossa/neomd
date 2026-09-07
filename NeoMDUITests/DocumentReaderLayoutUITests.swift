@@ -28,6 +28,83 @@ final class DocumentReaderLayoutUITests: XCTestCase {
     }
 
     @MainActor
+    func testDocumentStructureAndEmphasis() async throws {
+        let source = """
+            # Heading one
+            ## Heading two
+            ### Heading three
+            #### Heading four
+            ##### Heading five
+            ###### Heading six
+
+            **Bold** *italic* ***combined*** ~~struck~~ <ins>underlined</ins>
+
+            H<sub>2</sub>O and x<sup>3</sup>
+
+            line one
+            line two
+
+            hard one\u{0020}\u{0020}
+            hard two
+
+            5. Five with **emphasis** and a [site](https://example.com)
+
+               Continuation without another marker
+
+               - Nested bullet
+
+               Parent after nesting
+
+            6. Six
+            7. Seven
+            8. Eight
+            9. Nine
+            10. Ten
+
+            - Separate bullet
+            """
+        let url = try makeDocument(named: "structure.md", content: source)
+        let before = try snapshot(of: url)
+        for appearance in ["Light", "Dark"] {
+            let app = configuredApplication(appearance: appearance)
+            app.launch()
+            try await openWhileRunning(url, in: app)
+            let window = app.windows[url.lastPathComponent]
+            XCTAssertTrue(window.waitForExistence(timeout: 10))
+            resize(window, to: CGSize(width: 900, height: 900))
+            let scrollView = window.scrollViews["DocumentReaderScrollView"]
+            for label in ["Heading one", "Heading two", "Heading three", "Heading four", "Heading five", "Heading six"] {
+                XCTAssertTrue(window.staticTexts[label].waitForExistence(timeout: 5))
+            }
+            for value in ["H2O and x3", "line one line two", "hard one\nhard two"] {
+                XCTAssertTrue(staticText(value, in: window).waitForExistence(timeout: 5))
+            }
+            XCTAssertEqual(window.staticTexts.matching(NSPredicate(
+                format: "value CONTAINS %@ OR value CONTAINS %@ OR value CONTAINS %@",
+                "<sub>", "<sup>", "<ins>"
+            )).count, 0)
+            attachScreenshot(of: window, named: "Structure and emphasis — \(appearance)")
+            let first = staticText("Five with emphasis and a site", in: window)
+            let continuation = staticText("Continuation without another marker", in: window)
+            let parent = staticText("Parent after nesting", in: window)
+            let ten = staticText("Ten", in: window)
+            scrollToElement(ten, in: scrollView)
+            XCTAssertEqual(first.frame.minX, continuation.frame.minX, accuracy: 1)
+            XCTAssertEqual(first.frame.minX, parent.frame.minX, accuracy: 1)
+            XCTAssertEqual(first.frame.minX, ten.frame.minX, accuracy: 1)
+            XCTAssertEqual(staticText("Nested bullet", in: window).frame.minX - first.frame.minX, 22, accuracy: 1)
+            attachScreenshot(of: window, named: "List ordinal and continuation — \(appearance)")
+            resize(window, to: CGSize(width: 480, height: 760))
+            scrollToElement(first, in: scrollView)
+            attachScreenshot(of: window, named: "Structure narrow — \(appearance)")
+            app.terminate()
+        }
+        let after = try snapshot(of: url)
+        XCTAssertEqual(after.data, before.data)
+        XCTAssertEqual(after.modificationDate, before.modificationDate)
+    }
+
+    @MainActor
     func testReadingColumnReflowsAndKeepsCodeOverflowLocal() async throws {
         let prose = "PROSE START " + String(
             repeating: "ordinary spaced words make this paragraph reflow naturally ",

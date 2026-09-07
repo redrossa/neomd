@@ -14,7 +14,13 @@ struct MarkdownBlockView: View {
 
     /// The block's text with the reader's appearance policy applied.
     private var text: AttributedString {
-        theme.presentationText(for: block.text)
+        let headingLevel: Int?
+        if case .heading(let level) = block.kind {
+            headingLevel = level
+        } else {
+            headingLevel = nil
+        }
+        return theme.presentationText(for: block.text, headingLevel: headingLevel)
     }
 
     var body: some View {
@@ -60,7 +66,7 @@ struct MarkdownBlockView: View {
                 Text(marker)
                     .font(.body)
                     .foregroundStyle(.secondary)
-                    .frame(minWidth: 18, alignment: .trailing)
+                    .frame(width: 28, alignment: .trailing)
                     .accessibilityHidden(true)
                 Text(text)
                     .font(.body)

@@ -5,6 +5,30 @@
 
 import Foundation
 
+/// Semantic inline formatting; presentation stays in the reader theme.
+nonisolated enum MarkdownInlineStyle: String, Sendable {
+    case subscriptText, superscriptText, underline
+}
+
+nonisolated enum MarkdownInlineStyleAttribute: AttributedStringKey {
+    typealias Value = MarkdownInlineStyle
+    static let name = "NeoMD.InlineStyle"
+}
+
+extension AttributeScopes {
+    nonisolated struct MarkdownAttributes: AttributeScope {
+        let markdownInlineStyle: MarkdownInlineStyleAttribute
+    }
+
+    nonisolated var markdown: MarkdownAttributes.Type { MarkdownAttributes.self }
+}
+
+extension AttributeDynamicLookup {
+    nonisolated subscript<T: AttributedStringKey>(
+        dynamicMember keyPath: KeyPath<AttributeScopes.MarkdownAttributes, T>
+    ) -> T { self[T.self] }
+}
+
 /// One rendered block of a Markdown document.
 nonisolated struct MarkdownBlock: Identifiable, Sendable {
 
@@ -48,14 +72,22 @@ nonisolated enum MarkdownBlockRenderer {
 
         let parsed: AttributedString
         do {
-            parsed = try AttributedString(markdown: markdown, options: options)
+            parsed = applyingInlineHTML(try AttributedString(markdown: markdown, options: options))
         } catch {
             return [MarkdownBlock(id: 0, kind: .paragraph, text: AttributedString(markdown))]
         }
 
         var blocks: [MarkdownBlock] = []
+        var emittedListItems: Set<Int> = []
         for (intent, range) in parsed.runs[\.presentationIntent] {
-            let kind = kind(for: intent)
+            var kind = kind(for: intent)
+            if case .listItem(_, let depth) = kind,
+               let item = intent?.components.first(where: {
+                   if case .listItem = $0.kind { return true }
+                   return false
+               }), !emittedListItems.insert(item.identity).inserted {
+                kind = .listItem(marker: "", depth: depth)
+            }
             var text = AttributedString(parsed[range])
             text.presentationIntent = nil
             text = trimmed(text, keepingIndentation: kind == .codeBlock)
@@ -68,6 +100,95 @@ nonisolated enum MarkdownBlockRenderer {
             blocks.append(MarkdownBlock(id: blocks.count, kind: kind, text: text))
         }
         return blocks
+    }
+
+    private struct HTMLTag {
+        let name: String
+        let closing: Bool
+        let range: Range<AttributedString.Index>
+
+        var style: MarkdownInlineStyle? {
+            switch name {
+            case "sub": .subscriptText
+            case "sup": .superscriptText
+            case "ins": .underline
+            default: nil
+            }
+        }
+    }
+
+    /// Only complete, properly nested groups of supported inline wrappers are consumed.
+    /// A malformed group remains literal, including any otherwise matched inner pair.
+    /// Work within a presentation block: wrappers never leak into another paragraph or code.
+    private static func applyingInlineHTML(_ parsed: AttributedString) -> AttributedString {
+        var output = AttributedString()
+        for (_, range) in parsed.runs[\.presentationIntent] {
+            output.append(stylingInlineHTML(AttributedString(parsed[range])))
+        }
+        return output
+    }
+
+    private static func stylingInlineHTML(_ text: AttributedString) -> AttributedString {
+        guard text.runs.contains(where: { $0.inlinePresentationIntent?.contains(.inlineHTML) == true }) else {
+            return text
+        }
+        // The Markdown parser has already identified HTML, excluding escaped text and code.
+        // Quoted attribute values may contain >; attributes themselves are never interpreted.
+        // Tokenize entire tags (including unsupported ones), not apparent tags inside
+        // an attribute or comment. Unsupported markup is never removed or interpreted.
+        let pattern = #"<!--[\s\S]*?-->|<\s*(/?)\s*([a-zA-Z][a-zA-Z0-9-]*)(?=\s|/?>)(?:[^>\"']|\"[^\"]*\"|'[^']*')*>"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
+            return text
+        }
+        var tags: [HTMLTag] = []
+        for run in text.runs where run.inlinePresentationIntent?.contains(.inlineHTML) == true {
+            let source = String(text[run.range].characters)
+            for match in regex.matches(in: source, range: NSRange(source.startIndex..., in: source)) {
+                guard let matchRange = Range(match.range, in: source),
+                      let nameRange = Range(match.range(at: 2), in: source),
+                      !source[matchRange].hasSuffix("/>") else { continue }
+                let lower = text.characters.index(
+                    run.range.lowerBound,
+                    offsetBy: source.distance(from: source.startIndex, to: matchRange.lowerBound)
+                )
+                let upper = text.characters.index(lower, offsetBy: source[matchRange].count)
+                tags.append(HTMLTag(
+                    name: source[nameRange].lowercased(),
+                    closing: match.range(at: 1).length > 0,
+                    range: lower..<upper
+                ))
+            }
+        }
+
+        var stack: [HTMLTag] = []
+        var pending: [(HTMLTag, HTMLTag)] = []
+        var pairs: [(HTMLTag, HTMLTag)] = []
+        for tag in tags {
+            if !tag.closing {
+                stack.append(tag)
+            } else if let opening = stack.last, opening.name == tag.name {
+                stack.removeLast()
+                if opening.style != nil { pending.append((opening, tag)) }
+                if stack.isEmpty {
+                    pairs.append(contentsOf: pending)
+                    pending.removeAll()
+                }
+            } else {
+                // Crossing tags invalidate the whole in-flight group, not just the closer.
+                stack.removeAll()
+                pending.removeAll()
+            }
+        }
+
+        var result = text
+        // Outer first, then inner, so nested sub/sup use the innermost style.
+        for (opening, closing) in pairs.sorted(by: { $0.0.range.lowerBound < $1.0.range.lowerBound }) {
+            result[opening.range.upperBound..<closing.range.lowerBound].markdownInlineStyle = opening.style
+        }
+        let removals = pairs.flatMap { [$0.0.range, $0.1.range] }
+            .sorted { $0.lowerBound > $1.lowerBound }
+        for range in removals { result.removeSubrange(range) }
+        return result
     }
 
     /// Maps a run's presentation intent onto a block kind.
