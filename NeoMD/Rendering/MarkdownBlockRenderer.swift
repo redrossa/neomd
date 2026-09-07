@@ -68,11 +68,13 @@ nonisolated enum MarkdownBlockRenderer {
 
         var options = AttributedString.MarkdownParsingOptions()
         options.interpretedSyntax = .full
+        options.appliesSourcePositionAttributes = true
         options.failurePolicy = .returnPartiallyParsedIfPossible
 
         let parsed: AttributedString
         do {
-            parsed = applyingInlineHTML(try AttributedString(markdown: markdown, options: options))
+            let attributed = try AttributedString(markdown: markdown, options: options)
+            parsed = applyingInlineHTML(recoveringLinkHTML(attributed, source: markdown))
         } catch {
             return [MarkdownBlock(id: 0, kind: .paragraph, text: AttributedString(markdown))]
         }
@@ -100,6 +102,38 @@ nonisolated enum MarkdownBlockRenderer {
             blocks.append(MarkdownBlock(id: blocks.count, kind: kind, text: text))
         }
         return blocks
+    }
+
+    /// Foundation flattens link labels. Recover only parser-confirmed HTML provenance,
+    /// never inferred tags in rendered text; code and escaped labels can look identical.
+    private static func recoveringLinkHTML(_ parsed: AttributedString, source: String) -> AttributedString {
+        var result = parsed
+        for run in parsed.runs where run.link != nil {
+            guard let position = run.markdownSourcePosition,
+                  var range = Range<String.Index>(position, in: source) else { continue }
+            // Source positions omit code delimiters at either edge of a label.
+            while range.lowerBound > source.startIndex,
+                  source[source.index(before: range.lowerBound)] == "`" {
+                range = source.index(before: range.lowerBound)..<range.upperBound
+            }
+            while range.upperBound < source.endIndex, source[range.upperBound] == "`" {
+                range = range.lowerBound..<source.index(after: range.upperBound)
+            }
+            guard let label = try? AttributedString(
+                markdown: String(source[range]),
+                options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+            ), label.unicodeScalars.elementsEqual(parsed.unicodeScalars[run.range]) else { continue }
+            for token in label.runs where token.inlinePresentationIntent?.contains(.inlineHTML) == true {
+                let lower = parsed.unicodeScalars.index(run.range.lowerBound, offsetBy:
+                    label.unicodeScalars.distance(from: label.startIndex, to: token.range.lowerBound))
+                let upper = parsed.unicodeScalars.index(lower, offsetBy:
+                    label.unicodeScalars.distance(from: token.range.lowerBound, to: token.range.upperBound))
+                var intent = parsed[lower..<upper].inlinePresentationIntent ?? []
+                intent.insert(.inlineHTML)
+                result[lower..<upper].inlinePresentationIntent = intent
+            }
+        }
+        return result
     }
 
     private struct HTMLTag {
@@ -142,16 +176,16 @@ nonisolated enum MarkdownBlockRenderer {
         }
         var tags: [HTMLTag] = []
         for run in text.runs where run.inlinePresentationIntent?.contains(.inlineHTML) == true {
-            let source = String(text[run.range].characters)
+            let source = String(String.UnicodeScalarView(text.unicodeScalars[run.range]))
             for match in regex.matches(in: source, range: NSRange(source.startIndex..., in: source)) {
                 guard let matchRange = Range(match.range, in: source),
                       let nameRange = Range(match.range(at: 2), in: source),
                       !source[matchRange].hasSuffix("/>") else { continue }
-                let lower = text.characters.index(
+                let lower = text.unicodeScalars.index(
                     run.range.lowerBound,
-                    offsetBy: source.distance(from: source.startIndex, to: matchRange.lowerBound)
+                    offsetBy: source.unicodeScalars.distance(from: source.startIndex, to: matchRange.lowerBound)
                 )
-                let upper = text.characters.index(lower, offsetBy: source[matchRange].count)
+                let upper = text.unicodeScalars.index(lower, offsetBy: source.unicodeScalars[matchRange].count)
                 tags.append(HTMLTag(
                     name: source[nameRange].lowercased(),
                     closing: match.range(at: 1).length > 0,

@@ -39,7 +39,9 @@ final class DocumentReaderLayoutUITests: XCTestCase {
 
             **Bold** *italic* ***combined*** ~~struck~~ <ins>underlined</ins>
 
-            H<sub>2</sub>O and x<sup>3</sup>
+            [H<sub>2</sub>O](https://example.com) and [x<sup>3</sup>](https://example.com)
+
+            [<ins>important</ins>](https://example.com)
 
             line one
             line two
