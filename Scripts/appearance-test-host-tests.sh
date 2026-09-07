@@ -566,28 +566,48 @@ test_detached_runner() {
 # controller changed directory to the project, so the products were built somewhere
 # nobody had asked for, ownership was decided against a directory nothing came out of,
 # and the removal at the end pointed at whatever sat at that name inside the project.
+#
+# The project the controller would build into is a fixture inside this harness's own
+# directory, holding a byte-identical copy of the checked-in controller — which finds its
+# project from where the script itself sits, so a copy makes the same decisions about a
+# place this harness owns. The real checkout is never written to and never removed from:
+# this scenario's whole point is a path a run might reach without being asked to, and a
+# regression that proves that must not do it itself. A failed assertion is a reason to
+# report, never a licence to delete.
 test_relative_derived_data() {
     scenario "a relative parent is resolved before the run changes directory"
     local log="$WORK/relative.log" status relative='neomd-host-regression-relative-dd'
+    local project="$WORK/fixture-project" called="$WORK/calling-directory"
+    local controller="$project/Scripts/appearance-test-host.sh"
+    local sentinel="$project/$relative/unrelated-reader-notes.txt"
+    local kept='notes somebody left here before this run'
     if ! have_standin; then
         note "SKIPPED: cc and /usr/bin/python3 are needed for the stand-in runner"
         return
     fi
-    (cd "$WORK" && env "${CONTROLLER_ENV[@]}" "NEOMD_DERIVED_DATA=$relative" \
-        NEOMD_STUB_SCENARIO=detached-runner "$CONTROLLER") > "$log" 2>&1
+    mkdir -p "$project/Scripts" "$project/$relative" "$called"
+    cp "$CONTROLLER" "$controller"
+    # Content that was already at the name the mistake would have used, so the scenario
+    # can say what a run does to it rather than only where it builds.
+    printf '%s' "$kept" > "$sentinel"
+    (cd "$called" && env "${CONTROLLER_ENV[@]}" "NEOMD_DERIVED_DATA=$relative" \
+        NEOMD_STUB_SCENARIO=detached-runner "$controller") > "$log" 2>&1
     status=$?
     check "exit status" 0 "$status"
     check "appearance restored" true "$(cat "$STATE")"
     check "nothing left running" "" "$(stray_processes)"
     check "the run built under the directory it was called in" 1 \
-        "$(grep -cF "build directory: $WORK_PHYSICAL/$relative/run-" "$log" | tr -d ' ')"
+        "$(grep -cF "build directory: $WORK_PHYSICAL/calling-directory/$relative/run-" \
+            "$log" | tr -d ' ')"
     check "the runner was recognised and stopped before the restore" \
         "write true witness=gone" "$(appearance_write true)"
-    check "nothing was built inside the project" absent \
-        "$([ -e "$PROJECT_DIR/$relative" ] && printf present || printf absent)"
+    check "nothing was built inside the project" 0 \
+        "$(own_run_directories "$project/$relative")"
+    check "the directory already at that name in the project is still there" present \
+        "$([ -d "$project/$relative" ] && printf present || printf absent)"
+    check "its contents were not touched" "$kept" "$(cat "$sentinel" 2>/dev/null)"
     check "the run's own directory was removed afterwards" 0 \
-        "$(own_run_directories "$WORK/$relative")"
-    rm -rf "$PROJECT_DIR/$relative" "$WORK/$relative"
+        "$(own_run_directories "$called/$relative")"
 }
 
 # Paths with spaces are one path, everywhere: what is handed to xcodebuild, what a
