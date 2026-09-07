@@ -78,11 +78,8 @@ struct MarkdownBlockView: View {
 
         case .listItem(let marker, _):
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(marker)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
+                listMarker(marker)
                     .frame(width: 28, alignment: .trailing)
-                    .accessibilityHidden(true)
                 children
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -92,6 +89,26 @@ struct MarkdownBlockView: View {
                 .padding(.vertical, 8)
                 .accessibilityHidden(true)
         }
+    }
+
+    @ViewBuilder
+    private func listMarker(_ marker: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            if block.task == nil || marker.hasSuffix(".") {
+                Text(marker)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+            if let task = block.task {
+                // Shape and label carry status; this is deliberately not a control.
+                Image(systemName: task == .complete ? "checkmark.square.fill" : "square")
+                    .foregroundStyle(.primary)
+                    .accessibilityLabel(task == .complete ? "Completed task" : "Incomplete task")
+                    .accessibilityIdentifier("MarkdownTaskMarker-\(block.id)")
+            }
+        }
+        .fixedSize()
     }
 
     private var children: some View {
@@ -274,6 +291,11 @@ private struct MarkdownBlockViewPreview: View {
 
                     - First item
                     - Second item
+                    - [ ] Pending **review**
+                      - [x] Nested completed task
+
+                    5. [x] Shipped with [notes](https://example.com)
+                    6. [ ] Next release
 
                     > A quoted aside.
                     >

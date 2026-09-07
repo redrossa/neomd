@@ -120,6 +120,8 @@ Acceptance ideas:
 - Clicking or pressing Space on an item never changes its status or the file.
 - Task descriptions retain links and inline formatting.
 
+Implemented: literal `[ ]`, `[x]`, and `[X]` markers at the start of a list item's first direct paragraph become read-only task glyphs when followed by whitespace or the end of the paragraph. Checked and unchecked states differ by shape and accessible labels, including nested and quoted tasks; ordered tasks keep their visible ordinals. Escaped, code, formatted, linked, mid-text, and later-paragraph look-alikes remain literal. Descriptions retain links, inline formatting, and code-span whitespace. The glyphs are not controls: clicking or pressing Space cannot change status or source files.
+
 ### M1-09 — Follow links within a document · Core
 
 As a reader of a long document, I want section and footnote links to work so that I can move between an explanation and its supporting material.
