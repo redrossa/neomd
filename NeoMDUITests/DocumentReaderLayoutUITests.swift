@@ -28,6 +28,72 @@ final class DocumentReaderLayoutUITests: XCTestCase {
     }
 
     @MainActor
+    func testReadOnlyTaskStatesInBothAppearances() async throws {
+        let source = """
+            - [ ] Pending
+              - [x] Nested done
+            - [x] Ship **v1** with [docs](https://example.com) and `code`
+
+            5. [x] Ordered done
+            6. [ ] Ordered pending
+
+            > - [ ] Quoted pending
+
+            - \\[ \\] escaped
+            - `[ ]` code marker
+            - [ ] `  x  `
+            - [x] `   `
+            """
+        let url = try makeDocument(named: "tasks.md", content: source)
+        let before = try snapshot(of: url)
+        for appearance in ["Light", "Dark"] {
+            let app = configuredApplication(appearance: appearance)
+            app.launch()
+            try await openWhileRunning(url, in: app)
+            let window = app.windows[url.lastPathComponent]
+            XCTAssertTrue(window.waitForExistence(timeout: 10))
+            resize(window, to: CGSize(width: 900, height: 900))
+            let markers = window.descendants(matching: .any).matching(
+                NSPredicate(format: "identifier BEGINSWITH %@", "MarkdownTaskMarker-")
+            )
+            let parent = window.images["MarkdownTaskMarker-0"]
+            let nested = window.images["MarkdownTaskMarker-2"]
+            XCTAssertTrue(parent.waitForExistence(timeout: 5), window.debugDescription)
+            XCTAssertTrue(nested.exists)
+            XCTAssertEqual(parent.label, "Incomplete task")
+            XCTAssertEqual(nested.label, "Completed task")
+            XCTAssertEqual(markers.count, 8)
+            XCTAssertEqual(window.checkBoxes.count, 0)
+            XCTAssertEqual(window.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "MarkdownTaskMarker-")).count, 0)
+            let description = staticText("Ship v1 with docs and code", in: window)
+            XCTAssertTrue(description.exists)
+            for value in ["[ ] escaped", "[ ] code marker", " x ", "   "] {
+                XCTAssertTrue(staticText(value, in: window).exists, "Missing exact description: \(value.debugDescription)")
+            }
+            let labels = markers.allElementsBoundByIndex.map(\.label)
+            parent.click()
+            app.typeKey(" ", modifierFlags: [])
+            nested.click()
+            app.typeKey(" ", modifierFlags: [])
+            // The beginning is plain text, avoiding activation of the preserved link.
+            description.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5))
+                .withOffset(CGVector(dx: 5, dy: 0)).click()
+            app.typeKey(" ", modifierFlags: [])
+            XCTAssertEqual(markers.allElementsBoundByIndex.map(\.label), labels)
+            XCTAssertEqual(nested.frame.minX - parent.frame.minX, 22, accuracy: 1)
+            attachScreenshot(of: window, named: "Read-only tasks and ordered ordinals — \(appearance)")
+            resize(window, to: CGSize(width: 480, height: 760))
+            XCTAssertEqual(nested.frame.minX - parent.frame.minX, 22, accuracy: 1)
+            XCTAssertEqual(markers.allElementsBoundByIndex.map(\.label), labels)
+            attachScreenshot(of: window, named: "Read-only tasks narrow — \(appearance)")
+            let after = try snapshot(of: url)
+            XCTAssertEqual(after.data, before.data)
+            XCTAssertEqual(after.modificationDate, before.modificationDate)
+            app.terminate()
+        }
+    }
+
+    @MainActor
     func testDocumentStructureAndEmphasis() async throws {
         let source = """
             # Heading one

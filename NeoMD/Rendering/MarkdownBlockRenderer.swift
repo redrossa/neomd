@@ -30,6 +30,11 @@ extension AttributeDynamicLookup {
     ) -> T { self[T.self] }
 }
 
+/// Immutable checklist status, never an editable control value.
+nonisolated enum MarkdownTaskState: Equatable, Sendable {
+    case incomplete, complete
+}
+
 /// One rendered leaf or quote/list container, with document-order identity.
 nonisolated struct MarkdownBlock: Identifiable, Sendable {
 
@@ -49,6 +54,16 @@ nonisolated struct MarkdownBlock: Identifiable, Sendable {
     /// The block's text with inline formatting applied and Markdown syntax removed.
     let text: AttributedString
     var children: [MarkdownBlock] = []
+    let task: MarkdownTaskState?
+
+    init(id: Int, kind: Kind, text: AttributedString,
+         children: [MarkdownBlock] = [], task: MarkdownTaskState? = nil) {
+        self.id = id
+        self.kind = kind
+        self.text = text
+        self.children = children
+        self.task = task
+    }
 
     var leaves: [MarkdownBlock] {
         children.isEmpty ? [self] : children.flatMap(\.leaves)
@@ -114,7 +129,7 @@ nonisolated enum MarkdownBlockRenderer {
         }
         var cursor = 0
         var nextID = 0
-        return fold(entries, cursor: &cursor, depth: 0, parent: nil, nextID: &nextID)
+        return fold(entries, cursor: &cursor, depth: 0, parent: nil, nextID: &nextID, source: markdown)
     }
 
     private struct Ancestor {
@@ -152,7 +167,8 @@ nonisolated enum MarkdownBlockRenderer {
 
     /// A single cursor consumes each leaf once; containers own markers and boundaries.
     private static func fold(
-        _ entries: [Entry], cursor: inout Int, depth: Int, parent: Int?, nextID: inout Int
+        _ entries: [Entry], cursor: inout Int, depth: Int, parent: Int?, nextID: inout Int,
+        source: String
     ) -> [MarkdownBlock] {
         var result: [MarkdownBlock] = []
         while cursor < entries.count {
@@ -164,16 +180,51 @@ nonisolated enum MarkdownBlockRenderer {
             nextID += 1
             if entry.ancestry.count > depth {
                 let ancestor = entry.ancestry[depth]
-                let children = fold(entries, cursor: &cursor, depth: depth + 1,
-                                    parent: ancestor.identity, nextID: &nextID)
+                var children = fold(entries, cursor: &cursor, depth: depth + 1,
+                                    parent: ancestor.identity, nextID: &nextID, source: source)
+                var task: MarkdownTaskState?
+                if case .listItem = ancestor.kind,
+                   let first = children.first, first.kind == .paragraph,
+                   let marker = taskMarker(in: first.text, source: source) {
+                    task = marker.state
+                    children[0] = MarkdownBlock(id: first.id, kind: first.kind, text: marker.description)
+                }
                 result.append(MarkdownBlock(id: id, kind: ancestor.kind,
-                                            text: AttributedString(), children: children))
+                                            text: AttributedString(), children: children, task: task))
             } else {
                 result.append(MarkdownBlock(id: id, kind: entry.kind, text: entry.text))
                 cursor += 1
             }
         }
         return result
+    }
+
+    /// Only the first direct paragraph can own a task marker. Source provenance rejects
+    /// escaped look-alikes; attributed boundaries protect formatted description spaces.
+    private static func taskMarker(
+        in text: AttributedString, source: String
+    ) -> (state: MarkdownTaskState, description: AttributedString)? {
+        guard let run = text.runs.first,
+              run.inlinePresentationIntent == nil, run.link == nil,
+              run.markdownInlineStyle == nil,
+              let position = run.markdownSourcePosition,
+              let sourceRange = Range<String.Index>(position, in: source) else { return nil }
+        let prefix = String(text.characters.prefix(3))
+        guard ["[ ]", "[x]", "[X]"].contains(prefix),
+              text.characters[run.range].prefix(3).elementsEqual(prefix),
+              source[sourceRange].hasPrefix(prefix) else { return nil }
+        let sourceEnd = source.index(sourceRange.lowerBound, offsetBy: 3)
+        guard sourceEnd == source.endIndex || source[sourceEnd].isWhitespace else { return nil }
+        let markerEnd = text.characters.index(text.startIndex, offsetBy: 3)
+        guard markerEnd == text.endIndex || text.characters[markerEnd].isWhitespace else { return nil }
+        var end = markerEnd
+        // Do not cross the marker's unformatted source run into code or other content.
+        while end < run.range.upperBound, text.characters[end].isWhitespace {
+            end = text.characters.index(after: end)
+        }
+        var description = text
+        description.removeSubrange(text.startIndex..<end)
+        return (prefix == "[ ]" ? .incomplete : .complete, description)
     }
 
     /// Foundation flattens link labels. Recover only parser-confirmed HTML provenance,
