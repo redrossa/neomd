@@ -26,9 +26,24 @@ Scripts/appearance-test-host.sh --rehearse-cleanup
 Scripts/appearance-test-host-tests.sh
 ```
 
-Further arguments are passed to `xcodebuild`. `NEOMD_DERIVED_DATA` and
-`NEOMD_RESULT_BUNDLE` override the derived data and result bundle paths, which default
-to locations outside the repository.
+The controller owns the project, scheme, destination, build directory and result bundle,
+so it accepts only arguments that cannot take those away from it: `--rehearse-cleanup`,
+`-only-testing`/`-skip-testing` (both spellings), `-test-iterations`,
+`-test-repetition-relaunch-enabled`, `-retry-tests-on-failure`,
+`-run-tests-until-failure`, `-parallel-testing-enabled`, `-test-timeouts-enabled`,
+`-quiet` and `-verbose`. Anything else — including `-derivedDataPath`,
+`-resultBundlePath` and build settings such as `SYMROOT=` — is refused with `64` before
+anything is built, with the supported list printed.
+
+`NEOMD_DERIVED_DATA` and `NEOMD_RESULT_BUNDLE` override where the build and the result
+bundle go; both default to locations outside the repository, and a relative path is
+resolved against the directory the script was called from rather than the project.
+
+`NEOMD_DERIVED_DATA` names a **parent**, not the build directory: each run creates a
+fresh `run-XXXXXXXX` directory inside it, builds there, and removes that directory
+afterwards. Runs therefore never share build products, and the parent may be reused —
+including by concurrent runs — but every run is a cold build. `NEOMD_KEEP_DERIVED_DATA=1`
+keeps the run's own directory for inspection; a failing run prints how to ask for that.
 
 The controller's exit status is the run's own status, including a failed launch of
 `xcodebuild`. Otherwise it is `130` for `SIGINT`, `143` for `SIGTERM`, `69` when the
@@ -103,9 +118,13 @@ a defect of the test:
    never in that group to begin with. The controller therefore re-checks what it owns —
    members of that process group, and processes running out of this run's build products
    — until nothing is left, escalating from `SIGTERM` to `SIGKILL` and finally reporting
-   `71` rather than restoring over a survivor in silence. Ownership is decided by a
-   process group this run created and by this run's derived data path, so a separate
-   Xcode or app session is never signalled.
+   `71` rather than restoring over a survivor in silence.
+
+   Ownership is decided by a process group this run created and by the build directory
+   this run created for itself, which is why that directory is fresh per run: a shared or
+   reused one says only that a process was built from the same place, not that this
+   invocation started it. A pre-existing app, another concurrent run under the same
+   parent, and anything under an unrelated directory are all left alone.
 
    The control directory is removed before the restore as well, so nothing can have
    another switch *served* to it afterwards. That is a guarantee about the controller,
@@ -126,9 +145,17 @@ run does not reach. It runs the checked-in controller unmodified against a stubb
 one scenario, so the real setting is never touched: a passing run, a failing run, a run
 that could not be launched, `SIGINT` and `SIGTERM` mid-run, a descendant that ignores
 `SIGTERM`, a runner outside the process group, requests from separate runner processes, a
-refused restoration, and requests that are not the agreed shape. Each scenario checks
-both the status reported and the state left behind, because either one alone can hide a
-defect.
+refused restoration, and requests that are not the agreed shape. It also covers what the
+run may touch: a relative or space-containing parent, a refused argument, an owned
+survivor reported as `71`, retention, and processes this run did not start — a
+pre-existing app under the configured parent, another run's process beside it, and one
+under a different directory — surviving a run that finishes and one that is cancelled.
+Each scenario checks both the status reported and the state left behind, because either
+one alone can hide a defect.
+
+The processes those scenarios stand in for are compiled by the harness rather than copied
+from `/bin`, because macOS `SIGKILL`s a relocated platform binary; they need `cc` and
+`/usr/bin/python3`, and the harness says so and skips when they are missing.
 
 ## What the tests measure
 
