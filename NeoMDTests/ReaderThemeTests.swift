@@ -149,6 +149,22 @@ struct ReaderThemeTests {
         )
     }
 
+    @Test func scriptsUseSmallerBlockAppropriateFontsAndOppositeOffsets() throws {
+        let text = MarkdownBlockRenderer.blocks(from: "- H<sub>2</sub>O x<sup>3</sup> <ins>under</ins> [site](https://example.com)")[0].text
+        let body = ReaderTheme().presentationText(for: text)
+        let heading = ReaderTheme().presentationText(for: text, headingLevel: 1)
+        let sub = try #require(body.range(of: "2"))
+        let sup = try #require(body.range(of: "3"))
+        #expect(body[sub].baselineOffset == -3)
+        #expect(body[sup].baselineOffset == 5)
+        #expect(body[sub].font == .footnote)
+        #expect(heading[try #require(heading.range(of: "2"))].font == .system(.title3, weight: .semibold))
+        #expect(body[try #require(body.range(of: "under"))].underlineStyle == .single)
+        #expect(body.runs.filter { $0.link != nil }.allSatisfy { $0.underlineStyle == .single })
+        #expect(String(body.characters) == String(text.characters))
+        #expect(body.runs.allSatisfy { $0.foregroundColor == nil })
+    }
+
     @Test func textWithoutLinksIsUnchanged() {
         let text = MarkdownBlockRenderer.blocks(
             from: "Plain prose with *emphasis* and `code`."

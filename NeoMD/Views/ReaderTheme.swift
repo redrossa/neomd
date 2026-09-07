@@ -35,13 +35,34 @@ nonisolated struct ReaderTheme: Equatable, Sendable {
     /// The renderer stays free of presentation concerns, so link runs are given their
     /// non-color affordance here. Every link is underlined, in every appearance and
     /// with no accessibility setting required, because the tint alone would make the
-    /// distinction depend on color. Only the underline attribute is added: no color,
-    /// font, or character of the document is changed.
-    func presentationText(for text: AttributedString) -> AttributedString {
+    /// distinction depend on color. Supported HTML wrappers carry semantic attributes
+    /// from the renderer; scripts use a smaller block-appropriate font and baseline.
+    /// Neither document characters nor colors are rewritten here.
+    func presentationText(
+        for text: AttributedString,
+        headingLevel: Int? = nil
+    ) -> AttributedString {
         var presented = text
-        for run in text.runs where run.link != nil {
-            presented[run.range].underlineStyle = .single
+        for run in text.runs {
+            if run.link != nil || run.markdownInlineStyle == .underline {
+                presented[run.range].underlineStyle = .single
+            }
+            if let style = run.markdownInlineStyle,
+               style == .subscriptText || style == .superscriptText {
+                presented[run.range].font = scriptFont(headingLevel: headingLevel)
+                presented[run.range].baselineOffset = style == .subscriptText ? -3 : 5
+            }
         }
         return presented
+    }
+
+    private func scriptFont(headingLevel: Int?) -> Font {
+        switch headingLevel {
+        case 1: .system(.title3, weight: .semibold)
+        case 2: .system(.headline, weight: .semibold)
+        case 3, 4: .system(.subheadline, weight: .semibold)
+        case 5, 6: .system(.caption, weight: .semibold)
+        default: .footnote
+        }
     }
 }

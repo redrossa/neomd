@@ -92,6 +92,8 @@ Acceptance ideas:
 - Preserve intended paragraph boundaries and explicit line breaks while allowing ordinary wrapped source lines to flow as prose.
 - Keep mixed content legible, including emphasized text and links inside list items.
 
+Implemented: six heading levels and inline emphasis retain their native text styling. Matched inline `<sub>`, `<sup>`, and `<ins>` wrappers become smaller lowered/raised text or underlining; malformed wrappers and unsupported HTML remain literal, and code stays untouched. Lists preserve their starting ordinal and nested indentation, align single- and two-digit markers, and keep continuation paragraphs in the same text column without repeating a marker. Paragraph boundaries, explicit breaks, and links within list items are preserved.
+
 ### M1-07 — Read quotations and code comfortably · Core
 
 As a reviewer of technical output, I want quoted material and code to remain distinct so that I can separate explanation from examples.
