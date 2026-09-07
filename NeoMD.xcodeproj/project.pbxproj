@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		C00900000000000000000001 /* CMarkGFM in Frameworks */ = {isa = PBXBuildFile; productRef = C00900000000000000000002 /* CMarkGFM */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		B049D222304BF5BC0045E474 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -65,6 +69,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C00900000000000000000001 /* CMarkGFM in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -125,6 +130,7 @@
 			);
 			name = NeoMD;
 			packageProductDependencies = (
+				C00900000000000000000002 /* CMarkGFM */,
 			);
 			productName = NeoMD;
 			productReference = B049D214304BF5BB0045E474 /* NeoMD.app */;
@@ -208,6 +214,9 @@
 			);
 			mainGroup = B049D20B304BF5BB0045E474;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				C00900000000000000000003 /* XCLocalSwiftPackageReference "ThirdParty/cmark-gfm" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B049D215304BF5BB0045E474 /* Products */;
 			projectDirPath = "";
@@ -280,6 +289,20 @@
 			targetProxy = B049D22C304BF5BC0045E474 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		C00900000000000000000003 /* XCLocalSwiftPackageReference "ThirdParty/cmark-gfm" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "ThirdParty/cmark-gfm";
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		C00900000000000000000002 /* CMarkGFM */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CMarkGFM;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		B049D233304BF5BC0045E474 /* Debug */ = {

@@ -23,7 +23,8 @@ The current milestone direction is:
 - `NeoMD/NeoMDApp.swift`: SwiftUI app entry point; declares the read-only `DocumentGroup`.
 - `NeoMD/Info.plist`: imported Markdown type declaration and document types, merged with the generated Info.plist. This is what makes Finder offer NeoMD for `.md` files.
 - `NeoMD/Documents/`: file type declaration, byte decoding, and the read-only `FileDocument`.
-- `NeoMD/Rendering/`: Markdown source to presentable blocks; pure, main-actor free, unit tested.
+- `NeoMD/Rendering/`: cmark-gfm AST to presentable blocks and internal-link destinations; pure, main-actor free, unit tested.
+- `ThirdParty/cmark-gfm/`: pinned offline C parser package, complete notices, isolated patches and hash inventories. Verify with `Scripts/verify-cmark-vendoring.sh`.
 - `NeoMD/Views/`: reading surface and block layout.
 - `NeoMD/Assets.xcassets/`: app icon, accent color, and other visual assets.
 - `NeoMDTests/`: unit tests using Swift Testing (`import Testing`, `@Test`, `#expect`).
@@ -35,7 +36,7 @@ The project uses Xcode file-system-synchronized source groups. Place new files i
 
 ## Build and validation
 
-Use Xcode and `xcodebuild`, rather than `swift build` or `swift test`; there is no standalone Swift package. The project was created with Xcode 26.3 and currently targets macOS 26.2. Use an Xcode installation and macOS test host compatible with those settings. The targets use Swift 5 language mode; the app enables approachable concurrency and default `MainActor` isolation.
+Use Xcode and `xcodebuild`, rather than `swift build` or `swift test`; the app is not a standalone Swift package (the local package only builds the vendored C parser). The project was created with Xcode 26.3 and currently targets macOS 26.2. Use an Xcode installation and macOS test host compatible with those settings. The targets use Swift 5 language mode; the app enables approachable concurrency and default `MainActor` isolation.
 
 ```sh
 # Inspect the available scheme and targets.

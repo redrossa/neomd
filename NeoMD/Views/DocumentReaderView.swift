@@ -19,11 +19,17 @@ struct DocumentReaderView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var blocks: [MarkdownBlock] = []
     @State private var lazyAncestors: [Int: Int] = [:]
+    @State private var anchorTargets: [String: Int] = [:]
+    @State private var linkNotice: String?
+    @State private var noticeGeneration = 0
+    @State private var navigationGeneration = 0
     @State private var isRendered = false
     @State private var windowID = UUID()
     @State private var scrollPosition = ScrollPosition(idType: Int.self)
     @State private var scrollMetrics = DocumentReaderScrollMetrics.zero
     @State private var blockFrames: [Int: CGRect] = [:]
+    @State private var navigationBridge = DocumentNavigationBridge()
+    @State private var documentGeneration = 0
     @State private var readingAnchor: DocumentReadingAnchor?
     @State private var resizeRestoration = DocumentReaderResizeRestoration()
     @FocusState private var keyboardFocus: DocumentReaderFocusTarget?
@@ -49,6 +55,12 @@ struct DocumentReaderView: View {
                     .padding(.vertical, DocumentReaderLayout.verticalMargin)
                     .coordinateSpace(name: DocumentReaderCoordinateSpace.content)
                     .frame(maxWidth: .infinity, alignment: .center)
+                    .background(alignment: .topLeading) {
+                        DocumentNavigationMarker(bridge: navigationBridge, id: nil,
+                                                 generation: documentGeneration)
+                            .frame(width: 0, height: 0)
+                            .allowsHitTesting(false)
+                    }
             }
             .accessibilityIdentifier("DocumentReaderScrollView")
             .focusable(true, interactions: .edit)
@@ -69,6 +81,19 @@ struct DocumentReaderView: View {
                 handleBlockFrames(frames, viewportSize: geometry.size)
             }
         }
+        .environment(\.documentNavigationBridge, navigationBridge)
+        .environment(\.documentNavigationGeneration, documentGeneration)
+        .environment(\.openURL, OpenURLAction { url in handleLink(url) })
+        .environment(\.documentKeyboardOpenURL, OpenURLAction { url in handleLink(url, keyboardDriven: true) })
+        .overlay(alignment: .bottom) {
+            if let linkNotice {
+                Text(linkNotice)
+                    .padding(12)
+                    .background(.regularMaterial, in: .capsule)
+                    .padding()
+                    .accessibilityIdentifier("DocumentLinkNotice")
+            }
+        }
         .frame(minWidth: 480, minHeight: 320)
         .task(id: document.text) {
             await render(document.text)
@@ -80,6 +105,9 @@ struct DocumentReaderView: View {
         }
         .onDisappear {
             resizeRestoration.invalidate()
+            navigationGeneration += 1
+            navigationBridge.cancel()
+            noticeGeneration += 1
             guard openingCoordinator?.documentWindowDidDisappear(id: windowID)
                     == .showNoDocumentWindow else { return }
             let openingCoordinator = openingCoordinator
@@ -102,13 +130,22 @@ struct DocumentReaderView: View {
             Color.clear
                 .frame(height: 1)
                 .accessibilityHidden(true)
-        } else if blocks.isEmpty {
-            Text("This document is empty.")
-                .font(.body)
-                .foregroundStyle(.secondary)
+        } else if blocks.allSatisfy({ $0.kind == .anchor }) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("This document is empty.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                ForEach(blocks) { block in
+                    MarkdownBlockView(block: block, theme: theme,
+                                      keyboardFocus: $keyboardFocus, pageReader: scrollReaderPage)
+                        .id(block.id)
+                }
+            }
+            .scrollTargetLayout()
         } else {
             LazyVStack(alignment: .leading, spacing: 16) {
                 ForEach(blocks) { block in
+                    if case .footnote(ordinal: 1) = block.kind { Divider() }
                     MarkdownBlockView(
                         block: block,
                         theme: theme,
@@ -156,6 +193,8 @@ struct DocumentReaderView: View {
     }
 
     private func scrollReaderPage(_ direction: DocumentReaderPageDirection) {
+        navigationGeneration += 1
+        navigationBridge.cancel()
         resizeRestoration.cancelForUserScroll()
         let pageDistance = max(40, scrollMetrics.viewportSize.height * 0.9)
         let offset = switch direction {
@@ -170,12 +209,18 @@ struct DocumentReaderView: View {
     /// Renders `source` away from the main actor and publishes the result.
     private func render(_ source: String) async {
         isRendered = false
+        navigationBridge.replaceDocument()
+        documentGeneration = navigationBridge.generation
+        navigationGeneration += 1
+        noticeGeneration += 1
+        linkNotice = nil
         let rendered = await Task.detached(priority: .userInitiated) {
             MarkdownBlockRenderer.blocks(from: source)
         }.value
         guard !Task.isCancelled else { return }
         blocks = rendered
         lazyAncestors = MarkdownBlock.lazyAncestors(in: rendered)
+        anchorTargets = MarkdownBlock.anchorTargets(in: rendered)
         isRendered = true
     }
 
@@ -184,6 +229,10 @@ struct DocumentReaderView: View {
         to newMetrics: DocumentReaderScrollMetrics
     ) {
         let viewportChanged = oldMetrics.viewportSize != newMetrics.viewportSize
+        if viewportChanged {
+            navigationGeneration += 1
+            navigationBridge.cancel()
+        }
 
         if viewportChanged, !resizeRestoration.isPending {
             resizeRestoration.beginIfNeeded(
@@ -211,9 +260,62 @@ struct DocumentReaderView: View {
 
     private func handleScrollPhaseChange(_ phase: ScrollPhase) {
         if phase == .interacting {
+            navigationGeneration += 1
+            navigationBridge.cancel()
             resizeRestoration.cancelForUserScroll()
         } else if phase == .idle, !resizeRestoration.isPending {
             updateReadingAnchor()
+        }
+    }
+
+    private func handleLink(_ url: URL, keyboardDriven: Bool = false) -> OpenURLAction.Result {
+        switch DocumentLinkDestination.resolve(url: url, anchors: anchorTargets) {
+        case .external: return .systemAction
+        case .missing(let name):
+            let message = "No “\(name)” destination in this document"
+            linkNotice = message
+            noticeGeneration += 1
+            let generation = noticeGeneration
+            AccessibilityNotification.Announcement(message).post()
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(4))
+                if noticeGeneration == generation { linkNotice = nil }
+            }
+        case .top: navigate(to: nil, keyboardDriven: keyboardDriven)
+        case .block(let id): navigate(to: id, keyboardDriven: keyboardDriven)
+        }
+        return .handled
+    }
+
+    private func navigate(to id: Int?, keyboardDriven: Bool) {
+        resizeRestoration.invalidate()
+        navigationGeneration += 1
+        let generation = navigationGeneration
+        navigationBridge.cancel()
+        let request = navigationBridge.request
+        keyboardFocus = .reader
+        Task { @MainActor in
+            guard generation == navigationGeneration else { return }
+            if let id { scrollPosition.scrollTo(id: lazyAncestors[id] ?? id, anchor: .top) }
+            else { scrollPosition.scrollTo(edge: .top) }
+            try? await Task.sleep(for: .milliseconds(100))
+            var stablePasses = 0
+            for _ in 0..<12 {
+                guard generation == navigationGeneration, !Task.isCancelled else { return }
+                if let error = navigationBridge.position(id: id, request: request) {
+                    stablePasses = abs(error) <= 1 ? stablePasses + 1 : 0
+                    if stablePasses >= 3 { break }
+                } else { stablePasses = 0 }
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            guard generation == navigationGeneration else { return }
+            updateReadingAnchor()
+            // A Tab press can already have moved focus while lazy layout settles.
+            // Never overwrite that newer user choice with the initial reader focus.
+            if keyboardDriven, keyboardFocus == .reader,
+               let id, blocks.flatMap(\.leaves).contains(where: {
+                   $0.id == id && $0.text.runs.contains(where: { $0.link != nil })
+               }) { keyboardFocus = .links(id) }
         }
     }
 
@@ -380,6 +482,7 @@ nonisolated enum DocumentReaderLayout {
 nonisolated enum DocumentReaderFocusTarget: Hashable {
     case reader
     case codeBlock(Int)
+    case links(Int)
 }
 
 nonisolated enum DocumentReaderPageDirection {
@@ -493,6 +596,10 @@ private nonisolated struct DocumentReaderScrollMetrics: Equatable, Sendable {
         )
         return min(maximum, max(minimum, proposedOffset))
     }
+}
+
+extension EnvironmentValues {
+    @Entry var documentKeyboardOpenURL: OpenURLAction? = nil
 }
 
 enum DocumentReaderCoordinateSpace {

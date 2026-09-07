@@ -1,0 +1,41 @@
+diff --git a/extensions/tasklist.c b/extensions/tasklist.c
+index 7bef454..a895580 100644
+--- a/extensions/tasklist.c
++++ b/extensions/tasklist.c
+@@ -80,16 +80,32 @@ static cmark_node *open_tasklist_item(cmark_syntax_extension *self,
+     return NULL;
+   }
+ 
+-  bufsize_t matched = scan_tasklist(input, len, 0);
+-  if (!matched) {
++  // NeoMD: recognize the marker relative to the item's own opening line
++  // rather than the raw line start, so items nested in block quotes and
++  // items with an empty description are tasks too (GitHub parity).
++  if (parent_container->first_child != NULL ||
++      parent_container->start_line != parser->line_number) {
++    return NULL;
++  }
++  bufsize_t i = parser->first_nonspace;
++  if (i + 3 > (bufsize_t)len || input[i] != '[' || input[i + 2] != ']') {
++    return NULL;
++  }
++  unsigned char state = input[i + 1];
++  if (state != ' ' && state != 'x' && state != 'X') {
++    return NULL;
++  }
++  unsigned char after = i + 3 < (bufsize_t)len ? input[i + 3] : '\n';
++  if (after != ' ' && after != '\t' && after != '\v' && after != '\f' &&
++      after != '\r' && after != '\n') {
+     return NULL;
+   }
+ 
+   cmark_node_set_syntax_extension(parent_container, self);
+-  cmark_parser_advance_offset(parser, (char *)input, 3, false);
++  cmark_parser_advance_offset(parser, (char *)input, i + 3 - parser->offset, false);
+ 
+   // Either an upper or lower case X means the task is completed.
+-  parent_container->as.list.checked = (strstr((char*)input, "[x]") || strstr((char*)input, "[X]"));
++  parent_container->as.list.checked = (state != ' ');
+ 
+   return NULL;
+ }

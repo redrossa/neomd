@@ -100,6 +100,76 @@ The pre-amendment PR evidence records, on unchanged source at the head above:
 
 **The hover hang is unresolved: root cause is not established, and it is not claimed fixed or proven pre-existing.** Retain it for final cross-story verification/investigation, including horizontal code scrolling → offscreen prose hover and nested quote/reading-position resize combinations. If independent review establishes a current-story regression or failed required criterion, it still blocks this story. A subsequent pass is not proof of a fix. No source/test workaround or weakened assertion accompanies this policy amendment.
 
+## M1-09 — Internal links and universal parser (implemented; awaiting independent review)
+
+[Issue #9](https://github.com/redrossa/neomd/issues/9) · [baseline plan](https://github.com/redrossa/neomd/issues/9#issuecomment-5570562309) · [R2 universal parser](https://github.com/redrossa/neomd/issues/9#issuecomment-5571540097) · [binding corrections](https://github.com/redrossa/neomd/issues/9#issuecomment-5571540353) · [collision-safe allocation amendment](https://github.com/redrossa/neomd/issues/9#issuecomment-5571705057).
+
+Accepted base: `2daa9e6b65c661578c091c2ef47ed333ba081094`; branch `story/9-in-document-links`. The PR head identifies the implementation under review. **Implementation validation passed; independent acceptance is pending.**
+
+### Durable fixtures and setup
+
+Canonical reproducible fixture: `NeoMDUITests/DocumentLinkNavigationUITests.swift`, `fixture`. It contains the exact Markdown and expands `spacer(section)` into 18 numbered prose paragraphs per section. It covers the top link index, duplicate/formatted/Unicode headings, standalone and inline custom anchors, three reachable footnotes (one repeated, one structured, one quote-defined), an unused note, escaped and fenced reference syntax, and a quoted read-only task. `testEOFAnchorAndAnchorOnlyDocument` separately constructs 50 numbered paragraphs followed by a true trailing anchor, then an anchor-only document; this distinguishes actual EOF from an authored anchor followed by rendered notes.
+
+`setUpWithError` writes UTF-8 `links.md` in an owned `NeoMD-Links-<UUID>` temporary directory and sets mtime to Unix `1700000000`. `open` launches with `-ApplePersistenceIgnoreState YES`, uses the per-app Light/Dark override, and opens through `NSWorkspace` in the running app. Teardown terminates that app, compares exact source bytes/mtime and removes only its fixture directory. No host appearance preference changes. UI runs must be serialized.
+
+### Exact selectors and expectations
+
+Use this command prefix from the repository root, followed by the selector and `test`:
+
+```sh
+xcodebuild -project NeoMD.xcodeproj -scheme NeoMD \
+  -destination 'platform=macOS' -parallel-testing-enabled NO \
+  -derivedDataPath /tmp/NeoMD-M1-09-DerivedData
+```
+
+| Criterion | Selector suffix (`-only-testing:NeoMDUITests/DocumentLinkNavigationUITests/…`) | Actions and expected outcome |
+|---|---|---|
+| C1 | `testHeadingLinksReachDuplicateFormattedAndUnicodeSections` | Click each index link; correct heading at the reading viewport top (10pt allowance for heading typography), correct nearby return link; return to top. |
+| C2 | `testCustomAnchorsNavigateWithoutVisibleMarkup` | Standalone/inline anchors reach the intended heading/paragraph; no empty markup; end link reaches the note section following the authored anchor. |
+| C2 | `testEOFAnchorAndAnchorOnlyDocument` | True trailing anchor reaches final paragraph/document end; anchor-only file shows the empty-document message without markup. |
+| C3 | `testFootnoteReferencesAndReturnLinks` | Native reference click reaches notes; structured note/list remain present, unused note absent; repeated return reaches reference paragraph. |
+| C4 | `testMissingDestinationKeepsDocumentUsable` | Notice appears without moving ordinary prose or opening dialogs; PageDown still works; notice expires. Native focus may shift a link's AX bounds by one point, so unchanged prose frames establish no scroll. |
+| C5 | `testKeyboardFocusAndActivationOfInternalLinks` | Option-Tab focuses index; Right selects second link; Return activates; Escape returns to reading. Keyboard also selects a repeated reference and activates it with Space, cycles to the note's second return, and activates that return with Space. Repeat Light/Dark and capture focus screenshots. |
+
+Every method checks bytes/mtime. The keyboard test attaches `Link keyboard focus — Light` and `Link keyboard focus — Dark`. Full VoiceOver, live system appearance switching, combined full-screen/resize/selection scenarios remain final-milestone checks. Screenshot existence is not yet a completed visual review.
+
+Exact unit class selectors: `-only-testing:NeoMDTests/CMarkDocumentTests`, `CMarkParityTests`, `MarkdownAnchorsTests`, `MarkdownFootnotesTests`, `DocumentLinkResolverTests`, and `DocumentReaderLayoutTests` (repeat the same `-only-testing:NeoMDTests/` prefix for each). Existing renderer/task/code/theme suites remain required via `-only-testing:NeoMDTests`.
+
+The additional required migration UI selectors are:
+
+- `-only-testing:NeoMDUITests/DocumentReaderLayoutUITests/testDocumentStructureAndEmphasis`
+- `-only-testing:NeoMDUITests/DocumentReaderLayoutUITests/testReadOnlyTaskStatesInBothAppearances`
+- `-only-testing:NeoMDUITests/DocumentReaderLayoutUITests/testInlineCodeBoundaryAndAllSpaceTextInEveryContext`
+- `-only-testing:NeoMDUITests/DocumentReaderLayoutUITests/testNestedQuotationsAndHighlightedCodeInBothAppearances`
+- `-only-testing:NeoMDUITests/AppearanceUITests/testLinksAreUnderlinedByDefaultInLightAndDark`
+
+### Final worker evidence
+
+The final gate supersedes the historical failures below (retained for traceability). Native markers are zero-size, top-leading points only on actual anchor destinations plus the document root. Full-size background hosts interfered with ordinary list-text hit testing even with hit testing disabled; the focused structure/custom/footnote regression passed 3/3 after this repair (`/tmp/neomd-9-point-markers.xcresult`). Late navigation completion does not override newer keyboard focus. Named resize frames remain unchanged; diagnostic-only offset state and tracing were removed.
+
+- Full units: **97 methods / 155 expanded runs passed**, no skips; `/tmp/neomd-9-final-units.xcresult` and final diagnostic-state cleanup rerun `/tmp/neomd-9-clean-units.xcresult`.
+- Required serialized UI matrix: **11/11 passed**, no skips; `/tmp/neomd-9-final-ui.xcresult`: six story selectors plus the five migration selectors above. Final diagnostic-state cleanup rerun `/tmp/neomd-9-clean-ui.xcresult` also passed 11/11. Source-byte/mtime teardown checks passed.
+- Staged `git diff --check` reports only preserved upstream/generated-header trailing whitespace and unified-patch context whitespace under `ThirdParty/cmark-gfm`; these authenticated bytes are intentionally not normalized. The non-vendored diff is whitespace-clean, and hash/reverse-patch verification passes.
+- Explicit Debug build and offline vendoring: `/tmp/neomd-9-final-build.log`, `/tmp/neomd-9-final-vendor.log`, and final cleanup `...clean-build.log` / `...clean-vendor.log`, all passed.
+- The unchanged concurrency test ran in both `/tmp/neomd-9-lock-probe1.xcresult` and `...probe2.xcresult`: five methods/nine expanded runs each, all passed (640 parses each, zero mismatches). [Approved correction](https://github.com/redrossa/neomd/issues/9#issuecomment-5573078799): private static lock around C parser creation/attachment/feed/finish; defer unlock before concurrent adaptation. Audit and simultaneous-parse throughput trade-off are documented in `ThirdParty/cmark-gfm/UPSTREAM.md`; cleanup/getters do not mutate shared classification tables, though string getters may allocate within their owned node.
+- Actual final Light/Dark focus images inspected: `Link keyboard focus — Light` and `— Dark` in the final UI bundle (exported `BFAB199D-2601-4719-A20C-71CBF5839988.png`, `C6FA2589-21D6-44F7-AAFD-64C9D3818F14.png`). Readable underlined links, outline focus ring, selected-link treatment and normal task/code presentation are visible in both appearances. Keyboard activation and expected landing are proven by native events/assertions, not screenshots alone.
+- Prior `/tmp/neomd-9-lock-ui.xcresult` was 8/11 (custom final-note hit check, structure list hit check, nested-code scroll failed). Isolation reproduced structure without a window interruption. This prompted the point-marker repair; these failures were not waived. Final 11/11 passes supersede them. Comprehensive unrelated UI, full VoiceOver and combined milestone E2E remain deferred.
+
+### Historical development evidence (superseded by final gate)
+
+- Offline vendoring verification passed: `Scripts/verify-cmark-vendoring.sh`; `/tmp/neomd-9-vendor-final.log`.
+- Explicit Debug build passed: same project/scheme/destination/derived-data arguments above, `-configuration Debug build`; `/tmp/neomd-9-build-final.log`. Subsequent targeted test builds also compiled the navigation revisions.
+- Full units passed: `-only-testing:NeoMDTests test`, `/tmp/neomd-9-units-final-r2.xcresult` and `.log`: **95 methods, 153 expanded runs, zero failures/skips**. This precedes the latest navigation-loop-only adjustment; rerun the final gate after repairs.
+- Initial collision coverage verifies every generated reference/return URL against distinct intended block IDs under authored heading/custom collisions, later note headings, repeated `x` versus `x-2`, Unicode case identity and percent-containing labels. Allocation separately reserves occupied suffixes and later preferred names.
+- Previous serialized story run `/tmp/neomd-9-links-ui-r2.xcresult`: **3 passed, 3 failed**; superseded by the native-bridge run below, not treated as acceptance.
+- Native positioning revision approved at https://github.com/redrossa/neomd/issues/9#issuecomment-5572856406. `DocumentNavigationBridgeTests` constructs two independent NSWindows and vertical scrollers, checks exact native target alignment and isolation, rejects nested horizontal/cross-document targets, and verifies cancellation, replacement-safe unregister, stale generation rejection and weak cleanup. Run with `-only-testing:NeoMDTests/DocumentNavigationBridgeTests test`: **2 passed**, `/tmp/neomd-9-native-probe.xcresult` and `.log`. This synthetic AppKit probe does not prove SwiftUI interaction synchronization.
+- Previous serialized six-method story run `/tmp/neomd-9-native-ui.xcresult`: **4 passed, 2 failed** (footnote hit testing and keyboard return selection). Actual-host diagnostics found SwiftUI marker wrappers participating in hit testing and a late navigation-completion focus assignment racing Tab. Markers now disable SwiftUI hit testing as well as NSView hit testing; completion preserves newer user focus. The two unchanged methods `testFootnoteReferencesAndReturnLinks` and `testKeyboardFocusAndActivationOfInternalLinks` passed in `/tmp/neomd-9-native-repair1.xcresult` and `/tmp/neomd-9-native-hitproof.xcresult` (two methods each, actual mouse return `↩ 2`, keyboard return selection/Space and expected source landing, Light/Dark). Corrected native hit-point traces show `SwiftUI.SelectionTextField` before/after clip correction, matching metrics, and both mouse/keyboard `#fnref-x-2` callbacks. Temporary bounded diagnostics were removed; no source-global hooks remain. Six-method final rerun, five migration methods and screenshot inspection remain outstanding.
+- Latest explicit build and vendoring verification passed (`/tmp/neomd-9-build-native-final.log`, `/tmp/neomd-9-vendor-native-final.log`). Full units `/tmp/neomd-9-units-native-final.xcresult` failed one of 96 methods (153 expanded passes/one failure): `supportedExtensionsAndFlattenedPresentation` sometimes retains `~single~`. Pinned cmark `process_inlines` mutates global SPECIAL_CHARS/SKIP_CHARS per parse. New durable `CMarkParityTests.concurrentParsingPreservesExtensions` runs 16 detached workers × 40 parses of 200 `~single~` paragraphs; run `-only-testing:NeoMDTests/CMarkParityTests test`. `/tmp/neomd-9-parser-concurrency-probe2.xcresult` reproduced **68/640 malformed results**, blocking parser parity. A first method-selector command selected zero tests and is not evidence. Subsequently resolved by the approved parsing lock and repeated regression above.
+- Earlier individual story methods passed during development, but neither those nor the native probe waive the latest UI failures. The integrated bridge replaces global frame correction and retains named-frame resize restoration.
+- Existing `testDocumentStructureAndEmphasis` passed during migration (`/tmp/neomd-9-heading-structure-ui.log`). The other four migration UI gates and final exact-source reruns remain outstanding.
+- Intentional compatibility: cmark soft/hard breaks inside link labels (approved D1); exact original ineligible footnote spelling (D4 snapshot patch); empty thematic-break model text (D2); parser-owned nested/empty task patch (D3). Real table layout and image presentation remain later stories; cells remain flattened and images retain alt text. Unsupported HTML remains literal, never executable.
+- Deferred risks: historical hover hang remains unexplained, not fixed or proven unrelated; full VoiceOver and comprehensive combined E2E remain deferred. No milestone acceptance is claimed.
+
 ## Future story entry template
 
 Copy and complete in every subsequent story PR; do not replace prior entries.

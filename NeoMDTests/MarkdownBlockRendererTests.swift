@@ -43,7 +43,7 @@ struct MarkdownBlockRendererTests {
     @Test func sourcePositionsHandleRepeatedMultilineAndUnicodeLabels() throws {
         let source = "日本語 👩🏽‍💻\n\n[H<sub>2</sub>O](https://one.example) [H<sub>2</sub>O](https://two.example)\n\n[字\nx<sup>2</sup>][ref]\n\n[ref]: https://three.example"
         let blocks = MarkdownBlockRenderer.blocks(from: source)
-        #expect(blocks.map(plainText) == ["日本語 👩🏽‍💻", "H2O H2O", "字x2"])
+        #expect(blocks.map(plainText) == ["日本語 👩🏽‍💻", "H2O H2O", "字 x2"])
         let links = blocks.flatMap { $0.text.runs.compactMap { $0.link?.absoluteString } }
         for url in ["https://one.example", "https://two.example", "https://three.example"] {
             #expect(links.contains(url))
@@ -56,11 +56,11 @@ struct MarkdownBlockRendererTests {
 
     @Test func multilineLinkBreaksPreserveHTMLProvenanceAndLiteralControls() throws {
         for (label, expected, styled) in [
-            ("字\nx<sup>2</sup>", "字x2", "2"),
-            ("字  \nx<sup>2</sup>", "字x2", "2"),
-            ("字\\\nx<sup>2</sup>", "字x2", "2"),
+            ("字\nx<sup>2</sup>", "字 x2", "2"),
+            ("字  \nx<sup>2</sup>", "字\nx2", "2"),
+            ("字\\\nx<sup>2</sup>", "字\nx2", "2"),
             ("`字\nx<sup>2</sup>`", "字 x<sup>2</sup>", ""),
-            ("字\nx\\<sup>2\\</sup>", "字x<sup>2</sup>", "")
+            ("字\nx\\<sup>2\\</sup>", "字 x<sup>2</sup>", "")
         ] {
             let blocks = MarkdownBlockRenderer.blocks(from: "[\(label)](https://example.com)")
             #expect(blocks.count == 1)

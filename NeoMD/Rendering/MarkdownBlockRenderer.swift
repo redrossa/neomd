@@ -15,10 +15,20 @@ nonisolated enum MarkdownInlineStyleAttribute: AttributedStringKey {
     static let name = "NeoMD.InlineStyle"
 }
 
+nonisolated enum MarkdownGeneratedReference: String, Sendable {
+    case footnoteReference, footnoteReturn
+}
+
+nonisolated enum MarkdownGeneratedReferenceAttribute: AttributedStringKey {
+    typealias Value = MarkdownGeneratedReference
+    static let name = "NeoMD.GeneratedReference"
+}
+
 extension AttributeScopes {
     nonisolated struct MarkdownAttributes: AttributeScope {
         let markdownInlineStyle: MarkdownInlineStyleAttribute
         let markdownCodeToken: MarkdownCodeTokenAttribute
+        let markdownGeneratedReference: MarkdownGeneratedReferenceAttribute
     }
 
     nonisolated var markdown: MarkdownAttributes.Type { MarkdownAttributes.self }
@@ -46,6 +56,8 @@ nonisolated struct MarkdownBlock: Identifiable, Sendable {
         case blockQuote
         case listItem(marker: String, depth: Int)
         case thematicBreak
+        case footnote(ordinal: Int)
+        case anchor
     }
 
     /// Position of the block in the document, stable for the lifetime of a rendering.
@@ -55,37 +67,55 @@ nonisolated struct MarkdownBlock: Identifiable, Sendable {
     let text: AttributedString
     var children: [MarkdownBlock] = []
     let task: MarkdownTaskState?
+    var anchors: [String]
 
     init(id: Int, kind: Kind, text: AttributedString,
-         children: [MarkdownBlock] = [], task: MarkdownTaskState? = nil) {
+         children: [MarkdownBlock] = [], task: MarkdownTaskState? = nil, anchors: [String] = []) {
         self.id = id
         self.kind = kind
         self.text = text
         self.children = children
         self.task = task
+        self.anchors = anchors
     }
 
     var leaves: [MarkdownBlock] {
-        children.isEmpty ? [self] : children.flatMap(\.leaves)
+        var result: [MarkdownBlock] = []
+        var stack = [self]
+        while let block = stack.popLast() {
+            if block.children.isEmpty { result.append(block) }
+            else { stack.append(contentsOf: block.children.reversed()) }
+        }
+        return result
+    }
+
+    static func anchorTargets(in blocks: [MarkdownBlock]) -> [String: Int] {
+        var result: [String: Int] = [:]
+        var stack = Array(blocks.reversed())
+        while let block = stack.popLast() {
+            for anchor in block.anchors where result[anchor] == nil { result[anchor] = block.id }
+            stack.append(contentsOf: block.children.reversed())
+        }
+        return result
     }
 
     /// Every descendant resolves to the directly addressable lazy-stack target.
     static func lazyAncestors(in blocks: [MarkdownBlock]) -> [Int: Int] {
         var result: [Int: Int] = [:]
-        func visit(_ block: MarkdownBlock, ancestor: Int) {
+        var stack = blocks.reversed().map { ($0, $0.id) }
+        while let (block, ancestor) = stack.popLast() {
             result[block.id] = ancestor
-            for child in block.children { visit(child, ancestor: ancestor) }
+            stack.append(contentsOf: block.children.reversed().map { ($0, ancestor) })
         }
-        for block in blocks { visit(block, ancestor: block.id) }
         return result
     }
 }
 
 /// Converts Markdown source into presentable blocks.
 ///
-/// Foundation supplies semantic leaves and ancestry. Identity-based folding preserves
-/// quote/list order and marker ownership; code keeps its literal scalars and receives
-/// supplementary lexical token attributes. Presentation remains in the theme/views.
+/// The pinned cmark-gfm AST supplies semantic leaves and ancestry. Code keeps its
+/// literal scalars and receives supplementary lexical token attributes.
+/// Presentation remains in the theme/views.
 ///
 /// The renderer is pure and free of UI state so it can run off the main thread and be
 /// unit tested directly.
@@ -93,190 +123,20 @@ nonisolated enum MarkdownBlockRenderer {
 
     /// Renders `markdown` into blocks, in document order.
     ///
-    /// Malformed input never fails the open: the parser returns what it could
-    /// understand, and a total failure falls back to the source as a single paragraph.
+    /// Malformed syntax remains readable according to cmark-gfm's recovery rules.
     static func blocks(from markdown: String) -> [MarkdownBlock] {
         guard !markdown.isEmpty else { return [] }
 
-        var options = AttributedString.MarkdownParsingOptions()
-        options.interpretedSyntax = .full
-        options.appliesSourcePositionAttributes = true
-        options.failurePolicy = .returnPartiallyParsedIfPossible
-
-        let parsed: AttributedString
-        do {
-            let attributed = try AttributedString(markdown: markdown, options: options)
-            parsed = applyingInlineHTML(recoveringLinkHTML(attributed, source: markdown))
-        } catch {
-            return [MarkdownBlock(id: 0, kind: .paragraph, text: AttributedString(markdown))]
-        }
-
-        var entries: [Entry] = []
-        for (intent, range) in parsed.runs[\.presentationIntent] {
-            let kind = kind(for: intent)
-            var text = AttributedString(parsed[range])
-            text.presentationIntent = nil
-            if case .codeBlock(let hint) = kind {
-                // Parser-provided boundary blank lines are content, not separators.
-                if let language = CodeLanguage(infoString: hint) {
-                    text = CodeSyntaxHighlighter.highlight(text, language: language)
-                }
-            } else {
-                text = trimmed(text, keepingIndentation: false)
-            }
-            guard !text.characters.isEmpty || kind == .thematicBreak else { continue }
-            entries.append(Entry(kind: kind, text: text, ancestry: ancestry(for: intent)))
-        }
-        var cursor = 0
-        var nextID = 0
-        return fold(entries, cursor: &cursor, depth: 0, parent: nil, nextID: &nextID, source: markdown)
+        let document = CMarkDocument(markdown: markdown)
+        return CMarkBlockAdapter(document: document).blocks()
     }
 
-    private struct Ancestor {
-        let identity: Int
-        let kind: MarkdownBlock.Kind
-    }
-
-    private struct Entry {
-        let kind: MarkdownBlock.Kind
-        let text: AttributedString
-        let ancestry: [Ancestor]
-    }
-
-    /// Keep the actual outer-to-inner order: a quote in a list is not a list in a quote.
-    private static func ancestry(for intent: PresentationIntent?) -> [Ancestor] {
-        var result: [Ancestor] = []
-        var ordered = false
-        var depth = 0
-        for component in (intent?.components ?? []).reversed() {
-            switch component.kind {
-            case .orderedList: ordered = true
-            case .unorderedList: ordered = false
-            case .listItem(let ordinal):
-                depth += 1
-                result.append(Ancestor(identity: component.identity, kind: .listItem(
-                    marker: ordered ? "\(ordinal)." : unorderedMarker(depth: depth), depth: depth
-                )))
-            case .blockQuote:
-                result.append(Ancestor(identity: component.identity, kind: .blockQuote))
-            default: break
-            }
-        }
-        return result
-    }
-
-    /// A single cursor consumes each leaf once; containers own markers and boundaries.
-    private static func fold(
-        _ entries: [Entry], cursor: inout Int, depth: Int, parent: Int?, nextID: inout Int,
-        source: String
-    ) -> [MarkdownBlock] {
-        var result: [MarkdownBlock] = []
-        while cursor < entries.count {
-            let entry = entries[cursor]
-            if let parent, entry.ancestry.count < depth || entry.ancestry[depth - 1].identity != parent {
-                break
-            }
-            let id = nextID
-            nextID += 1
-            if entry.ancestry.count > depth {
-                let ancestor = entry.ancestry[depth]
-                var children = fold(entries, cursor: &cursor, depth: depth + 1,
-                                    parent: ancestor.identity, nextID: &nextID, source: source)
-                var task: MarkdownTaskState?
-                if case .listItem = ancestor.kind,
-                   let first = children.first, first.kind == .paragraph,
-                   let marker = taskMarker(in: first.text, source: source) {
-                    task = marker.state
-                    children[0] = MarkdownBlock(id: first.id, kind: first.kind, text: marker.description)
-                }
-                result.append(MarkdownBlock(id: id, kind: ancestor.kind,
-                                            text: AttributedString(), children: children, task: task))
-            } else {
-                result.append(MarkdownBlock(id: id, kind: entry.kind, text: entry.text))
-                cursor += 1
-            }
-        }
-        return result
-    }
-
-    /// Only the first direct paragraph can own a task marker. Source provenance rejects
-    /// escaped look-alikes; attributed boundaries protect formatted description spaces.
-    private static func taskMarker(
-        in text: AttributedString, source: String
-    ) -> (state: MarkdownTaskState, description: AttributedString)? {
-        guard let run = text.runs.first,
-              run.inlinePresentationIntent == nil, run.link == nil,
-              run.markdownInlineStyle == nil,
-              let position = run.markdownSourcePosition,
-              let sourceRange = Range<String.Index>(position, in: source) else { return nil }
-        let prefix = String(text.characters.prefix(3))
-        guard ["[ ]", "[x]", "[X]"].contains(prefix),
-              text.characters[run.range].prefix(3).elementsEqual(prefix),
-              source[sourceRange].hasPrefix(prefix) else { return nil }
-        let sourceEnd = source.index(sourceRange.lowerBound, offsetBy: 3)
-        guard sourceEnd == source.endIndex || source[sourceEnd].isWhitespace else { return nil }
-        let markerEnd = text.characters.index(text.startIndex, offsetBy: 3)
-        guard markerEnd == text.endIndex || text.characters[markerEnd].isWhitespace else { return nil }
-        var end = markerEnd
-        // Do not cross the marker's unformatted source run into code or other content.
-        while end < run.range.upperBound, text.characters[end].isWhitespace {
-            end = text.characters.index(after: end)
-        }
-        var description = text
-        description.removeSubrange(text.startIndex..<end)
-        return (prefix == "[ ]" ? .incomplete : .complete, description)
-    }
-
-    /// Foundation flattens link labels. Recover only parser-confirmed HTML provenance,
-    /// never inferred tags in rendered text; code and escaped labels can look identical.
-    private static func recoveringLinkHTML(_ parsed: AttributedString, source: String) -> AttributedString {
-        var result = parsed
-        for run in parsed.runs where run.link != nil {
-            guard let position = run.markdownSourcePosition,
-                  var range = Range<String.Index>(position, in: source) else { continue }
-            // Source positions omit code delimiters at either edge of a label.
-            while range.lowerBound > source.startIndex,
-                  source[source.index(before: range.lowerBound)] == "`" {
-                range = source.index(before: range.lowerBound)..<range.upperBound
-            }
-            while range.upperBound < source.endIndex, source[range.upperBound] == "`" {
-                range = range.lowerBound..<source.index(after: range.upperBound)
-            }
-            guard var label = try? AttributedString(
-                markdown: String(source[range]),
-                options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-            ) else { continue }
-            if !label.unicodeScalars.elementsEqual(parsed.unicodeScalars[run.range]) {
-                guard var candidate = try? AttributedString(
-                    markdown: String(source[range]), options: .init(interpretedSyntax: .full)
-                ) else { continue }
-                // Full link parsing omits semantic breaks, but preserves code-span spaces.
-                // Normalize only the temporary parser-marked provenance candidate.
-                let breaks = candidate.runs.filter {
-                    $0.inlinePresentationIntent?.contains(.softBreak) == true ||
-                    $0.inlinePresentationIntent?.contains(.lineBreak) == true
-                }.map(\.range)
-                for range in breaks.reversed() { candidate.removeSubrange(range) }
-                label = candidate
-            }
-            guard label.unicodeScalars.elementsEqual(parsed.unicodeScalars[run.range]) else { continue }
-            for token in label.runs where token.inlinePresentationIntent?.contains(.inlineHTML) == true {
-                let lower = parsed.unicodeScalars.index(run.range.lowerBound, offsetBy:
-                    label.unicodeScalars.distance(from: label.startIndex, to: token.range.lowerBound))
-                let upper = parsed.unicodeScalars.index(lower, offsetBy:
-                    label.unicodeScalars.distance(from: token.range.lowerBound, to: token.range.upperBound))
-                var intent = parsed[lower..<upper].inlinePresentationIntent ?? []
-                intent.insert(.inlineHTML)
-                result[lower..<upper].inlinePresentationIntent = intent
-            }
-        }
-        return result
-    }
 
     private struct HTMLTag {
         let name: String
         let closing: Bool
         let range: Range<AttributedString.Index>
+        var anchor: String? = nil
 
         var style: MarkdownInlineStyle? {
             switch name {
@@ -288,20 +148,10 @@ nonisolated enum MarkdownBlockRenderer {
         }
     }
 
-    /// Only complete, properly nested groups of supported inline wrappers are consumed.
-    /// A malformed group remains literal, including any otherwise matched inner pair.
-    /// Work within a presentation block: wrappers never leak into another paragraph or code.
-    private static func applyingInlineHTML(_ parsed: AttributedString) -> AttributedString {
-        var output = AttributedString()
-        for (_, range) in parsed.runs[\.presentationIntent] {
-            output.append(stylingInlineHTML(AttributedString(parsed[range])))
-        }
-        return output
-    }
-
-    private static func stylingInlineHTML(_ text: AttributedString) -> AttributedString {
+    /// Only complete, properly nested inline wrappers are consumed within a leaf.
+    static func inlineHTML(_ text: AttributedString) -> (text: AttributedString, anchors: [String]) {
         guard text.runs.contains(where: { $0.inlinePresentationIntent?.contains(.inlineHTML) == true }) else {
-            return text
+            return (text, [])
         }
         // The Markdown parser has already identified HTML, excluding escaped text and code.
         // Quoted attribute values may contain >; attributes themselves are never interpreted.
@@ -309,7 +159,7 @@ nonisolated enum MarkdownBlockRenderer {
         // an attribute or comment. Unsupported markup is never removed or interpreted.
         let pattern = #"<!--[\s\S]*?-->|<\s*(/?)\s*([a-zA-Z][a-zA-Z0-9-]*)(?=\s|/?>)(?:[^>\"']|\"[^\"]*\"|'[^']*')*>"#
         guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
-            return text
+            return (text, [])
         }
         var tags: [HTMLTag] = []
         for run in text.runs where run.inlinePresentationIntent?.contains(.inlineHTML) == true {
@@ -326,7 +176,9 @@ nonisolated enum MarkdownBlockRenderer {
                 tags.append(HTMLTag(
                     name: source[nameRange].lowercased(),
                     closing: match.range(at: 1).length > 0,
-                    range: lower..<upper
+                    range: lower..<upper,
+                    anchor: source[nameRange].lowercased() == "a"
+                        ? customAnchor(in: String(source[matchRange])) : nil
                 ))
             }
         }
@@ -339,7 +191,7 @@ nonisolated enum MarkdownBlockRenderer {
                 stack.append(tag)
             } else if let opening = stack.last, opening.name == tag.name {
                 stack.removeLast()
-                if opening.style != nil { pending.append((opening, tag)) }
+                if opening.style != nil || opening.anchor != nil { pending.append((opening, tag)) }
                 if stack.isEmpty {
                     pairs.append(contentsOf: pending)
                     pending.removeAll()
@@ -354,43 +206,36 @@ nonisolated enum MarkdownBlockRenderer {
         var result = text
         // Outer first, then inner, so nested sub/sup use the innermost style.
         for (opening, closing) in pairs.sorted(by: { $0.0.range.lowerBound < $1.0.range.lowerBound }) {
-            result[opening.range.upperBound..<closing.range.lowerBound].markdownInlineStyle = opening.style
+            if let style = opening.style {
+                result[opening.range.upperBound..<closing.range.lowerBound].markdownInlineStyle = style
+            }
         }
         let removals = pairs.flatMap { [$0.0.range, $0.1.range] }
             .sorted { $0.lowerBound > $1.lowerBound }
         for range in removals { result.removeSubrange(range) }
-        return result
+        let anchors = pairs.sorted { $0.0.range.lowerBound < $1.0.range.lowerBound }.compactMap { $0.0.anchor }
+        return (result, anchors)
     }
 
-    /// Maps a run's presentation intent onto a block kind.
-    private static func kind(for intent: PresentationIntent?) -> MarkdownBlock.Kind {
-        guard let intent else { return .paragraph }
-
-        var headingLevel: Int?
-        var codeKind: MarkdownBlock.Kind?
-        var isThematicBreak = false
-
-        for component in intent.components {
-            switch component.kind {
-            case .header(let level):
-                headingLevel = headingLevel ?? level
-            case .codeBlock(let hint):
-                codeKind = .codeBlock(language: hint?.split(whereSeparator: \.isWhitespace).first.map { $0.lowercased() })
-            case .thematicBreak:
-                isThematicBreak = true
-            default:
-                break
+    private static func customAnchor(in tag: String) -> String? {
+        let pattern = #"(?<=\s)([a-zA-Z_:][a-zA-Z0-9_:.-]*)(?:\s*=\s*(?:\"([^\"]*)\"|'([^']*)'|([^\s>]+)))?"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        var anchor: String?
+        for match in regex.matches(in: tag, range: NSRange(tag.startIndex..., in: tag)) {
+            guard let nameRange = Range(match.range(at: 1), in: tag) else { continue }
+            let name = tag[nameRange].lowercased()
+            if name == "href" { return nil }
+            if anchor == nil, name == "id" || name == "name" {
+                for group in 2...4 {
+                    if let range = Range(match.range(at: group), in: tag) { anchor = String(tag[range]); break }
+                }
             }
         }
-
-        if isThematicBreak { return .thematicBreak }
-        if let headingLevel { return .heading(level: min(max(headingLevel, 1), 6)) }
-        if let codeKind { return codeKind }
-        return .paragraph
+        return anchor
     }
 
     /// The bullet used at a given nesting depth, mirroring the usual Markdown convention.
-    private static func unorderedMarker(depth: Int) -> String {
+    static func unorderedMarker(depth: Int) -> String {
         switch (depth - 1) % 3 {
         case 0: "\u{2022}"
         case 1: "\u{25E6}"
@@ -401,7 +246,7 @@ nonisolated enum MarkdownBlockRenderer {
     /// Removes the blank space blocks pick up from their separators.
     ///
     /// Inline code keeps every parser-normalized scalar, including boundary spaces.
-    private static func trimmed(_ text: AttributedString, keepingIndentation: Bool) -> AttributedString {
+    static func trimmed(_ text: AttributedString, keepingIndentation: Bool) -> AttributedString {
         var text = text
         let isTrimmable: (Character) -> Bool = keepingIndentation
             ? { $0.isNewline }

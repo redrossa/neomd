@@ -1,0 +1,26 @@
+--- a/src/blocks.c
++++ b/src/blocks.c
+@@ -460,6 +460,12 @@
+   cmark_footnote *a = *(cmark_footnote **)_a;
+   cmark_footnote *b = *(cmark_footnote **)_b;
+   return (int)a->ix - (int)b->ix;
++}
++
++/* NeoMD owns this otherwise unused node user-data slot. Keep reference-side
++ * spelling before ordinal replacement; the node's allocator owns its lifetime. */
++static void neomd_free_reference_spelling(cmark_mem *mem, void *data) {
++  mem->free(data);
+ }
+ 
+ static void process_footnotes(cmark_parser *parser) {
+@@ -490,6 +496,10 @@
+     if (ev_type == CMARK_EVENT_EXIT && cur->type == CMARK_NODE_FOOTNOTE_REFERENCE) {
+       cmark_footnote *footnote = (cmark_footnote *)cmark_map_lookup(map, &cur->as.literal);
+       if (footnote) {
++        char *spelling = parser->mem->calloc(cur->as.literal.len + 1, 1);
++        memcpy(spelling, cur->as.literal.data, cur->as.literal.len);
++        cmark_node_set_user_data(cur, spelling);
++        cmark_node_set_user_data_free_func(cur, neomd_free_reference_spelling);
+         if (!footnote->ix)
+           footnote->ix = ++ix;
+ 
