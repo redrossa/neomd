@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		C00900000000000000000001 /* CMarkGFM in Frameworks */ = {isa = PBXBuildFile; productRef = C00900000000000000000002 /* CMarkGFM */; };
+		C00903000000000000000001 /* CMarkGFM in Lifecycle Frameworks */ = {isa = PBXBuildFile; productRef = C00900000000000000000002 /* CMarkGFM */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		B049D222304BF5BC0045E474 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -27,6 +32,7 @@
 		B049D214304BF5BB0045E474 /* NeoMD.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NeoMD.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B049D221304BF5BC0045E474 /* NeoMDTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NeoMDTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B049D22B304BF5BC0045E474 /* NeoMDUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NeoMDUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C00903000000000000000002 /* RenderLifecycleTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RenderLifecycleTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -58,6 +64,16 @@
 			path = NeoMDUITests;
 			sourceTree = "<group>";
 		};
+		C00903000000000000000003 /* Actual rendering sources for isolated tests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = NeoMD/Rendering;
+			sourceTree = SOURCE_ROOT;
+		};
+		C00903000000000000000004 /* RenderLifecycle */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Tests/RenderLifecycle;
+			sourceTree = SOURCE_ROOT;
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -65,6 +81,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C00900000000000000000001 /* CMarkGFM in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -82,6 +99,12 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C00903000000000000000005 /* Lifecycle Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (C00903000000000000000001 /* CMarkGFM in Lifecycle Frameworks */);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -92,6 +115,8 @@
 				B049D224304BF5BC0045E474 /* NeoMDTests */,
 				B049D22E304BF5BC0045E474 /* NeoMDUITests */,
 				B049D215304BF5BB0045E474 /* Products */,
+				C00903000000000000000003 /* Actual rendering sources for isolated tests */,
+				C00903000000000000000004 /* RenderLifecycle */,
 			);
 			sourceTree = "<group>";
 		};
@@ -125,6 +150,7 @@
 			);
 			name = NeoMD;
 			packageProductDependencies = (
+				C00900000000000000000002 /* CMarkGFM */,
 			);
 			productName = NeoMD;
 			productReference = B049D214304BF5BB0045E474 /* NeoMD.app */;
@@ -176,6 +202,19 @@
 			productReference = B049D22B304BF5BC0045E474 /* NeoMDUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		C00903000000000000000006 /* RenderLifecycleTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C00903000000000000000009;
+			buildPhases = (C00903000000000000000007, C00903000000000000000005);
+			buildRules = ();
+			dependencies = ();
+			fileSystemSynchronizedGroups = (C00903000000000000000003, C00903000000000000000004);
+			name = RenderLifecycleTests;
+			packageProductDependencies = (C00900000000000000000002 /* CMarkGFM */);
+			productName = RenderLifecycleTests;
+			productReference = C00903000000000000000002;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -208,11 +247,15 @@
 			);
 			mainGroup = B049D20B304BF5BB0045E474;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				C00900000000000000000003 /* XCLocalSwiftPackageReference "ThirdParty/cmark-gfm" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B049D215304BF5BB0045E474 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				C00903000000000000000006 /* RenderLifecycleTests */,
 				B049D213304BF5BB0045E474 /* NeoMD */,
 				B049D220304BF5BC0045E474 /* NeoMDTests */,
 				B049D22A304BF5BC0045E474 /* NeoMDUITests */,
@@ -266,6 +309,12 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C00903000000000000000007 /* Lifecycle Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -280,6 +329,20 @@
 			targetProxy = B049D22C304BF5BC0045E474 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		C00900000000000000000003 /* XCLocalSwiftPackageReference "ThirdParty/cmark-gfm" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "ThirdParty/cmark-gfm";
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		C00900000000000000000002 /* CMarkGFM */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CMarkGFM;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		B049D233304BF5BC0045E474 /* Debug */ = {
@@ -542,6 +605,38 @@
 			};
 			name = Release;
 		};
+		C0090300000000000000000A /* Lifecycle Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = io.neomd.RenderLifecycleTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "";
+			};
+			name = Debug;
+		};
+		C0090300000000000000000B /* Lifecycle Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = io.neomd.RenderLifecycleTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -578,6 +673,12 @@
 				B049D23C304BF5BC0045E474 /* Debug */,
 				B049D23D304BF5BC0045E474 /* Release */,
 			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C00903000000000000000009 /* Lifecycle configurations */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (C0090300000000000000000A, C0090300000000000000000B);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};

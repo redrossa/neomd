@@ -35,7 +35,7 @@ struct CodeSyntaxHighlighterTests {
         }
         for hint: String? in [nil, "", "rust", "{.swift}"] {
             #expect(CodeLanguage(infoString: hint) == nil)
-            let blocks = MarkdownBlockRenderer.blocks(from: "```\(hint ?? "")\nlet x = 1\n```")
+            let blocks = MarkdownBlockRenderer.render(from: "```\(hint ?? "")\nlet x = 1\n```").roots
             #expect(blocks[0].text.runs.allSatisfy { $0.markdownCodeToken == nil })
         }
     }

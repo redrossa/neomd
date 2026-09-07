@@ -12,6 +12,19 @@ struct MarkdownBlockView: View {
     let keyboardFocus: FocusState<DocumentReaderFocusTarget?>.Binding
     let pageReader: (DocumentReaderPageDirection) -> Void
 
+    @Environment(\.openURL) private var openURL
+    @Environment(\.documentKeyboardOpenURL) private var keyboardOpenURL
+    @State private var selectedLink = 0
+    @Environment(\.documentNavigationBridge) private var navigationBridge
+    @Environment(\.documentNavigationGeneration) private var documentGeneration
+
+    private var links: [(url: URL, range: Range<AttributedString.Index>, label: String)] {
+        block.text.runs[\.link].compactMap { url, range in
+            guard let url else { return nil }
+            return (url, range, String(block.text.characters[range]))
+        }
+    }
+
     /// The block's text with the reader's appearance policy applied.
     private var text: AttributedString {
         let headingLevel: Int?
@@ -20,13 +33,39 @@ struct MarkdownBlockView: View {
         } else {
             headingLevel = nil
         }
-        return theme.presentationText(for: block.text, headingLevel: headingLevel)
+        var result = theme.presentationText(for: block.text, headingLevel: headingLevel)
+        if keyboardFocus.wrappedValue == .links(block.id), !links.isEmpty {
+            let range = links[selectedLink % links.count].range
+            result[range].appKit.underlineStyle = .thick
+            result[range].backgroundColor = Color.accentColor.opacity(0.2)
+        }
+        return result
     }
 
     var body: some View {
         blockContent
+            .background(alignment: .topLeading) {
+                if let navigationBridge, !block.anchors.isEmpty {
+                    DocumentNavigationMarker(bridge: navigationBridge, id: block.id,
+                                             generation: documentGeneration)
+                        .frame(width: 0, height: 0)
+                        .allowsHitTesting(false)
+                }
+            }
+            .modifier(MarkdownLinkFocus(enabled: !links.isEmpty && block.isLeaf,
+                id: block.id, keyboardFocus: keyboardFocus, handleKeyPress: handleLinkKeyPress))
+            .overlay {
+                if keyboardFocus.wrappedValue == .links(block.id), !links.isEmpty {
+                    RoundedRectangle(cornerRadius: 3).stroke(Color.accentColor, lineWidth: 2)
+                        .padding(-3).allowsHitTesting(false).accessibilityHidden(true)
+                }
+            }
+            .modifier(MarkdownLinkAccessibility(
+                id: block.id,
+                value: links.isEmpty ? nil : "Link \(selectedLink % links.count + 1) of \(links.count): \(links[selectedLink % links.count].label)"
+            ))
             .background {
-                if block.children.isEmpty {
+                if block.isLeaf {
                     GeometryReader { geometry in
                         Color.clear.preference(key: DocumentBlockFramePreferenceKey.self, value: [
                             block.id: geometry.frame(in: .named(DocumentReaderCoordinateSpace.content))
@@ -35,6 +74,18 @@ struct MarkdownBlockView: View {
                     .accessibilityHidden(true)
                 }
             }
+    }
+
+    private func handleLinkKeyPress(_ press: KeyPress) -> KeyPress.Result {
+        guard !links.isEmpty, keyboardFocus.wrappedValue == .links(block.id) else { return .ignored }
+        switch press.key {
+        case .leftArrow: selectedLink = (selectedLink + links.count - 1) % links.count
+        case .rightArrow: selectedLink = (selectedLink + 1) % links.count
+        case .return, .space: (keyboardOpenURL ?? openURL)(links[selectedLink % links.count].url)
+        case .escape: keyboardFocus.wrappedValue = .reader
+        default: return .ignored
+        }
+        return .handled
     }
 
     @ViewBuilder
@@ -63,68 +114,18 @@ struct MarkdownBlockView: View {
                 pageReader: pageReader
             )
 
-        case .blockQuote:
-            HStack(alignment: .top, spacing: 12) {
-                Rectangle()
-                    .fill(.tertiary)
-                    .frame(width: 3)
-                children
-                    .foregroundStyle(.secondary)
-            }
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("MarkdownBlockQuote-\(block.id)")
+        case .blockQuote, .listItem, .footnote:
+            // Container geometry/semantics are emitted by the flat root host.
+            EmptyView()
 
-        case .listItem(let marker, _):
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                listMarker(marker)
-                    .frame(width: 28, alignment: .trailing)
-                children
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        case .anchor:
+            Color.clear.frame(height: 0).accessibilityHidden(true)
 
         case .thematicBreak:
             Divider()
                 .padding(.vertical, 8)
                 .accessibilityHidden(true)
         }
-    }
-
-    @ViewBuilder
-    private func listMarker(_ marker: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
-            if block.task == nil || marker.hasSuffix(".") {
-                Text(marker)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-            }
-            if let task = block.task {
-                // Shape and label carry status; this is deliberately not a control.
-                Image(systemName: task == .complete ? "checkmark.square.fill" : "square")
-                    .foregroundStyle(.primary)
-                    .accessibilityLabel(task == .complete ? "Completed task" : "Incomplete task")
-                    .accessibilityIdentifier("MarkdownTaskMarker-\(block.id)")
-            }
-        }
-        .fixedSize()
-    }
-
-    private var children: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            ForEach(block.children) { child in
-                MarkdownBlockView(block: child, theme: theme,
-                                  keyboardFocus: keyboardFocus, pageReader: pageReader)
-                    .padding(.leading, nestedListAdjustment(child))
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func nestedListAdjustment(_ child: MarkdownBlock) -> CGFloat {
-        if case .listItem = block.kind, case .listItem = child.kind { return -14 }
-        return 0
     }
 
     /// The type scale used for each heading level.
@@ -137,6 +138,38 @@ struct MarkdownBlockView: View {
         case 5: .system(.headline)
         default: .system(.subheadline, weight: .semibold)
         }
+    }
+}
+
+/// Do not install a FocusState binding on containers: it would override the
+/// binding of a link-bearing descendant (notably footnote return paragraphs).
+private struct MarkdownLinkFocus: ViewModifier {
+    let enabled: Bool
+    let id: Int
+    let keyboardFocus: FocusState<DocumentReaderFocusTarget?>.Binding
+    let handleKeyPress: (KeyPress) -> KeyPress.Result
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if enabled {
+            content.focusable(true, interactions: .edit)
+                .focused(keyboardFocus, equals: .links(id))
+                .onKeyPress(keys: [.leftArrow, .rightArrow, .return, .space, .escape], action: handleKeyPress)
+        } else { content }
+    }
+}
+
+private struct MarkdownLinkAccessibility: ViewModifier {
+    let id: Int
+    let value: String?
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if let value {
+            content.accessibilityElement(children: .contain)
+                .accessibilityIdentifier("MarkdownLinkBlock-\(id)")
+                .accessibilityValue(value)
+                .accessibilityLabel(value)
+                .accessibilityHint("Left and Right select a link. Return or Space opens it. Escape returns to reading.")
+        } else { content }
     }
 }
 
@@ -282,9 +315,7 @@ private struct MarkdownBlockViewPreview: View {
     @FocusState private var keyboardFocus: DocumentReaderFocusTarget?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                ForEach(MarkdownBlockRenderer.blocks(from: """
+        let document = MarkdownBlockRenderer.render(from: """
                     # Release notes
 
                     A short paragraph with **bold**, *italic*, and `inline code`.
@@ -304,9 +335,14 @@ private struct MarkdownBlockViewPreview: View {
                     ```swift
                     print("hello")
                     ```
-                    """)) { block in
-                    MarkdownBlockView(
-                        block: block,
+                    """)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                ForEach(document.roots) { block in
+                    MarkdownContainerView(
+                        document: document,
+                        rootID: block.id,
+                        width: 640,
                         theme: ReaderTheme(),
                         keyboardFocus: $keyboardFocus,
                         pageReader: { _ in }

@@ -108,7 +108,7 @@ Acceptance ideas:
 
 Syntax highlighting is a proposed implementation baseline inspired by GitHub's [code-block guidance](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-and-highlighting-code-blocks), not a promise to support every language GitHub recognizes.
 
-Implemented: quotations and list items retain their ordered hierarchy, with continuous nested quote rules. Inline code is monospaced with an adaptive background; code blocks preserve parser-provided whitespace (including boundary blank lines) and scroll horizontally. Supplementary local syntax colors cover Swift, Python (`py`), JavaScript (`js`), TypeScript (`ts`), JSON, shell (`sh`, `bash`, `zsh`), and Markdown (`md`), using the lowercased first info-string word. Unknown/absent languages remain plain. This is a small lexical baseline, not full compiler grammars. Blocks above 262,144 Unicode scalars skip tokenization without dropping content; empty fences produce no Foundation text run and no fabricated block.
+Implemented: quotations and list items retain their ordered hierarchy, with continuous nested quote rules. Inline code is monospaced with an adaptive background; code blocks preserve parser-provided whitespace (including boundary blank lines) and scroll horizontally. Supplementary local syntax colors cover Swift, Python (`py`), JavaScript (`js`), TypeScript (`ts`), JSON, shell (`sh`, `bash`, `zsh`), and Markdown (`md`), using the lowercased first info-string word. Unknown/absent languages remain plain. This is a small lexical baseline, not full compiler grammars. Blocks above 262,144 Unicode scalars skip tokenization without dropping content; empty fences produce no fabricated block.
 
 ### M1-08 — See checklist progress without changing it · Core
 
@@ -133,6 +133,8 @@ Acceptance ideas:
 - Footnote references reach their notes; return links bring me back to the reference.
 - A missing destination leaves the document usable and gives unobtrusive feedback.
 - Keyboard users can focus and activate these links.
+
+Implemented in the M1-09 branch (independent acceptance pending): every document is parsed offline by pinned cmark-gfm, then mapped into native attributed text and existing block views. Heading slugs include formatting/Unicode and deterministic duplicate suffixes. Complete inline `<a name|id>` pairs without `href` supply hidden custom destinations; unsupported, unclosed, escaped and code markup remains literal. Reachable footnotes retain structured bodies, repeated references and return links; unused definitions and disconnected cycles stay hidden. Generated destinations are collision-safe without changing authored first-wins fragments. Missing fragments show a transient notice rather than launching another app. Option-Tab focuses link-bearing blocks, arrows cycle links, Return/Space activates, and Escape returns to reading. Return targets are containing blocks, not individual text runs. cmark soft/hard breaks in link labels are intentional; tables remain flattened cells and images remain alt text until their later stories. Source files are never rewritten. See the cumulative fixture catalog for exact test selectors and validation status.
 
 ### M1-10 — Follow links to nearby files · Core
 
