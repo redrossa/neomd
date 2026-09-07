@@ -18,6 +18,7 @@ nonisolated enum MarkdownInlineStyleAttribute: AttributedStringKey {
 extension AttributeScopes {
     nonisolated struct MarkdownAttributes: AttributeScope {
         let markdownInlineStyle: MarkdownInlineStyleAttribute
+        let markdownCodeToken: MarkdownCodeTokenAttribute
     }
 
     nonisolated var markdown: MarkdownAttributes.Type { MarkdownAttributes.self }
@@ -29,14 +30,14 @@ extension AttributeDynamicLookup {
     ) -> T { self[T.self] }
 }
 
-/// One rendered block of a Markdown document.
+/// One rendered leaf or quote/list container, with document-order identity.
 nonisolated struct MarkdownBlock: Identifiable, Sendable {
 
     /// How a block should be presented.
     nonisolated enum Kind: Equatable, Sendable {
         case paragraph
         case heading(level: Int)
-        case codeBlock
+        case codeBlock(language: String?)
         case blockQuote
         case listItem(marker: String, depth: Int)
         case thematicBreak
@@ -47,13 +48,29 @@ nonisolated struct MarkdownBlock: Identifiable, Sendable {
     let kind: Kind
     /// The block's text with inline formatting applied and Markdown syntax removed.
     let text: AttributedString
+    var children: [MarkdownBlock] = []
+
+    var leaves: [MarkdownBlock] {
+        children.isEmpty ? [self] : children.flatMap(\.leaves)
+    }
+
+    /// Every descendant resolves to the directly addressable lazy-stack target.
+    static func lazyAncestors(in blocks: [MarkdownBlock]) -> [Int: Int] {
+        var result: [Int: Int] = [:]
+        func visit(_ block: MarkdownBlock, ancestor: Int) {
+            result[block.id] = ancestor
+            for child in block.children { visit(child, ancestor: ancestor) }
+        }
+        for block in blocks { visit(block, ancestor: block.id) }
+        return result
+    }
 }
 
 /// Converts Markdown source into presentable blocks.
 ///
-/// This is a first, deliberately small presentation pass so an opened document shows
-/// rendered content rather than raw syntax. Full GitHub-style typography belongs to the
-/// later reading stories and will replace the styling, not this parsing boundary.
+/// Foundation supplies semantic leaves and ancestry. Identity-based folding preserves
+/// quote/list order and marker ownership; code keeps its literal scalars and receives
+/// supplementary lexical token attributes. Presentation remains in the theme/views.
 ///
 /// The renderer is pure and free of UI state so it can run off the main thread and be
 /// unit tested directly.
@@ -79,29 +96,84 @@ nonisolated enum MarkdownBlockRenderer {
             return [MarkdownBlock(id: 0, kind: .paragraph, text: AttributedString(markdown))]
         }
 
-        var blocks: [MarkdownBlock] = []
-        var emittedListItems: Set<Int> = []
+        var entries: [Entry] = []
         for (intent, range) in parsed.runs[\.presentationIntent] {
-            var kind = kind(for: intent)
-            if case .listItem(_, let depth) = kind,
-               let item = intent?.components.first(where: {
-                   if case .listItem = $0.kind { return true }
-                   return false
-               }), !emittedListItems.insert(item.identity).inserted {
-                kind = .listItem(marker: "", depth: depth)
-            }
+            let kind = kind(for: intent)
             var text = AttributedString(parsed[range])
             text.presentationIntent = nil
-            text = trimmed(text, keepingIndentation: kind == .codeBlock)
-
-            if kind == .thematicBreak {
-                blocks.append(MarkdownBlock(id: blocks.count, kind: kind, text: AttributedString()))
-                continue
+            if case .codeBlock(let hint) = kind {
+                // Parser-provided boundary blank lines are content, not separators.
+                if let language = CodeLanguage(infoString: hint) {
+                    text = CodeSyntaxHighlighter.highlight(text, language: language)
+                }
+            } else {
+                text = trimmed(text, keepingIndentation: false)
             }
-            guard !text.characters.isEmpty else { continue }
-            blocks.append(MarkdownBlock(id: blocks.count, kind: kind, text: text))
+            guard !text.characters.isEmpty || kind == .thematicBreak else { continue }
+            entries.append(Entry(kind: kind, text: text, ancestry: ancestry(for: intent)))
         }
-        return blocks
+        var cursor = 0
+        var nextID = 0
+        return fold(entries, cursor: &cursor, depth: 0, parent: nil, nextID: &nextID)
+    }
+
+    private struct Ancestor {
+        let identity: Int
+        let kind: MarkdownBlock.Kind
+    }
+
+    private struct Entry {
+        let kind: MarkdownBlock.Kind
+        let text: AttributedString
+        let ancestry: [Ancestor]
+    }
+
+    /// Keep the actual outer-to-inner order: a quote in a list is not a list in a quote.
+    private static func ancestry(for intent: PresentationIntent?) -> [Ancestor] {
+        var result: [Ancestor] = []
+        var ordered = false
+        var depth = 0
+        for component in (intent?.components ?? []).reversed() {
+            switch component.kind {
+            case .orderedList: ordered = true
+            case .unorderedList: ordered = false
+            case .listItem(let ordinal):
+                depth += 1
+                result.append(Ancestor(identity: component.identity, kind: .listItem(
+                    marker: ordered ? "\(ordinal)." : unorderedMarker(depth: depth), depth: depth
+                )))
+            case .blockQuote:
+                result.append(Ancestor(identity: component.identity, kind: .blockQuote))
+            default: break
+            }
+        }
+        return result
+    }
+
+    /// A single cursor consumes each leaf once; containers own markers and boundaries.
+    private static func fold(
+        _ entries: [Entry], cursor: inout Int, depth: Int, parent: Int?, nextID: inout Int
+    ) -> [MarkdownBlock] {
+        var result: [MarkdownBlock] = []
+        while cursor < entries.count {
+            let entry = entries[cursor]
+            if let parent, entry.ancestry.count < depth || entry.ancestry[depth - 1].identity != parent {
+                break
+            }
+            let id = nextID
+            nextID += 1
+            if entry.ancestry.count > depth {
+                let ancestor = entry.ancestry[depth]
+                let children = fold(entries, cursor: &cursor, depth: depth + 1,
+                                    parent: ancestor.identity, nextID: &nextID)
+                result.append(MarkdownBlock(id: id, kind: ancestor.kind,
+                                            text: AttributedString(), children: children))
+            } else {
+                result.append(MarkdownBlock(id: id, kind: entry.kind, text: entry.text))
+                cursor += 1
+            }
+        }
+        return result
     }
 
     /// Foundation flattens link labels. Recover only parser-confirmed HTML provenance,
@@ -244,28 +316,17 @@ nonisolated enum MarkdownBlockRenderer {
         guard let intent else { return .paragraph }
 
         var headingLevel: Int?
-        var listDepth = 0
-        var ordinal: Int?
-        var isOrderedList = false
-        var isCodeBlock = false
-        var isBlockQuote = false
+        var codeKind: MarkdownBlock.Kind?
         var isThematicBreak = false
 
         for component in intent.components {
             switch component.kind {
             case .header(let level):
                 headingLevel = headingLevel ?? level
-            case .codeBlock:
-                isCodeBlock = true
-            case .blockQuote:
-                isBlockQuote = true
+            case .codeBlock(let hint):
+                codeKind = .codeBlock(language: hint?.split(whereSeparator: \.isWhitespace).first.map { $0.lowercased() })
             case .thematicBreak:
                 isThematicBreak = true
-            case .listItem(let value):
-                listDepth += 1
-                if ordinal == nil { ordinal = value }
-            case .orderedList:
-                if listDepth <= 1 { isOrderedList = true }
             default:
                 break
             }
@@ -273,12 +334,7 @@ nonisolated enum MarkdownBlockRenderer {
 
         if isThematicBreak { return .thematicBreak }
         if let headingLevel { return .heading(level: min(max(headingLevel, 1), 6)) }
-        if isCodeBlock { return .codeBlock }
-        if listDepth > 0 {
-            let marker = isOrderedList ? "\(ordinal ?? 1)." : unorderedMarker(depth: listDepth)
-            return .listItem(marker: marker, depth: listDepth)
-        }
-        if isBlockQuote { return .blockQuote }
+        if let codeKind { return codeKind }
         return .paragraph
     }
 
@@ -293,7 +349,7 @@ nonisolated enum MarkdownBlockRenderer {
 
     /// Removes the blank space blocks pick up from their separators.
     ///
-    /// Code blocks keep leading indentation, which is part of their content.
+    /// Inline code keeps every parser-normalized scalar, including boundary spaces.
     private static func trimmed(_ text: AttributedString, keepingIndentation: Bool) -> AttributedString {
         var text = text
         let isTrimmable: (Character) -> Bool = keepingIndentation
@@ -301,10 +357,14 @@ nonisolated enum MarkdownBlockRenderer {
             : { $0.isWhitespace }
 
         while let first = text.characters.first, isTrimmable(first) {
-            text.removeSubrange(text.startIndex..<text.characters.index(after: text.startIndex))
+            let range = text.startIndex..<text.characters.index(after: text.startIndex)
+            guard !text[range].runs.contains(where: { $0.inlinePresentationIntent?.contains(.code) == true }) else { break }
+            text.removeSubrange(range)
         }
         while let last = text.characters.last, last.isNewline || (!keepingIndentation && last.isWhitespace) {
-            text.removeSubrange(text.characters.index(text.endIndex, offsetBy: -1)..<text.endIndex)
+            let range = text.characters.index(text.endIndex, offsetBy: -1)..<text.endIndex
+            guard !text[range].runs.contains(where: { $0.inlinePresentationIntent?.contains(.code) == true }) else { break }
+            text.removeSubrange(range)
         }
         return text
     }

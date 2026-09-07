@@ -27,7 +27,8 @@ import SwiftUI
 ///   monospaced face inside its own container, list items keep literal markers, and a
 ///   thematic break is a rule. A link keeps the platform and GitHub convention of a
 ///   tinted label and is always underlined as well, so it stays recognizable when the
-///   tint cannot be seen or is not perceived as a difference.
+///   tint cannot be seen or is not perceived as a difference. Syntax highlighting is
+///   supplementary: literal code remains understandable without token colors.
 nonisolated struct ReaderTheme: Equatable, Sendable {
 
     /// Applies the appearance policy that inline text carries.
@@ -44,6 +45,13 @@ nonisolated struct ReaderTheme: Equatable, Sendable {
     ) -> AttributedString {
         var presented = text
         for run in text.runs {
+            if run.inlinePresentationIntent?.contains(.code) == true {
+                presented[run.range].font = inlineCodeFont(headingLevel: headingLevel)
+                presented[run.range].backgroundColor = Self.codeBackground
+            }
+            if let token = run.markdownCodeToken {
+                presented[run.range].foregroundColor = Self.tokenColor(token)
+            }
             if run.link != nil || run.markdownInlineStyle == .underline {
                 presented[run.range].underlineStyle = .single
             }
@@ -54,6 +62,49 @@ nonisolated struct ReaderTheme: Equatable, Sendable {
             }
         }
         return presented
+    }
+
+    /// Explicit opaque surfaces make the contrast contract measurable in both appearances.
+    static func codeBackgroundRGB(dark: Bool) -> UInt32 { dark ? 0x252b33 : 0xf6f8fa }
+
+    static var codeBackground: Color {
+        adaptive(light: codeBackgroundRGB(dark: false), dark: codeBackgroundRGB(dark: true))
+    }
+
+    static func tokenRGB(_ token: MarkdownCodeToken, dark: Bool) -> UInt32 {
+        switch token {
+        case .keyword, .marker: dark ? 0xff7b72 : 0xa31525
+        case .string, .codeSpan: dark ? 0xa5d6ff : 0x0a3069
+        case .comment: dark ? 0x9da7b3 : 0x57606a
+        case .number: dark ? 0x79c0ff : 0x0550ae
+        case .key, .heading: dark ? 0xd2a8ff : 0x6639ba
+        case .emphasis, .link: dark ? 0x7ee787 : 0x116329
+        }
+    }
+
+    private static func tokenColor(_ token: MarkdownCodeToken) -> Color {
+        adaptive(light: tokenRGB(token, dark: false), dark: tokenRGB(token, dark: true))
+    }
+
+    private static func adaptive(light: UInt32, dark: UInt32) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            let rgb = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+            return NSColor(srgbRed: Double((rgb >> 16) & 255) / 255,
+                           green: Double((rgb >> 8) & 255) / 255,
+                           blue: Double(rgb & 255) / 255, alpha: 1)
+        })
+    }
+
+    private func inlineCodeFont(headingLevel: Int?) -> Font {
+        switch headingLevel {
+        case 1: .system(.largeTitle, design: .monospaced, weight: .semibold)
+        case 2: .system(.title, design: .monospaced, weight: .semibold)
+        case 3: .system(.title2, design: .monospaced, weight: .semibold)
+        case 4: .system(.title3, design: .monospaced, weight: .semibold)
+        case 5: .system(.headline, design: .monospaced)
+        case 6: .system(.subheadline, design: .monospaced, weight: .semibold)
+        default: .system(.body, design: .monospaced)
+        }
     }
 
     private func scriptFont(headingLevel: Int?) -> Font {

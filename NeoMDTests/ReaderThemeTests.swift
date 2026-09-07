@@ -116,7 +116,7 @@ struct ReaderThemeTests {
         let theme = ReaderTheme()
         var underlinedLinks = 0
 
-        for block in blocks {
+        for block in blocks.flatMap(\.leaves) {
             let presented = theme.presentationText(for: block.text)
             for run in presented.runs where run.link != nil {
                 #expect(
@@ -150,7 +150,7 @@ struct ReaderThemeTests {
     }
 
     @Test func scriptsUseSmallerBlockAppropriateFontsAndOppositeOffsets() throws {
-        let text = MarkdownBlockRenderer.blocks(from: "- H<sub>2</sub>O x<sup>3</sup> <ins>under</ins> [site](https://example.com)")[0].text
+        let text = MarkdownBlockRenderer.blocks(from: "- H<sub>2</sub>O x<sup>3</sup> <ins>under</ins> [site](https://example.com)")[0].leaves[0].text
         let body = ReaderTheme().presentationText(for: text)
         let heading = ReaderTheme().presentationText(for: text, headingLevel: 1)
         let sub = try #require(body.range(of: "2"))
@@ -167,7 +167,7 @@ struct ReaderThemeTests {
 
     @Test func textWithoutLinksIsUnchanged() {
         let text = MarkdownBlockRenderer.blocks(
-            from: "Plain prose with *emphasis* and `code`."
+            from: "Plain prose with *emphasis*."
         )[0].text
 
         #expect(ReaderTheme().presentationText(for: text) == text)

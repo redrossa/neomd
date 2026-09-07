@@ -24,6 +24,21 @@ struct MarkdownBlockView: View {
     }
 
     var body: some View {
+        blockContent
+            .background {
+                if block.children.isEmpty {
+                    GeometryReader { geometry in
+                        Color.clear.preference(key: DocumentBlockFramePreferenceKey.self, value: [
+                            block.id: geometry.frame(in: .named(DocumentReaderCoordinateSpace.content))
+                        ])
+                    }
+                    .accessibilityHidden(true)
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var blockContent: some View {
         switch block.kind {
         case .paragraph:
             Text(text)
@@ -43,6 +58,7 @@ struct MarkdownBlockView: View {
         case .codeBlock:
             MarkdownCodeBlockView(
                 block: block,
+                theme: theme,
                 keyboardFocus: keyboardFocus,
                 pageReader: pageReader
             )
@@ -52,35 +68,46 @@ struct MarkdownBlockView: View {
                 Rectangle()
                     .fill(.tertiary)
                     .frame(width: 3)
-                Text(text)
-                    .font(.body)
+                children
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("MarkdownBlockQuote-\(block.id)")
 
-        case .listItem(let marker, let depth):
+        case .listItem(let marker, _):
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(marker)
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .frame(width: 28, alignment: .trailing)
                     .accessibilityHidden(true)
-                Text(text)
-                    .font(.body)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                children
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.leading, CGFloat(depth - 1) * 22)
 
         case .thematicBreak:
             Divider()
                 .padding(.vertical, 8)
                 .accessibilityHidden(true)
         }
+    }
+
+    private var children: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            ForEach(block.children) { child in
+                MarkdownBlockView(block: child, theme: theme,
+                                  keyboardFocus: keyboardFocus, pageReader: pageReader)
+                    .padding(.leading, nestedListAdjustment(child))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func nestedListAdjustment(_ child: MarkdownBlock) -> CGFloat {
+        if case .listItem = block.kind, case .listItem = child.kind { return -14 }
+        return 0
     }
 
     /// The type scale used for each heading level.
@@ -99,6 +126,7 @@ struct MarkdownBlockView: View {
 /// Keeps wide code keyboard-accessible without moving the surrounding reader.
 private struct MarkdownCodeBlockView: View {
     let block: MarkdownBlock
+    let theme: ReaderTheme
     let keyboardFocus: FocusState<DocumentReaderFocusTarget?>.Binding
     let pageReader: (DocumentReaderPageDirection) -> Void
 
@@ -107,13 +135,14 @@ private struct MarkdownCodeBlockView: View {
 
     var body: some View {
         ScrollView(.horizontal) {
-            Text(block.text)
+            Text(theme.presentationText(for: block.text))
                 .font(.system(.callout, design: .monospaced))
                 .fixedSize(horizontal: true, vertical: true)
                 .padding(12)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 6))
+        .foregroundStyle(Color.primary)
+        .background(ReaderTheme.codeBackground, in: .rect(cornerRadius: 6))
         .accessibilityIdentifier("MarkdownCodeBlock-\(block.id)")
         .scrollPosition($scrollPosition)
         .onScrollGeometryChange(for: CodeBlockScrollMetrics.self) { geometry in
@@ -247,8 +276,10 @@ private struct MarkdownBlockViewPreview: View {
                     - Second item
 
                     > A quoted aside.
+                    >
+                    > > A nested quotation with `inline code`.
 
-                    ```
+                    ```swift
                     print("hello")
                     ```
                     """)) { block in

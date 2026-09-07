@@ -112,7 +112,7 @@ final class AppearanceUITests: XCTestCase {
             let link = try element(containing: Self.linkLabel, in: window)
             let quote = staticText("QUOTED ASIDE CONTENT", in: window)
             let list = staticText("LIST ITEM CONTENT", in: window)
-            let code = staticText("CODE_BLOCK_CONTENT", in: window)
+            let code = staticText("CODE_BLOCK_CONTENT\n", in: window)
             let codeContainer = window.scrollViews.matching(
                 NSPredicate(format: "identifier BEGINSWITH 'MarkdownCodeBlock-'")
             ).firstMatch
