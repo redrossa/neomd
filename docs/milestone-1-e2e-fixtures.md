@@ -104,7 +104,7 @@ The pre-amendment PR evidence records, on unchanged source at the head above:
 
 [Issue #9](https://github.com/redrossa/neomd/issues/9) · [baseline plan](https://github.com/redrossa/neomd/issues/9#issuecomment-5570562309) · [R2 universal parser](https://github.com/redrossa/neomd/issues/9#issuecomment-5571540097) · [binding corrections](https://github.com/redrossa/neomd/issues/9#issuecomment-5571540353) · [collision-safe allocation amendment](https://github.com/redrossa/neomd/issues/9#issuecomment-5571705057).
 
-Accepted base: `2daa9e6b65c661578c091c2ef47ed333ba081094`; branch `story/9-in-document-links`. The PR head identifies the implementation under review. **Implementation validation passed; independent acceptance is pending.**
+[PR #33](https://github.com/redrossa/neomd/pull/33). Accepted base: `2daa9e6b65c661578c091c2ef47ed333ba081094`; branch `story/9-in-document-links`. Validated implementation commit: `23d78b756394a240345df9a87a167f11fd39d8b0`; the following documentation-only commit records this PR link. The current PR head is the independent review target. **Implementation validation passed; independent acceptance is pending.**
 
 ### Durable fixtures and setup
 
