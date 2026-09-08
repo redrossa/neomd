@@ -315,7 +315,7 @@ No production, UI selection, read-only policy or VoiceOver setting changed. Only
 
 ## M1-10 — Follow links to nearby files (worker validated; milestone acceptance pending)
 
-[Issue #10](https://github.com/redrossa/neomd/issues/10) · accepted plan: see the triage comment linked from the issue (2026-09-08) · approved decisions: [user decisions comment](https://github.com/redrossa/neomd/issues/10#issuecomment-5577686581).
+[Issue #10](https://github.com/redrossa/neomd/issues/10) · [PR #34](https://github.com/redrossa/neomd/pull/34) · accepted plan: see the triage comment linked from the issue (2026-09-08) · approved decisions: [user decisions comment](https://github.com/redrossa/neomd/issues/10#issuecomment-5577686581).
 
 Implementation base: `7fb3c4a5a4273a50bf28f53038d350d2e2d457b9`. No reviewer stage applies (user policy change recorded on the issue); the worker self-validates and the coordinator merges on evidence. Targeted units/UI, M1-09 regressions, a separate app build and native plain-build grant checks passed as detailed below. Selectors marked *existing* are on the accepted base; the M1-10 selectors are implemented. [Validation amendments](https://github.com/redrossa/neomd/issues/10#issuecomment-5578156000) preserve the baseline and record harness/fixture corrections.
 
