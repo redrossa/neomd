@@ -402,6 +402,98 @@ Worker runtime verified `openai-codex/gpt-6-astra`, low. Branch `story/10-nearby
 - Final-milestone sweep: combine nearby-file navigation with resize restoration, Light/Dark switching and multiple windows (M1-03/M1-04) in one session; verify the notice never overlaps the M1-09 notice queue.
 - Risk: LaunchServices default-app variance across hosts for `.txt`/`.png`; the test derives the expected app from `urlForApplication(toOpen:)` rather than hard-coding TextEdit/Preview.
 
+## M1-11 — Open web references (worker-validated; milestone acceptance pending)
+
+[Issue #11](https://github.com/redrossa/neomd/issues/11) · PR: linked from the issue · [baseline plan](https://github.com/redrossa/neomd/issues/11#issuecomment-5578397508) · revisions: [keyboard selection oracle](https://github.com/redrossa/neomd/issues/11#issuecomment-5578543964), [keyboard dispatch](https://github.com/redrossa/neomd/issues/11#issuecomment-5578594417), [user-approved investigation](https://github.com/redrossa/neomd/issues/11#issuecomment-5579017450), [approved background attachment](https://github.com/redrossa/neomd/issues/11#issuecomment-5579096053).
+
+Implementation base: `ced176677ec9cb1d00bdb29242f5940fb9136625`. Exact evidence head is recorded in the story PR; final commands below ran against that unchanged source/test tree before commit. No reviewer stage; the worker self-validates and the coordinator merges on evidence. The authored scenarios below are now implemented except the explicitly deferred manual checks.
+
+### Durable fixture
+
+Checked-in path: `docs/fixtures/m1-11-web-links/` — source `web-links.md`, sibling `nearby.md` (only so the M1-10 link resolves), and `README-fixture.md` with the link → form → destination table. Meaningful details: full/collapsed/shortcut reference definitions at the end of the file; a bare `www.` autolink whose destination gains `http://`; a two-link paragraph whose second URL contains `&`; links inside a heading, list item and quotation; a link-free paragraph for the native-menu check; 30 filler paragraphs so `Far link` (`http://127.0.0.1:1/neomd-m1-11-far`, connection-refused, no network dependence) sits below the first screen with the `FAR END.` marker after it. Actual loader: `WebLinkUITests.setUpWithError()` copies the folder relative to the test source; it also includes `keyboard-links.md` for the approved keyboard oracle.
+
+### Setup, isolation and cleanup
+
+- Copy the fixture to `FileManager.default.temporaryDirectory`; never open the repository copy. Opening route, launch arguments and `NEOMD_UI_TEST_APPEARANCE` as in `NearbyFileLinkUITests.open` (*existing*).
+- Default browser: derive from `NSWorkspace.shared.urlForApplication(toOpen: URL("https://example.com/")!)`; record its running PIDs before each launch-sensitive step. Terminate it afterwards only if it was not running before; if it was, its new tab/window is tolerated host state and must be recorded, not cleaned by force.
+- Pasteboard: save all item representations before Copy Link/selection tests and restore in `defer` (not merely the plain string). An externally killed test cannot execute this cleanup; see interrupted-run evidence below.
+- Cleanup: remove the temporary folder, terminate NeoMD, assert fixture bytes and modification dates unchanged.
+
+### Selectors and commands
+
+Unit (Swift Testing): `NeoMDTests/MarkdownWebLinksTests/…` — link forms produce exact link runs; web URLs resolve `.external` with a file `documentURL`; `MarkdownLinkMenu` entry order/titles.
+
+UI (XCTest): `NeoMDUITests/WebLinkUITests/testWebLinkFormsAreLinksAndOpeningLaunchesNothing`, `…/testActivatingWebLinkOpensDefaultBrowserAndKeepsReadingPosition`, `…/testContextualMenuRevealsDestinationWithoutOpening`.
+
+```sh
+xcodebuild -project NeoMD.xcodeproj -scheme NeoMD -destination 'platform=macOS' \
+  -derivedDataPath /tmp/NeoMD-DerivedData -only-testing:NeoMDTests \
+  -resultBundlePath /tmp/neomd-11-units.xcresult test
+xcodebuild -project NeoMD.xcodeproj -scheme NeoMD -destination 'platform=macOS' \
+  -derivedDataPath /tmp/NeoMD-DerivedData -parallel-testing-enabled NO \
+  -only-testing:NeoMDUITests/WebLinkUITests \
+  -only-testing:NeoMDUITests/DocumentLinkNavigationUITests \
+  -only-testing:NeoMDUITests/NearbyFileLinkUITests \
+  -resultBundlePath /tmp/neomd-11-ui.xcresult test
+```
+
+`DocumentLinkNavigationUITests` (M1-09) and `NearbyFileLinkUITests` (M1-10) are regression gates because `MarkdownBlockView` gains a background menu attachment on each authored-link-bearing leaf. Additional actual selectors: `NeoMDTests/MarkdownLinkAttachmentTests`, `NeoMDUITests/WebLinkUITests/testKeyboardWebLinkOpensDefaultBrowserAndKeepsReadingPosition`, and `NeoMDUITests/WebLinkUITests/testNativeSelectionInLinkBearingParagraphStillCopiesText`.
+
+### Criteria → actions → expected outcomes → evidence
+
+| Criterion | Actions (from `web-links.md`) | Expected outcome | Planned evidence |
+|---|---|---|---|
+| 1. Labeled, reference-style and ordinary web URLs recognizable/actionable | Open the fixture; query `window.links[...]` for `Example site`, `Spec reference`, `GFM spec`, `CommonMark`, `https://autolink.example/bare`, `https://angle.example/path`, `www.plain.example/site`, `Heading site`, `List site`, `Quote site` | Every element exists as an `AXLink` (link labels are what the base already exposes; a bare autolink's label is its URL), underlined and tinted in both appearances (M1-05 *existing* `testLinksAreUnderlinedByDefaultInLightAndDark` remains the visual gate) | Unit link-form test + `testWebLinkFormsAreLinksAndOpeningLaunchesNothing` |
+| 2. HTTP(S) activation opens the default browser and preserves the reading position | Scroll until `Far link` is visible; record its frame and `FAR END.`; click it; separately open `keyboard-links.md`, Option-Tab/Right until `MarkdownLinkBlock-0` changes from `Link 1 of 2: First web link` to `Link 2 of 2: Keyboard web link`, then press Return (see fixture README) | The default browser becomes frontmost/running within 10 s; after `app.activate()` the link and marker frames are unchanged (±1 pt), `app.windows.count == 1`, no `DocumentLinkNotice` (*existing*) appears, no re-render | `testActivatingWebLinkOpensDefaultBrowserAndKeepsReadingPosition` |
+| 3. Destination inspectable through a contextual menu, no permanent controls | Right-click `Example site`; right-click `First site`; right-click `Section link` and choose `Open Link`; right-click the link-free paragraph; `window.toolbars.count` | Menu shows a disabled `https://example.com/path?q=1` item plus `Open Link`/`Copy Link`; `Copy Link` puts exactly that string on the pasteboard and launches nothing; the two-link paragraph lists `https://first.example/` and `https://second.example/?x=1&y=2`; `Open Link` on the section link lands `Far section` at the top without any launch; the link-free paragraph still shows the native `Copy` menu and no `Copy Link`; Escape dismisses; the window has no toolbar and only its standard title-bar buttons | `testContextualMenuRevealsDestinationWithoutOpening` (+ menu-model unit test) |
+| 4. Opening never auto-opens a browser or launched app | Open the fixture, wait 3 s after links appear | Browser PID set identical before/after; no foreign app frontmost; same holds while the contextual menu is open | `testWebLinkFormsAreLinksAndOpeningLaunchesNothing` (assertion shared with criterion 1) |
+
+### Appearance, keyboard, accessibility, read-only
+
+- Light/Dark: run the contextual-menu method under both `NEOMD_UI_TEST_APPEARANCE` values; attach a screenshot of the open menu in each.
+- Keyboard: existing Option-Tab / arrows / Return / Space link flow (M1-09) must be unchanged; Return on a web link is covered by criterion 2. Keyboard invocation of the new menu is not a criterion and not planned.
+- AX: `AXLink` + `AXURL` exposure is *existing*; the background attachment adds no accessibility element (`isAccessibilityElement = false`), so `MarkdownLinkBlock-<id>` labels/values (*existing*) are unchanged. VoiceOver spoken order remains deferred.
+- Read-only: fixture bytes and modification dates unchanged at teardown; no preference keys written.
+- Not covered by automation: physical (non-synthesized) right-click behaviour of the native menu, browser page content, VoiceOver.
+
+### Manual checks (final milestone)
+
+1. Open the fixture copy from Finder; hover a link (pointing-hand cursor), right-click it before any left-click: the menu shows the destination; `Copy Link` then paste into any text field yields the URL.
+2. Click `Example site`: the default browser opens `https://example.com/path?q=1`; return to NeoMD: same scroll position, same window, no notice.
+3. Select text across a link by dragging, Cmd-C: copied text is the selection (selection is not blocked by the attachment). Right-click the link-free paragraph: native text menu.
+4. Confirm no toolbar/button appears in any appearance and that opening the document with no network launches nothing.
+
+### Actual commands/results
+
+Historical keyboard failure (corrected below). Revised native selector `NeoMDUITests/WebLinkUITests/testKeyboardWebLinkOpensDefaultBrowserAndKeepsReadingPosition` proves selection change, but its browser-frontmost assertion fails identically on the story and accepted base `ced176677ec9cb1d00bdb29242f5940fb9136625`. Evidence: `/tmp/neomd-11-revised-probe.{log,xcresult}` and `/tmp/neomd-11-base-keyboard.{log,xcresult}`. Both use `xcodebuild -project NeoMD.xcodeproj -scheme NeoMD -destination 'platform=macOS' -parallel-testing-enabled NO -only-testing:NeoMDUITests/WebLinkUITests/testKeyboardWebLinkOpensDefaultBrowserAndKeepsReadingPosition test`, separate external DerivedData and fresh result bundles. The story run also executes `-only-testing:NeoMDTests/MarkdownWebLinksTests`: all 5 tests pass, including styled-label coalescing, separate authored links and generated-reference exclusion. Full required gates remain pending. Browser sessions existing before tests are preserved; pasteboard representations are restored by the menu test. Triage feasibility probe evidence (synthesized right-click on the built base app and a minimal SwiftUI app, 2026-09-08) is summarized in the accepted plan comment; it is research, not story evidence.
+
+Dispatch correction approved at https://github.com/redrossa/neomd/issues/11#issuecomment-5578594417: a custom environment-key `OpenURLAction` does not receive the built-in openURL system fallback. `DocumentReaderView` now invokes its inherited `openURL` for external keyboard activation and returns `.handled`; local and keyboard-driven internal routing remain unchanged. The unchanged keyboard regression passes in `/tmp/neomd-11-dispatch-probe.xcresult` and the combined gate.
+
+Historical overlay gate (superseded by the passing attachment gate below): Debug build passed (`/tmp/neomd-11-final-build.log`); all 112 unit tests passed (`/tmp/neomd-11-final-units.xcresult`); proactive diagnostics found no errors in five changed Swift files. Combined targeted UI (`WebLinkUITests`, `DocumentLinkNavigationUITests`, `NearbyFileLinkUITests`, serialized with the command flags above) is **15 passed, 1 failed, 0 skipped**, `/tmp/neomd-11-final-ui.xcresult`. All four WebLinkUITests and four NearbyFileLinkUITests pass. Remaining blocker: `DocumentLinkNavigationUITests/testHeadingLinksReachDuplicateFormattedAndUnicodeSections`, line 325, immediate `Back second.isHittable`. Reproduces in full-class rerun and isolation; accepted base passes and disabling only the new overlay passes. Therefore it is a current-story regression, not waived. A failure video shows the backlink visibly rendered, but accessibility hit availability fails. SwiftUI accessibility hiding and a nil NSView accessibility-hit override did not fix it; both probes were reverted. No PR is ready.
+
+Inspected actual menu screenshots from the combined run: `EEBE7D39-CC36-4903-BF0E-3774828BCF45.png` (Light), `E899437E-13B8-4BB6-9BF3-E97C6245C6BE.png` (Dark), exported under `/tmp/neomd-11-final-ui-attachments`. Destination text fits, native disabled appearance is dim, Open Link/Copy Link are legible, document links remain underlined, no permanent controls. Physical input and full VoiceOver remain unrun.
+
+### Approved attachment and final worker evidence
+
+Baseline steps 1–2 and 4–7 remain; step 3 now uses `MarkdownLinkContextMenuAttachment` as a background whose NSView always returns nil from hitTest. A weak local event monitor owns only secondary/Control-clicks in its exact window, in both bounds and visibleRect, while visible and not sheet-blocked. Native controls are excluded; noneditable NSTextField backing selectable Text is permitted. Token ownership is idempotent and released on transition/dismantle/deallocation; dismantling clears action captures. No global monitor, private view discovery or swizzling. Menu contents/actions and keyboard dispatch correction are unchanged.
+
+Final commands used the command prefix above with `-derivedDataPath /tmp/NeoMD-M1-11-Worker`, serial testing, and fresh bundles:
+- Debug `build`: passed, `/tmp/neomd-11-accepted-build.log`.
+- `-only-testing:NeoMDTests test`: **115 Swift Testing tests / 21 suites plus 4 XCTest hosting tests passed**, `/tmp/neomd-11-accepted-units.{log,xcresult}`. Three new attachment tests cover wrong-window/nonsecondary/outside/hidden/clipped/detached events, overlapping buttons/editable fields/scrollbars, native text backing, no hit/AX/focus target, reattachment, token ownership and action-capture release. The release test drains AppKit autoreleases before asserting view deallocation.
+- All three targeted UI classes together: **17 passed, 0 failed, 0 skipped**, `/tmp/neomd-11-accepted-ui-complete.{log,xcresult}`. Includes unchanged Back-second hittability, M1-09/M1-10 regressions, all five web tests, fresh Light right-click/Dark Control-click, native plain menu, and drag-selection/Command-C of `Labeled` in a link-bearing paragraph.
+- Primary LSP diagnostics: six changed Swift files clean. `git diff --check` passed.
+- Inspected final Light `D7A545DF-439B-448A-89D6-56BC193E64DF.png` and Dark `BF41DB51-BFB4-48B7-A18E-A7FFE8EA6DE0.png` in `/tmp/neomd-11-accepted-attachments`: destination fits in native disabled styling, actions are readable, links remain underlined, no permanent controls.
+
+The first final combined run (`/tmp/neomd-11-accepted-ui.xcresult`) was externally interrupted by a 600-second command timeout after 12 regression tests and the Far-link test passed, during the menu test. It is not a passing gate. The owned test app was terminated by its exact PID; PR25 app PID31721 remained alive. Interrupted teardown may leave a temporary fixture and its Copy Link clipboard value; the original clipboard representations from that killed process cannot be recovered. The complete rerun used a 1000-second budget and passed all teardown assertions, preserving its starting clipboard and existing browser sessions. Browser tabs opened in preexisting sessions are intentionally retained. This host-state limitation is not hidden by the subsequent pass.
+
+Physical input, full VoiceOver, browser page content and combined milestone business acceptance remain unrun/deferred. No independent review is claimed.
+
+### Deferred and cross-story
+
+- Combine web-link activation with resize restoration, multiple windows and Light/Dark switching in the final sweep.
+- M1-12 must not turn `imageURL` loading into an automatic launch; M1-16 selection/copy inside link-bearing blocks should be re-checked against the background attachment.
+- Risk: default-browser variance across hosts (Safari vs Chrome tab behaviour); the test derives the browser from LaunchServices and never hard-codes it.
+
 ## Future story entry template
 
 Copy and complete in every subsequent story PR; do not replace prior entries.

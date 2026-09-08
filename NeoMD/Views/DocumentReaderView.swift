@@ -24,6 +24,7 @@ struct DocumentReaderView: View {
     @Environment(\.dismissWindow) private var dismissWindow
     @Environment(\.openDocument) private var openDocument
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openURL) private var systemOpenURL
     @State private var renderedDocument = MarkdownRenderDocument.empty
     @State private var linkNotice: String?
     @State private var noticeGeneration = 0
@@ -285,7 +286,15 @@ struct DocumentReaderView: View {
         let destination = DocumentLinkDestination.resolve(
             url: url, anchors: renderedDocument.anchorTargets, documentURL: fileURL)
         switch destination {
-        case .external: return .systemAction
+        case .external:
+            // A custom environment key does not receive SwiftUI's openURL
+            // system fallback. Dispatch through the inherited action exactly
+            // once; the descendant override above cannot recurse into this.
+            if keyboardDriven {
+                systemOpenURL(url)
+                return .handled
+            }
+            return .systemAction
         case .local(let target):
             Task { @MainActor in await openLocalTarget(target) }
         default: followSection(destination, keyboardDriven: keyboardDriven)

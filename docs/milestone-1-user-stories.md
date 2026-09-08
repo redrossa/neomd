@@ -165,6 +165,8 @@ Acceptance ideas:
 
 The user's exclusion of external-resource references means repository-configured shorthand such as ticket identifiers; it does not exclude normal hyperlinks.
 
+Implemented: labeled, reference-style and ordinary web URLs retain underlined native links. Explicit mouse or keyboard activation opens the system handler without changing reading position. Right-click or Control-click a link-bearing leaf to inspect its authored destinations and choose Open Link or Copy Link; link-free text keeps its native menu. A non-hit-testing background attachment leaves selectable text and accessibility links unobstructed. No permanent controls, automatic browser launches or source-file writes are added. See the cumulative fixture catalog for worker evidence and deferred milestone checks.
+
 ### M1-12 — View illustrations and screenshots · Core
 
 As someone reviewing an illustrated explanation, I want its images displayed in context so that I can understand the whole document.
