@@ -52,6 +52,12 @@ struct MarkdownBlockView: View {
                         .allowsHitTesting(false)
                 }
             }
+            .background {
+                let menuLinks = MarkdownLinkMenu.links(in: block.text)
+                if block.isLeaf, !menuLinks.isEmpty {
+                    MarkdownLinkContextMenuAttachment(links: menuLinks, open: { openURL($0) })
+                }
+            }
             .modifier(MarkdownLinkFocus(enabled: !links.isEmpty && block.isLeaf,
                 id: block.id, keyboardFocus: keyboardFocus, handleKeyPress: handleLinkKeyPress))
             .overlay {
