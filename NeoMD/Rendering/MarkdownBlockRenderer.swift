@@ -98,11 +98,11 @@ nonisolated enum MarkdownBlockRenderer {
     /// Renders `markdown` into blocks, in document order.
     ///
     /// Malformed syntax remains readable according to cmark-gfm's recovery rules.
-    static func render(from markdown: String) -> MarkdownRenderDocument {
+    static func render(from markdown: String, documentURL: URL? = nil) -> MarkdownRenderDocument {
         guard !markdown.isEmpty else { return .empty }
 
         let document = CMarkDocument(markdown: markdown)
-        return CMarkBlockAdapter(document: document).render()
+        return CMarkBlockAdapter(document: document, documentURL: documentURL).render()
     }
 
 

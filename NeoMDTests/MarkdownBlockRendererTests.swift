@@ -8,6 +8,21 @@ import Testing
 @testable import NeoMD
 
 struct MarkdownBlockRendererTests {
+    @Test func localImagesUseTheDocumentPathPolicy() throws {
+        let base = URL(fileURLWithPath: "/base/docs/guide.md")
+        for (destination, expected) in [
+            ("img/a b.png", URL(fileURLWithPath: "/base/docs/img/a b.png")),
+            ("/img.png", URL(fileURLWithPath: "/base/docs/img.png")),
+            ("../shared/x.png", URL(fileURLWithPath: "/base/shared/x.png")),
+            ("img/caf%C3%A9%23.png", URL(fileURLWithPath: "/base/docs/img/café#.png")),
+            ("https://example.com/x.png", URL(string: "https://example.com/x.png")!)
+        ] {
+            let rendered = MarkdownBlockRenderer.render(from: "![alt](<\(destination)>)", documentURL: base)
+            let images = rendered.nodes.flatMap { $0.text.runs.compactMap(\.imageURL) }
+            #expect(images == [expected])
+        }
+    }
+
 
     /// The plain characters of a block, for asserting that syntax was consumed.
     private func plainText(_ block: MarkdownBlock) -> String {

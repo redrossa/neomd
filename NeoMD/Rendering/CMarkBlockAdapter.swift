@@ -14,6 +14,7 @@ nonisolated final class CMarkBlockAdapter {
     }
 
     private let document: CMarkDocument
+    private let documentURL: URL?
     private var notes: [OpaquePointer] = []
     private var ordinals: [OpaquePointer: Int] = [:]
     private var occurrences: [OpaquePointer] = []
@@ -25,7 +26,10 @@ nonisolated final class CMarkBlockAdapter {
     private var taskDescriptions: Set<Int> = []
     private var listOrdinals: [OpaquePointer: Int] = [:]
 
-    init(document: CMarkDocument) { self.document = document }
+    init(document: CMarkDocument, documentURL: URL? = nil) {
+        self.document = document
+        self.documentURL = documentURL
+    }
 
     func render() -> MarkdownRenderDocument {
         discoverFootnotes()
@@ -212,7 +216,11 @@ nonisolated final class CMarkBlockAdapter {
                 let destination = cmark_node_get_url(node).map { String(cString: $0) } ?? ""
                 if !destination.isEmpty, let url = URL(string: destination) {
                     if type == "link" { attributes.link = url }
-                    else { attributes.imageURL = url }
+                    else {
+                        attributes.imageURL = documentURL.flatMap {
+                            DocumentLocalPath.resolve(url, relativeTo: $0)?.fileURL
+                        } ?? url
+                    }
                 }
             case "footnote_reference":
                 if !ineligible, let note = cmark_node_parent_footnote_def(node), let ordinal = ordinals[note] {

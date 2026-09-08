@@ -148,9 +148,9 @@ Acceptance ideas:
 - Missing or inaccessible targets produce a readable message while retaining the current document.
 - Apply the same path policy to linked images.
 
-Proposed root-path policy: for a path beginning with `/`, use the enclosing repository's root when one can be identified; otherwise use the opened document's folder. Review this fallback before implementation. GitHub itself treats leading-slash links as repository-relative. [Relative-link reference](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax#relative-links).
+Approved root-path policy (user email reply, 2026-09-08): resolve a path beginning with `/` from the current document's folder, without repository-root discovery. Apply this same policy to linked images. This deliberately differs from GitHub's repository-relative leading-slash links. [Relative-link reference](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax#relative-links).
 
-Local folder navigation does not imply branch switching, private-repository access, or fetching files from another repository. If macOS requires permission to read a linked local resource, offer its native permission flow on demand.
+Local folder navigation does not imply branch switching, private-repository access, or fetching files from another repository. Approved (user email reply, 2026-09-08): when needed, offer an explicit native enclosing-folder permission request for read-only access held only for the current app session. Preserve the sandbox; no persisted bookmarks or access across launches is implied.
 
 ### M1-11 — Open web references · Core
 
@@ -356,7 +356,7 @@ The guide's outline menu and authoring shortcuts are website interactions, not a
 ## Review decisions before creating GitHub issues
 
 1. Confirm that native window controls, the macOS menu bar, temporary system dialogs, and document links fit “no buttons.”
-2. Confirm separate windows for distinct documents and the leading-slash path fallback in M1-10.
+2. Confirm separate windows for distinct documents. M1-10 now uses the current document's folder for leading-slash paths, with on-demand read-only enclosing-folder access for the current session (approved by email, 2026-09-08).
 3. Confirm the explicit color-swatch extension and account-free mention treatment.
 4. Choose the minimum macOS version, baseline Mac, performance target, and supported image formats; these are not settled by this brainstorm.
 
