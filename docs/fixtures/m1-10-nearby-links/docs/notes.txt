@@ -1,0 +1,1 @@
+PLAIN TEXT TARGET. Opened by the default macOS application for .txt after an explicit click; NeoMD must not render it.

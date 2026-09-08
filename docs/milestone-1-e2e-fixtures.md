@@ -313,6 +313,95 @@ Final corrected-source refresh: `/tmp/neomd-h1-lifecycle/results.json`21/21 plus
 
 No production, UI selection, read-only policy or VoiceOver setting changed. Only manual spoken order/duplicate speech/context exit remains unverified and user-deferred as above; this host gate is **not deferred**. Worker correction is ready for independent exact-head review, not acceptance or merge.
 
+## M1-10 — Follow links to nearby files (worker validated; milestone acceptance pending)
+
+[Issue #10](https://github.com/redrossa/neomd/issues/10) · [PR #34](https://github.com/redrossa/neomd/pull/34) · accepted plan: see the triage comment linked from the issue (2026-09-08) · approved decisions: [user decisions comment](https://github.com/redrossa/neomd/issues/10#issuecomment-5577686581).
+
+Implementation base: `7fb3c4a5a4273a50bf28f53038d350d2e2d457b9`. No reviewer stage applies (user policy change recorded on the issue); the worker self-validates and the coordinator merges on evidence. Targeted units/UI, M1-09 regressions, a separate app build and native plain-build grant checks passed as detailed below. Selectors marked *existing* are on the accepted base; the M1-10 selectors are implemented. [Validation amendments](https://github.com/redrossa/neomd/issues/10#issuecomment-5578156000) preserve the baseline and record harness/fixture corrections.
+
+### Durable fixture
+
+Checked-in path: `docs/fixtures/m1-10-nearby-links/` (source document `docs/guide.md`; see its `README-fixture.md` for the link → target → marker table). `NearbyFileLinkUITests.fixtureTree()` reads all 13 authored durable files relative to the test source, then setup writes their exact bytes inside `FileManager.default.temporaryDirectory`. This avoids a divergent inline copy. The UI test asserts on-disk bytes and modification dates of every fixture file are unchanged at teardown.
+
+Meaningful details: `docs/my notes.md` (space), `docs/café.md` (NFC `é`; linked both as `caf%C3%A9.md` and `café.md`), `docs/100%.md` (malformed-escape edge, not a criterion), `docs/root-target.md` versus the decoy `root-target.md` at the fixture root (the decoy prints `ROOT POLICY WRONG`), `docs/private.md` (made `chmod 000` by the test/manual step; restored before removal), `docs/notes.txt`, `docs/img/diagram.png` (1×1 PNG), and deliberately absent `docs/missing.md`, `docs/sub/absent/nowhere.md`, `docs/img/absent.png`.
+
+### Setup, isolation and cleanup
+
+- Copy the fixture to a fresh temporary folder; never open the repository copy (app launches and `chmod` must not touch version-controlled files).
+- Opening route: same `NSWorkspace.shared.open(_:withApplicationAt:configuration:)` route as `DocumentLinkNavigationUITests.open` (*existing*), launched with `-ApplePersistenceIgnoreState YES` and `NEOMD_UI_TEST_APPEARANCE`.
+- Host state: the "other local type" check launches the host's default application for `.txt` (`NSWorkspace.shared.urlForApplication(toOpen:)`, usually TextEdit). Record whether that app was running before the test; terminate it afterwards only if it was not. Close any of its windows the test created. Skip (not pass) the check if no default application exists.
+- Sandbox caveat: `xcodebuild … test` products carry an Xcode-injected `com.apple.security.temporary-exception.files.absolute-path.read-only` for `/` (verified 2026-09-08 by `codesign -d --entitlements` on `/tmp/NeoMD-DerivedData/Build/Products/Debug/NeoMD.app`; plain `build` products carry only `files.user-selected.read-only`). Therefore UI tests **cannot** observe sandbox denial; the inaccessible branch is exercised with POSIX `chmod 000`, and the real sandbox grant is a manual check with a plain build (below).
+- Cleanup: `chmod 644` the private file, remove the temporary folder, terminate NeoMD.
+
+### Selectors and commands (implemented)
+
+Unit (Swift Testing): `NeoMDTests/DocumentLinkResolverTests/localPathsResolveFromTheDocumentFolder`, `NeoMDTests/LocalFileAccessTests/probeDistinguishesReadableMissingAndUnreadable`, `NeoMDTests/MarkdownBlockRendererTests/localImagesUseTheDocumentPathPolicy`, `NeoMDTests/DocumentOpeningTests/sectionRequestsAreKeyedByCanonicalURLAndConsumedOnce`.
+
+UI (XCTest): `NeoMDUITests/NearbyFileLinkUITests/testRelativePathsOpenNearbyMarkdownAtRequestedSections`, `…/testMissingAndInaccessibleTargetsKeepTheCurrentDocument`, `…/testOtherLocalTypesOpenInTheDefaultApplicationOnlyAfterActivation`, `…/testAlreadyOpenTargetRefocusesAndNavigates`.
+
+```sh
+xcodebuild -project NeoMD.xcodeproj -scheme NeoMD -destination 'platform=macOS' \
+  -derivedDataPath /tmp/NeoMD-DerivedData -only-testing:NeoMDTests \
+  -resultBundlePath /tmp/neomd-10-units.xcresult test
+xcodebuild -project NeoMD.xcodeproj -scheme NeoMD -destination 'platform=macOS' \
+  -derivedDataPath /tmp/NeoMD-DerivedData -parallel-testing-enabled NO \
+  -only-testing:NeoMDUITests/NearbyFileLinkUITests \
+  -only-testing:NeoMDUITests/DocumentLinkNavigationUITests \
+  -resultBundlePath /tmp/neomd-10-ui.xcresult test
+```
+
+Use fresh result-bundle paths on reruns. `DocumentLinkNavigationUITests` (*existing*) is included as the M1-09 regression gate because the reader's link handling changes.
+
+### Criteria → actions → expected outcomes → evidence
+
+| Criterion | Actions (from `docs/guide.md`) | Expected outcome | Planned evidence |
+|---|---|---|---|
+| 1. Resolve `./`, `../`, spaces, encoded names from the document folder | Click `Intro second section`, `Parent readme`, `Deep target`, `Spaces bracketed`, `Spaces encoded`, `Encoded Unicode`, `Literal Unicode`, `Root target` | Windows titled `intro.md`, `README.md`, `deep.md`, `my notes.md`, `café.md`, `root-target.md` appear; `root-target.md` shows `ROOT POLICY CORRECT`, never `ROOT POLICY WRONG`; both spellings of the spaces/Unicode links open the same file (one window, M1-03 identity) | Unit resolver table + `testRelativePathsOpenNearbyMarkdownAtRequestedSections` |
+| 2. Linked Markdown opens in NeoMD at the requested section | Same clicks with fragments; also keyboard: Option-Tab to the block, Right-arrow to `Deep target`, Return | Target window front; `SECOND SECTION LANDED`, `PARENT SECTION LANDED`, `DEEP TARGET LANDED` are at the top of their scroll views (`assertAtTop` pattern, *existing*); `Plain sibling` opens `intro.md` at `INTRO START`; source window keeps its scroll position | Same UI test; keyboard branch in the same method |
+| 3. Other local types open in the appropriate app after an explicit click | Render the document and wait 3 s (no launch); click `Plain text notes`; separately click `Linked image` | No foreign app launches on render or hover; after the click the default app for `.txt` becomes running/frontmost and NeoMD opens no new window; the PNG link opens the default image viewer (or is skipped with a recorded reason if none) | `testOtherLocalTypesOpenInTheDefaultApplicationOnlyAfterActivation` |
+| 4. Missing/inaccessible targets: readable message, current document retained | Click `Missing file`, `Missing nested`, `Private file` (chmod 000), `Missing section` | `DocumentLinkNotice` (*existing*) shows a message naming the link (e.g. `Couldn’t find “missing.md” next to this document.` / `NeoMD doesn’t have permission to read “private.md”.`), no new window, no alert; guide scroll position unchanged; the notice auto-dismisses. For `Private file`, an `NSOpenPanel` folder request (title/prompt *proposed*: message mentioning read-only access for this session, prompt `Allow Access`) appears first; the test presses Cancel and then expects the permission notice. `Missing section` opens `intro.md` and that window shows the existing `No “nowhere” destination in this document` notice | `testMissingAndInaccessibleTargetsKeepTheCurrentDocument` + `LocalFileAccessTests` |
+| 5. Same path policy for images | Render `docs/guide.md` | Rendered `imageURL` runs for `img/diagram.png` equal `file://<fixture>/docs/img/diagram.png` (unit-level via `MarkdownBlockRenderer.render(from:documentURL:)`, *proposed*); remote image URLs untouched; the linked image's link opens the PNG through criterion 3 | `localImagesUseTheDocumentPathPolicy`; the linked-image click in the criterion-3 method. Image display itself is M1-12 |
+
+Already-open target: click `Same document section` in `guide.md` → the same window stays (no duplicate window), scrolls to `GUIDE END`; then open `intro.md` via `Plain sibling`, return to `guide.md`, click `Intro second section` → the existing `intro.md` window comes to front and lands on `SECOND SECTION LANDED` (`testAlreadyOpenTargetRefocusesAndNavigates`).
+
+### Appearance, keyboard, accessibility, read-only
+
+- Light/Dark: run the section-navigation method under both `NEOMD_UI_TEST_APPEARANCE` values and attach a screenshot of the notice in each.
+- Keyboard: Option-Tab / arrows / Return / Space activation reaches local targets exactly like internal links; Escape unchanged.
+- AX: the notice is announced (`AccessibilityNotification.Announcement`, *existing* pattern); link labels unchanged. VoiceOver spoken order is not covered here (deferred as in M1-09).
+- Read-only: bytes and modification dates of every fixture file, including targets opened in NeoMD and the `.txt` opened elsewhere, are unchanged at teardown; no bookmark data is written (assert `UserDefaults.standard.dictionaryRepresentation()` for the app's suite contains no key introduced by this story — *proposed*; simplest is that the implementation stores no bookmarks at all and the worker states so).
+- Not covered by automation: real sandbox denial and a successful folder grant (see manual), width/full-screen (unchanged reader layout), VoiceOver.
+
+### Manual checks (plain build, real sandbox; execution scope below)
+
+Build with `xcodebuild … build` (not `test`) and confirm `codesign -d --entitlements :- /tmp/NeoMD-DerivedData/Build/Products/Debug/NeoMD.app` lists **no** `absolute-path.read-only` exception. Copy the fixture to `~/Documents/NeoMD-M1-10/` (a location outside the app container), open `docs/guide.md` from Finder, then:
+
+1. Click `Intro second section` → an explicit native folder panel appears preselecting `docs/`; Cancel → permission notice, guide retained, no new window.
+2. Click again → panel → choose `docs/` → `intro.md` opens at `SECOND SECTION LANDED`. Subsequent clicks inside `docs/` (`Spaces encoded`, `Plain text notes`, `Linked image`) open without another panel; `Plain text notes` opens in the default app.
+3. Click `Parent readme` → panel again (target is outside the granted folder) → choose the fixture root → `README.md` opens at `PARENT SECTION LANDED`.
+4. Reserve a never-opened sibling (for example, omit `Spaces encoded` in step 2). Quit and relaunch NeoMD, open `guide.md`, click that sibling → the panel appears again (no persisted folder grant). Previously opened individual documents may remain accessible through macOS recent-document machinery; they do not establish whether a folder grant persisted.
+5. Confirm `Console.app` shows no sandbox violation from NeoMD during steps 2–3, and that `Missing file` yields the missing message, not the permission message, in a granted folder.
+
+### Actual commands/results
+
+Worker runtime verified `openai-codex/gpt-6-astra`, low. Branch `story/10-nearby-file-links` from the accepted base. All final gates used the source included in this story commit; subsequent edits only record evidence. Baseline: https://github.com/redrossa/neomd/issues/10#issuecomment-5577784954; binding refinements: https://github.com/redrossa/neomd/issues/10#issuecomment-5577793780.
+
+- Targeted units passed 33 tests, zero failures/skips: `/tmp/neomd-10-cheap2.xcresult`, log `/tmp/neomd-10-cheap2.log`. Command: `xcodebuild -project NeoMD.xcodeproj -scheme NeoMD -destination 'platform=macOS' -derivedDataPath /tmp/NeoMD-M1-10-DerivedData -parallel-testing-enabled NO -only-testing:NeoMDTests/DocumentLinkResolverTests -only-testing:NeoMDTests/LocalFileAccessTests -only-testing:NeoMDTests/DocumentOpeningTests -only-testing:NeoMDTests/MarkdownBlockRendererTests -resultBundlePath /tmp/neomd-10-cheap2.xcresult test`. Includes denied-parent/nonexistent-child classification, unreadable file, FIFO nonblocking rejection, decoded percent/Unicode/delimiter fragments, stale cleanup/no-fragment supersession and actual image URLs. First compile attempt `cheap1` exposed a nested Testing macro expansion in a new test; splitting the nested `#require` corrected it before this pass.
+- Native opening probe **blocked before story actions**, twice: `/tmp/neomd-10-ui-probe1.xcresult` and `...probe2.xcresult`, corresponding `.log` files. Same command prefix, selecting only `-only-testing:NeoMDUITests/NearbyFileLinkUITests/testAlreadyOpenTargetRefocusesAndNavigates`. NeoMD launches, then `NSWorkspace.shared.open` reports Cocoa260 / LaunchServices-43 (`fnfErr`) for the running application's existing `/private/tmp/NeoMD-M1-10-DerivedData/Build/Products/Debug/NeoMD.app`. Second attempt explicitly matches M1-09's activates/no-substitution/no-new-instance configuration. Executable existence was confirmed. Each run failed1, passed0; these are not behavior passes. Resolved by bounded diagnosis: the fixture helper incorrectly sliced `/private/tmp` enumeration URLs using a `/tmp` root length, creating the source at the wrong relative path. The existing M1-09 opening method passed on the same bundle. Relative enumeration plus explicit fixture/source assertions fixed the helper; no host registration/security change was needed.
+- New native selectors retain the four authored names above. Section landing asserts the **heading** at viewport top, with the authored marker body below it; no claim that a paragraph below a heading lands at the exact same coordinate. The no-fragment already-open case preserves the current reading position per M1-03; new-window plain sibling opens at the beginning.
+- Final nearby UI gate: `xcodebuild -project NeoMD.xcodeproj -scheme NeoMD -destination 'platform=macOS' -derivedDataPath /tmp/NeoMD-M1-10-DerivedData -resultBundlePath /tmp/neomd-10-nearby-final2.xcresult -only-testing:NeoMDUITests/NearbyFileLinkUITests test`: **4 passed, 0 failed/skipped**. Log: `/tmp/neomd-10-nearby-final2.log`. This repeats the passing `nearby-final` gate after removing one redundant final blank line from triage's `docs/sub/deep.md` fixture for `git diff --check`; all other authored fixture bytes are preserved. Earlier class run exposed the duplicate Touch Bar Cancel selector and reached the command timeout; the fixed selector targets `open-panel/CancelButton`. Final run completed normally. Light/Dark notice screenshots exported to `/tmp/neomd-10-final-attachments`; inspected Light missing and Dark permission notices: readable, source retained, no clipping.
+- Broader gate: same command prefix/data path, `-resultBundlePath /tmp/neomd-10-regression.xcresult -only-testing:NeoMDTests -only-testing:NeoMDUITests/DocumentLinkNavigationUITests test`: **119 tests passed (111 unit + 8 UI; 179 parameterized executions), 0 failed/skipped**. Log `/tmp/neomd-10-regression.log`.
+- Plain build: `xcodebuild -project NeoMD.xcodeproj -scheme NeoMD -configuration Debug -destination 'platform=macOS' -derivedDataPath /tmp/NeoMD-M1-10-Plain build`: passed, log `/tmp/neomd-10-plain-build.log`. `codesign -d --entitlements :-` confirmed sandbox + user-selected read-only, **no** XCTest absolute-path exception.
+- Actual plain-build native checks used a fresh fixture copy under `~/Documents/`, opened through the explicitly selected built app, with PID-scoped System Events inspection and physical CGEvent clicks (not XCTest injection). Cancel showed `NeoMD doesn’t have permission to read “intro.md”.`, guide only. Choosing an unrelated sibling folder produced the same notice and no dispatch. Choosing `docs` opened `intro.md` at the second section; choosing Parent readme prompted again, and granting the fixture root opened `README.md` at its parent section. Normal process termination/relaunch: the never-opened `my notes.md` prompted again, proving no retained folder grant. The originally specified already-open `intro.md` relaunch check did not prompt; see the explicit fixture correction above. Source bytes matched all 13 originals after manual checks; UI teardown additionally verifies all mtimes. Both owned plain processes terminated; unrelated PR25 NeoMD remained untouched.
+- Primary LSP diagnostics clean. No bookmark/default persistence or signing/sandbox changes. Supplemental manual external-app checks under a plain grant, Console inspection, and VoiceOver remain unrun for final milestone verification; automated explicit external-app activation passed. Window-only plain screenshot capture was unavailable, so native AX/window/position evidence supports grant checks; this is not a screenshot claim. Full combined E2E and business acceptance remain pending.
+
+### Deferred and cross-story
+
+- Image display and image permission/missing-image fallback: M1-12 must consume the resolved `imageURL` and reuse the access probe and folder-grant session; not verified here.
+- Web links keep today's behavior (`.external` → system action) until M1-11.
+- Final-milestone sweep: combine nearby-file navigation with resize restoration, Light/Dark switching and multiple windows (M1-03/M1-04) in one session; verify the notice never overlaps the M1-09 notice queue.
+- Risk: LaunchServices default-app variance across hosts for `.txt`/`.png`; the test derives the expected app from `urlForApplication(toOpen:)` rather than hard-coding TextEdit/Preview.
+
 ## Future story entry template
 
 Copy and complete in every subsequent story PR; do not replace prior entries.

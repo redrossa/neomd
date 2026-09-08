@@ -21,6 +21,7 @@ struct NeoMDApp: App {
         DocumentGroup(viewing: MarkdownDocument.self) { configuration in
             DocumentReaderView(
                 document: configuration.document,
+                fileURL: configuration.fileURL,
                 openingCoordinator: applicationDelegate.openingCoordinator
             )
             .focusedSceneValue(\.closeWindowTargetAvailable, true)

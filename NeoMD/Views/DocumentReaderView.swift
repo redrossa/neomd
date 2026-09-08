@@ -3,6 +3,7 @@
 //  NeoMD
 //
 
+import AppKit
 import SwiftUI
 
 /// The reading surface for an open Markdown document.
@@ -12,6 +13,12 @@ import SwiftUI
 /// document is loading and not if rendering fails.
 struct DocumentReaderView: View {
     let document: MarkdownDocument
+    let fileURL: URL?
+
+    private struct RenderInput: Hashable {
+        let text: String
+        let fileURL: URL?
+    }
     let openingCoordinator: DocumentOpeningCoordinator?
 
     @Environment(\.dismissWindow) private var dismissWindow
@@ -34,9 +41,11 @@ struct DocumentReaderView: View {
 
     init(
         document: MarkdownDocument,
+        fileURL: URL? = nil,
         openingCoordinator: DocumentOpeningCoordinator? = nil
     ) {
         self.document = document
+        self.fileURL = fileURL
         self.openingCoordinator = openingCoordinator
     }
 
@@ -93,8 +102,11 @@ struct DocumentReaderView: View {
             }
         }
         .frame(minWidth: 480, minHeight: 320)
-        .task(id: document.text) {
+        .task(id: RenderInput(text: document.text, fileURL: fileURL)) {
             await render(document.text)
+        }
+        .onChange(of: fileURL.flatMap { openingCoordinator?.sectionRequest(for: $0) }) {
+            consumeSectionRequest()
         }
         .onAppear {
             guard openingCoordinator?.documentWindowDidAppear(id: windowID)
@@ -215,12 +227,14 @@ struct DocumentReaderView: View {
         navigationGeneration += 1
         noticeGeneration += 1
         linkNotice = nil
+        let documentURL = fileURL
         let rendered = await Task.detached(priority: .userInitiated) {
-            MarkdownBlockRenderer.render(from: source)
+            MarkdownBlockRenderer.render(from: source, documentURL: documentURL)
         }.value
         guard !Task.isCancelled else { return }
         renderedDocument = rendered
         isRendered = true
+        consumeSectionRequest()
     }
 
     private func handleScrollGeometryChange(
@@ -268,22 +282,80 @@ struct DocumentReaderView: View {
     }
 
     private func handleLink(_ url: URL, keyboardDriven: Bool = false) -> OpenURLAction.Result {
-        switch DocumentLinkDestination.resolve(url: url, anchors: renderedDocument.anchorTargets) {
+        let destination = DocumentLinkDestination.resolve(
+            url: url, anchors: renderedDocument.anchorTargets, documentURL: fileURL)
+        switch destination {
         case .external: return .systemAction
-        case .missing(let name):
-            let message = "No “\(name)” destination in this document"
-            linkNotice = message
-            noticeGeneration += 1
-            let generation = noticeGeneration
-            AccessibilityNotification.Announcement(message).post()
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(4))
-                if noticeGeneration == generation { linkNotice = nil }
-            }
-        case .top: navigate(to: nil, keyboardDriven: keyboardDriven)
-        case .block(let id): navigate(to: id, keyboardDriven: keyboardDriven)
+        case .local(let target):
+            Task { @MainActor in await openLocalTarget(target) }
+        default: followSection(destination, keyboardDriven: keyboardDriven)
         }
         return .handled
+    }
+
+    private func followSection(_ destination: DocumentLinkDestination, keyboardDriven: Bool) {
+        switch destination {
+        case .missing(let name): showNotice("No “\(name)” destination in this document")
+        case .top: navigate(to: nil, keyboardDriven: keyboardDriven)
+        case .block(let id): navigate(to: id, keyboardDriven: keyboardDriven)
+        case .external, .local: break
+        }
+    }
+
+    private func consumeSectionRequest() {
+        guard isRendered, let fileURL,
+              let request = openingCoordinator?.takeSectionRequest(for: fileURL) else { return }
+        followSection(.resolve(fragment: request.fragment, anchors: renderedDocument.anchorTargets),
+                      keyboardDriven: false)
+    }
+
+    private func showNotice(_ message: String) {
+        linkNotice = message
+        noticeGeneration += 1
+        let generation = noticeGeneration
+        AccessibilityNotification.Announcement(message).post()
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(4))
+            if noticeGeneration == generation { linkNotice = nil }
+        }
+    }
+
+    private func openLocalTarget(_ target: DocumentLocalTarget) async {
+        let url = target.fileURL
+        let name = url.lastPathComponent
+        var state = await Task.detached { LocalFileAccessProbe.state(of: url) }.value
+        if state == .inaccessible, let fileURL {
+            guard await openingCoordinator?.folderAccess.requestReadAccess(for: url, documentURL: fileURL) == true else {
+                showNotice("NeoMD doesn’t have permission to read “\(name)”.")
+                return
+            }
+            state = await Task.detached { LocalFileAccessProbe.state(of: url) }.value
+        }
+        switch state {
+        case .missing:
+            showNotice("Couldn’t find “\(name)” next to this document.")
+        case .inaccessible:
+            showNotice("NeoMD doesn’t have permission to read “\(name)”.")
+        case .readable(let isDirectory):
+            if !isDirectory, MarkdownFileType.claimsFile(at: url) {
+                let request = openingCoordinator?.requestSection(target.fragment, in: url)
+                do { try await openDocument(at: url) }
+                catch {
+                    openingCoordinator?.cancelSectionRequest(request, for: url)
+                    showNotice("Couldn’t open “\(name)”. \(error.localizedDescription)")
+                }
+            } else {
+                do {
+                    let values = try url.resourceValues(forKeys: [.isApplicationKey, .isExecutableKey])
+                    // Conservative disposition for executable content, not a ban on explicit launches.
+                    if values.isApplication == true || (!isDirectory && values.isExecutable == true) {
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                    } else {
+                        _ = try await NSWorkspace.shared.open(url, configuration: NSWorkspace.OpenConfiguration())
+                    }
+                } catch { showNotice("Couldn’t open “\(name)”. \(error.localizedDescription)") }
+            }
+        }
     }
 
     private func navigate(to id: Int?, keyboardDriven: Bool) {
