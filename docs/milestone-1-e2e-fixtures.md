@@ -500,7 +500,7 @@ Physical input, full VoiceOver, browser page content and combined milestone busi
 
 The triage plan and recovery history below are preserved as historical context; superseded proposed setup/oracles are not current execution instructions.
 
-[Issue #12](https://github.com/redrossa/neomd/issues/12) · PR: to be linked by the worker · [blocked assessment and feasibility probes](https://github.com/redrossa/neomd/issues/12#issuecomment-5579457860) · [approved decisions 1C/2A/3B/4/5](https://github.com/redrossa/neomd/issues/12#issuecomment-5584759706) · [accepted plan (baseline)](https://github.com/redrossa/neomd/issues/12#issuecomment-5584922066).
+[Issue #12](https://github.com/redrossa/neomd/issues/12) · [PR #37](https://github.com/redrossa/neomd/pull/37) · [blocked assessment and feasibility probes](https://github.com/redrossa/neomd/issues/12#issuecomment-5579457860) · [approved decisions 1C/2A/3B/4/5](https://github.com/redrossa/neomd/issues/12#issuecomment-5584759706) · [accepted plan (baseline)](https://github.com/redrossa/neomd/issues/12#issuecomment-5584922066).
 
 Implementation base: `265cd3e30fd94e859d6811705caff09ae48de132`. No reviewer stage; the worker self-validates with the gates below and the coordinator merges on evidence. Everything in this entry is **planned**; nothing below is executed evidence until the worker records results in "Actual commands/results". Selectors marked *existing* are on the accepted base; all `MarkdownImage…` identifiers and `DocumentImageUITests` are *proposed*.
 

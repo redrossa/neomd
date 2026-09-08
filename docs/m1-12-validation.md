@@ -1,6 +1,6 @@
 # M1-12 validation record
 
-Issue: [#12](https://github.com/redrossa/neomd/issues/12). Base: `265cd3e30fd94e859d6811705caff09ae48de132`. Branch: `story/12-images`. The PR records the exact committed head and final build/unit results. Coordinator acceptance and milestone business acceptance are separate; no independent reviewer stage is claimed.
+Issue: [#12](https://github.com/redrossa/neomd/issues/12). PR: [#37](https://github.com/redrossa/neomd/pull/37). Base: `265cd3e30fd94e859d6811705caff09ae48de132`. Branch: `story/12-images`. The PR records the exact committed head and final build/unit results. Coordinator acceptance and milestone business acceptance are separate; no independent reviewer stage is claimed.
 
 ## Approved boundary
 
@@ -10,7 +10,7 @@ The narrow correction uses `ScrollPosition()` (no eager edge/point request; defa
 
 ## Current-source nonclipboard evidence (2026-09-08)
 
-All listed successful selectors have zero skips and zero expected failures. Bundles are temporary local evidence; durable fixtures and test methods are checked in. Production/test inputs are unchanged between these runs and the implementation commit; the PR records the exact head and post-commit checks.
+All listed successful selectors have zero skips and zero expected failures. Bundles are temporary local evidence; durable fixtures and test methods are checked in. Production/test inputs are unchanged between these runs and implementation commit `2edad0fb54d321107a5578c7a6ce1d6764f1adb9`; only fixture README factual prose was corrected afterward. On that committed head, Debug build passed and `/tmp/NeoMD-12-CommittedHead.xcresult` passed 138/0/0 (all136 units plus focused margin and repeated image scroll), zero expected failures. This subsequent documentation-only commit records the PR link; the PR records the exact final head and post-commit checks.
 
 | Bundle under `/tmp/` | Actual result and scope |
 | --- | --- |
