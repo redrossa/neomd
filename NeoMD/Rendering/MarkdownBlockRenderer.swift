@@ -28,6 +28,7 @@ extension AttributeScopes {
     nonisolated struct MarkdownAttributes: AttributeScope {
         let markdownInlineStyle: MarkdownInlineStyleAttribute
         let markdownCodeToken: MarkdownCodeTokenAttribute
+        let markdownImage: MarkdownImageAttribute
         let markdownGeneratedReference: MarkdownGeneratedReferenceAttribute
     }
 
