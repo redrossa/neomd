@@ -11,6 +11,8 @@ struct MarkdownBlockView: View {
     let theme: ReaderTheme
     let keyboardFocus: FocusState<DocumentReaderFocusTarget?>.Binding
     let pageReader: (DocumentReaderPageDirection) -> Void
+    var availableWidth: CGFloat = DocumentReaderLayout.maximumColumnWidth
+    var quoted = false
 
     @Environment(\.openURL) private var openURL
     @Environment(\.documentKeyboardOpenURL) private var keyboardOpenURL
@@ -98,13 +100,13 @@ struct MarkdownBlockView: View {
     private var blockContent: some View {
         switch block.kind {
         case .paragraph:
-            Text(text)
+            inlineContent
                 .font(.body)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
         case .heading(let level):
-            Text(text)
+            inlineContent
                 .font(Self.headingFont(level: level))
                 .foregroundStyle(level >= 6 ? Color.secondary : Color.primary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -132,6 +134,20 @@ struct MarkdownBlockView: View {
                 .padding(.vertical, 8)
                 .accessibilityHidden(true)
         }
+    }
+
+    @ViewBuilder private var inlineContent: some View {
+        if text.runs.contains(where: { $0.markdownImage != nil }) {
+            MarkdownImageParagraph(id: block.id, text: text, availableWidth: availableWidth,
+                                   headingLevel: imageHeadingLevel, quoted: quoted)
+        } else {
+            Text(text)
+        }
+    }
+
+    private var imageHeadingLevel: Int? {
+        if case .heading(let level) = block.kind { return level }
+        return nil
     }
 
     /// The type scale used for each heading level.

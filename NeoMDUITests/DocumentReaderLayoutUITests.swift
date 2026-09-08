@@ -172,6 +172,57 @@ final class DocumentReaderLayoutUITests: XCTestCase {
         XCTAssertEqual(after.modificationDate, before.modificationDate)
     }
 
+    /// Focused initial-viewport regression, not a replacement for the full
+    /// reflow/selection/overflow test retained below (baseline hang: issue #36).
+    @MainActor
+    func testInitialReadingMarginAndTopPositionSurviveResize() async throws {
+        let prose = "MARGIN PROSE " + String(
+            repeating: "ordinary spaced words make this paragraph reflow naturally ",
+            count: 18
+        ) + "END"
+        let url = try makeDocument(named: "initial-margin.md", content: "# Initial margin\n\n\(prose)")
+        let before = try snapshot(of: url)
+        for appearance in ["Light", "Dark"] {
+            let app = configuredApplication(appearance: appearance)
+            app.launch()
+            try await openWhileRunning(url, in: app)
+            let window = app.windows[url.lastPathComponent]
+            XCTAssertTrue(window.waitForExistence(timeout: 10))
+            let scroll = window.scrollViews["DocumentReaderScrollView"]
+            XCTAssertTrue(scroll.waitForExistence(timeout: 10))
+            let title = window.staticTexts["Initial margin"]
+            let paragraph = staticText(prose, in: window)
+            XCTAssertTrue(title.waitForExistence(timeout: 10))
+            XCTAssertTrue(paragraph.waitForExistence(timeout: 5))
+            XCTAssertGreaterThanOrEqual(title.frame.minY - scroll.frame.minY, 30)
+            assertInsideReadingMargins(title.frame, scrollView: scroll)
+
+            resize(window, to: CGSize(width: 1_200, height: 760))
+            let wide = paragraph.frame
+            XCTAssertGreaterThanOrEqual(title.frame.minY - scroll.frame.minY, 30)
+            XCTAssertTrue(title.isHittable)
+            XCTAssertGreaterThanOrEqual(wide.minX - scroll.frame.minX, 190)
+            XCTAssertLessThanOrEqual(wide.width, 760)
+            // AX reports the text's used width, not the surrounding column;
+            // its leading edge independently locates the centered 760pt column.
+            XCTAssertEqual(wide.minX - scroll.frame.minX, (scroll.frame.width - 760) / 2, accuracy: 2)
+
+            resize(window, to: CGSize(width: 520, height: 620))
+            XCTAssertTrue(waitUntil { paragraph.isHittable })
+            let narrow = paragraph.frame
+            XCTAssertGreaterThanOrEqual(title.frame.minY - scroll.frame.minY, 30)
+            XCTAssertTrue(title.isHittable)
+            assertInsideReadingMargins(narrow, scrollView: scroll)
+            XCTAssertGreaterThan(wide.width, narrow.width + 250)
+            XCTAssertGreaterThan(narrow.height, wide.height)
+            attachScreenshot(of: window, named: "Initial margin and narrow reflow — \(appearance)")
+            app.terminate()
+        }
+        let after = try snapshot(of: url)
+        XCTAssertEqual(after.data, before.data)
+        XCTAssertEqual(after.modificationDate, before.modificationDate)
+    }
+
     @MainActor
     func testReadingColumnReflowsAndKeepsCodeOverflowLocal() async throws {
         let prose = "PROSE START " + String(

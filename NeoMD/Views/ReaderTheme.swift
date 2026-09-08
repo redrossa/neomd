@@ -20,8 +20,8 @@ import SwiftUI
 /// - Important: The reader never applies a page-wide color transform. Appearance is
 ///   achieved by resolving adaptive colors, never by inverting, multiplying, hue
 ///   rotating, desaturating, or blending a rendered page. Document-provided content
-///   therefore keeps the colors its author chose. Image rendering, including
-///   appearance-specific image sources, is not part of this foundation.
+///   therefore keeps the colors its author chose. MarkdownImageParagraph honours
+///   this invariant while selecting appearance-specific image sources.
 /// - Important: No distinction the reader draws depends on color alone. Headings differ
 ///   in size and weight, quotations carry an indent and a leading rule, code keeps a
 ///   monospaced face inside its own container, list items keep literal markers, and a

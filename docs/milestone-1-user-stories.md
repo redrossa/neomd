@@ -180,6 +180,10 @@ Acceptance ideas:
 - Opening text remains responsive while remote images load.
 - Existing links to uploaded assets remain usable; uploading new assets is outside this reading milestone.
 
+Approved decisions (issue #12, 2026-09-08): accept every image format the system decoder accepts and document a tested subset (PNG, JPEG, GIF shown as a static first frame, SVG rendered statically by the system without running scripts); never prompt for folder permission automatically — inaccessible local images show their alternative text or a quiet placeholder with an explicit `Allow folder access` action that reuses the M1-10 session-only read-only grant; load both HTTP and HTTPS images, with the App Transport Security exception required for plain HTTP and the outgoing-network sandbox entitlement; support only GitHub's documented `<picture>`/`prefers-color-scheme` form with an `<img>` fallback, excluding the legacy `#gh-dark-mode-only`/`#gh-light-mode-only` fragments. [Picture-element reference](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax#the-picture-element); the `prefers-color-scheme` sun/moon example with its `user-images.githubusercontent.com` assets comes from the earlier revision of that section and is reproduced in `docs/fixtures/m1-12-images/network.md`. Local text rendering stays offline; only explicitly referenced remote images use the network.
+
+Validation boundary approved for M1-12: [option B](https://github.com/redrossa/neomd/issues/12#issuecomment-5589023958) tracks the accepted-base full-reflow hang separately in [#36](https://github.com/redrossa/neomd/issues/36), without changing the ordered story sequence. The unchanged full test remains **BLOCKED/deferred** until final milestone validation, not passed; initial margins and all other image/navigation/resize obligations remain required. [Actual fixture/gate evidence](m1-12-validation.md). Implementation pauses after M1-12; this does not authorize M1-13 or milestone closure.
+
 ### M1-13 — Notice alerts, emoji, and color references · Core
 
 As a reader skimming an agent's output, I want visual cues to communicate meaning so that I can notice cautions and useful context.
@@ -360,7 +364,7 @@ The guide's outline menu and authoring shortcuts are website interactions, not a
 1. Confirm that native window controls, the macOS menu bar, temporary system dialogs, and document links fit “no buttons.”
 2. Confirm separate windows for distinct documents. M1-10 now uses the current document's folder for leading-slash paths, with on-demand read-only enclosing-folder access for the current session (approved by email, 2026-09-08).
 3. Confirm the explicit color-swatch extension and account-free mention treatment.
-4. Choose the minimum macOS version, baseline Mac, performance target, and supported image formats; these are not settled by this brainstorm.
+4. Choose the minimum macOS version, baseline Mac, and performance target; these are not settled by this brainstorm. Supported image formats were settled for M1-12 on issue #12 (all system-decodable formats, documented tested subset).
 
 ## Suggested milestone review scenario
 

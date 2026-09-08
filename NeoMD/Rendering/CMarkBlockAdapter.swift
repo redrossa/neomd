@@ -184,6 +184,12 @@ nonisolated final class CMarkBlockAdapter {
             return (text, [])
         }
         if type == "html_block" {
+            if let picture = MarkdownPictureParser.parse(CMarkDocument.literal(node), documentURL: documentURL) {
+                var text = AttributedString(picture.alt.isEmpty ? MarkdownPictureParser.emptyAltCarrier : picture.alt)
+                text.markdownImage = picture.image
+                text.imageURL = picture.image.source
+                return (text, [])
+            }
             var text = AttributedString(CMarkDocument.literal(node))
             text.inlinePresentationIntent = .blockHTML
             return (MarkdownBlockRenderer.trimmed(text, keepingIndentation: false), [])
@@ -220,6 +226,9 @@ nonisolated final class CMarkBlockAdapter {
                         attributes.imageURL = documentURL.flatMap {
                             DocumentLocalPath.resolve(url, relativeTo: $0)?.fileURL
                         } ?? url
+                        attributes.markdownImage = MarkdownImage(source: attributes.imageURL, lightSource: nil, darkSource: nil,
+                            occurrence: "\(cmark_node_get_start_line(node)):\(cmark_node_get_start_column(node))")
+                        if CMarkDocument.children(node).isEmpty { literal = MarkdownPictureParser.emptyAltCarrier }
                     }
                 }
             case "footnote_reference":

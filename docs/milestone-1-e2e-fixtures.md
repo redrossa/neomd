@@ -494,6 +494,116 @@ Physical input, full VoiceOver, browser page content and combined milestone busi
 - M1-12 must not turn `imageURL` loading into an automatic launch; M1-16 selection/copy inside link-bearing blocks should be re-checked against the background attachment.
 - Risk: default-browser variance across hosts (Safari vs Chrome tab behaviour); the test derives the browser from LaunchServices and never hard-codes it.
 
+## M1-12 — View illustrations and screenshots
+
+**Current execution record:** [M1-12 validation](m1-12-validation.md) contains actual selectors/results, plain-build setup, clipboard source-delta assessment and exact gate mapping. [Approved option B](https://github.com/redrossa/neomd/issues/12#issuecomment-5589023958) defers only the unchanged full reflow test under [#36](https://github.com/redrossa/neomd/issues/36): **BLOCKED/deferred, not passed**. The separate initial-margin/resize and repeated-image-scroll checks pass. Final milestone acceptance remains user-owned.
+
+The triage plan and recovery history below are preserved as historical context; superseded proposed setup/oracles are not current execution instructions.
+
+[Issue #12](https://github.com/redrossa/neomd/issues/12) · [PR #37](https://github.com/redrossa/neomd/pull/37) · [blocked assessment and feasibility probes](https://github.com/redrossa/neomd/issues/12#issuecomment-5579457860) · [approved decisions 1C/2A/3B/4/5](https://github.com/redrossa/neomd/issues/12#issuecomment-5584759706) · [accepted plan (baseline)](https://github.com/redrossa/neomd/issues/12#issuecomment-5584922066).
+
+Implementation base: `265cd3e30fd94e859d6811705caff09ae48de132`. No reviewer stage; the worker self-validates with the gates below and the coordinator merges on evidence. Everything in this entry is **planned**; nothing below is executed evidence until the worker records results in "Actual commands/results". Selectors marked *existing* are on the accepted base; all `MarkdownImage…` identifiers and `DocumentImageUITests` are *proposed*.
+
+### Durable fixture
+
+Checked-in path: `docs/fixtures/m1-12-images/` — `illustrated.md` (local cases, markers `LOCAL START`/`LOCAL END`), `remote.md` (loopback template; the literal `PORT` is replaced by the test), `network.md` (real GitHub-hosted assets, manual only), `README-fixture.md` (file → bytes → expected table), and `img/` with deterministic solid-colour bitmaps: `wide.png` 1200×300 orange, `small.png` 64×32 green, `photo.jpg` 320×240 magenta, `anim.gif` 48×48 two frames (red then blue), `vector.svg` purple with an inert `<script>`, `sun.png` yellow / `moon.png` blue / `fallback.png` gray for `<picture>`, `private.png` (chmod 000 by the test), `not-an-image.png` (text bytes); `img/absent.png` is deliberately missing. Solid colours let a screenshot sample prove original colours in both appearances.
+
+### Setup, isolation and cleanup
+
+- Copy the folder to `FileManager.default.temporaryDirectory/NeoMD-Images-<UUID>`; never open the repository copy. Set a fixed modification date and record bytes/mtimes of every file (M1-10 pattern, *existing* in `NearbyFileLinkUITests`).
+- Opening route, launch arguments (`-ApplePersistenceIgnoreState YES`), `NEOMD_UI_TEST_APPEARANCE`, and the DEBUG-only `NEOMD_UI_TEST_APPEARANCE_CHANNEL=1` distributed notification are all *existing* (`NearbyFileLinkUITests.open`, `AppearanceUITests`).
+- Loopback server: the test process owns an `NWListener` on `127.0.0.1` with an ephemeral port serving `/wide.png` and `/not-an-image.png` immediately, `/slow.png` (bytes of `small.png`) after a 4 s delay, `/absent.png` as 404. Write `remote.md` with `PORT` substituted. No real network; the app's new outgoing-network entitlement is exercised by loopback. Stop the listener in teardown.
+- Sandbox caveat (*existing*, M1-10): `xcodebuild … test` products carry an absolute-path read exception, so UI tests cannot observe real sandbox denial; `chmod 000 img/private.png` exercises the inaccessible branch and the folder panel; the real grant is the manual plain-build check.
+- Cleanup: `chmod 644 img/private.png`, assert bytes/mtimes unchanged, remove the folder, terminate NeoMD, stop the listener. Assert no `UserDefaults` key is introduced (the implementation stores no bookmarks or image caches on disk).
+
+### Historical selectors and commands (superseded)
+
+**Do not run the historical broad UI command below on a shared clipboard.** Use the current nonclipboard commands/exclusions in [M1-12 validation](m1-12-validation.md); copy tests require a newly approved exclusive window.
+
+Unit (Swift Testing, new `NeoMDTests/MarkdownImagesTests.swift`): `pictureBlockBecomesAnImageParagraph`, `pictureSourcesUseTheDocumentPathPolicy`, `pictureWithoutImgOrWithExtraContentStaysLiteral`, `emptyAltImagesKeepACarrierRun`, `appearanceSelectionPrefersMatchingSourceThenFallback`, `displaySizeClampsToWidthPreservingAspectRatio`, `loaderClassifiesMissingInaccessibleUndecodableAndUnavailable`, `loaderRefusesNonImageSchemesWithoutNetwork`. Existing image tests remain green: `MarkdownBlockRendererTests/localImagesUseTheDocumentPathPolicy`, `CMarkParityTests/supportedExtensionsAndFlattenedPresentation`.
+
+UI (XCTest, new `NeoMDUITests/DocumentImageUITests.swift`): `testLocalImagesDisplayWithPreservedAspectRatioAndOriginalColors`, `testPictureSourcesFollowAppearanceAndUpdateLive`, `testUnavailableImagesShowAlternativeTextAndOfferFolderAccess`, `testRemoteImagesLoadWithoutBlockingText`.
+
+```sh
+xcodebuild -project NeoMD.xcodeproj -scheme NeoMD -configuration Debug -destination 'platform=macOS' \
+  -derivedDataPath /tmp/NeoMD-DerivedData -resultBundlePath /tmp/neomd-12-build.xcresult build
+codesign -d --entitlements :- /tmp/NeoMD-DerivedData/Build/Products/Debug/NeoMD.app   # expect network.client + user-selected read-only
+xcodebuild -project NeoMD.xcodeproj -scheme NeoMD -destination 'platform=macOS' \
+  -derivedDataPath /tmp/NeoMD-DerivedData -only-testing:NeoMDTests \
+  -resultBundlePath /tmp/neomd-12-units.xcresult test
+xcodebuild -project NeoMD.xcodeproj -scheme NeoMD -destination 'platform=macOS' \
+  -derivedDataPath /tmp/NeoMD-DerivedData -parallel-testing-enabled NO \
+  -only-testing:NeoMDUITests/DocumentImageUITests \
+  -only-testing:NeoMDUITests/DocumentLinkNavigationUITests \
+  -only-testing:NeoMDUITests/NearbyFileLinkUITests \
+  -only-testing:NeoMDUITests/WebLinkUITests \
+  -only-testing:NeoMDUITests/DocumentReaderLayoutUITests/testDocumentStructureAndEmphasis \
+  -resultBundlePath /tmp/neomd-12-ui.xcresult test
+```
+
+The M1-09/M1-10/M1-11 classes and the M1-06 structure test are regression gates because paragraph rendering in `MarkdownBlockView` changes for every leaf. Use fresh result-bundle paths on reruns.
+
+### Criteria → actions → expected outcomes → evidence
+
+| Criterion | Actions | Expected outcome | Planned evidence |
+|---|---|---|---|
+| 1. Local and HTTP(S) images, aspect ratio, sensible sizing | Open `illustrated.md` (Light); locate `MarkdownImageBlock-<id>` for `Wide orange screenshot` and `Small green figure`; read their frames; sample the screenshot pixel at each frame centre; open `remote.md` | Wide block width equals the reading column width (±2 pt) and height equals width/4 (±2 pt); small block is 64×32 (±2 pt), not stretched; centre pixels are orange / green; JPEG, GIF (red first frame) and SVG (purple, window title never `SCRIPT EXECUTED`) blocks report value `Image displayed`; inline badge sentence keeps its words on either side of the images; the fast loopback `http://` image reports `Image displayed` | `displaySizeClampsToWidthPreservingAspectRatio` + `testLocalImagesDisplayWithPreservedAspectRatioAndOriginalColors` + `testRemoteImagesLoadWithoutBlockingText` |
+| 2. Documented `<picture>` use case with appearance-specific sources and image fallback | Same document: the two `<picture>` blocks and the non-documented `<picture>` | The first picture is an image block (label = its alt) showing yellow in Light; the dark-only picture shows gray (fallback) in Light; the `<picture>` without `<img>` remains literal text (`window.staticTexts` containing `<picture>`), exactly as on the base | `pictureBlockBecomesAnImageParagraph`, `pictureWithoutImgOrWithExtraContentStaysLiteral`, `appearanceSelectionPrefersMatchingSourceThenFallback` + `testPictureSourcesFollowAppearanceAndUpdateLive` |
+| 3. Original colours in both themes; appearance-specific sources switch live | Launch with `NEOMD_UI_TEST_APPEARANCE_CHANNEL=1`, Light; scroll so the wide image and the first picture are visible; record the `LOCAL END`/picture frames; post `Dark` on `io.neomd.uitest.setAppearance` (*existing*); wait ≤ 5 s; post `Light` | Wide image centre stays orange in Dark (no inversion/transform); first picture centre changes yellow → blue → yellow; dark-only picture gray → blue → gray; block frames unchanged (±1 pt, reading position kept); no re-render (marker element identity/frames unchanged) | `testPictureSourcesFollowAppearanceAndUpdateLive`; real system switch via `Scripts/appearance-test-host.sh` at final milestone |
+| 4. Missing/inaccessible/offline → alternative text or quiet placeholder, non-blocking | `illustrated.md` unavailable section (after `chmod 000 img/private.png`); `remote.md` unreachable section | `Missing diagram`, `Private diagram`, `Corrupt diagram` are visible static texts; their blocks report `Image unavailable`; `Text after the unavailable images…` and `LOCAL END` exist; only the private block shows button `MarkdownImageAccessButton-<id>` (`Allow folder access`); clicking it presents the native folder panel (`open-panel`, *existing*); Cancel keeps the placeholder and text, no alert, no window; the empty-alt block shows a placeholder with no visible text and value `Image unavailable` when its file is later made unreadable (optional); refused, TLS-failed, 404 and text-bodied remote images all report `Image unavailable` within 10 s and `REMOTE END` is present throughout | `loaderClassifiesMissingInaccessibleUndecodableAndUnavailable` + `testUnavailableImagesShowAlternativeTextAndOfferFolderAccess` + `testRemoteImagesLoadWithoutBlockingText` |
+| 5. Opening text remains responsive while remote images load | Open `remote.md` while `/slow.png` is delayed 4 s | `REMOTE START` and `REMOTE END` exist within 2 s of the window appearing; the slow block reports `Image loading` first, then `Image displayed` by 10 s; scrolling and text selection work during the delay | `testRemoteImagesLoadWithoutBlockingText` |
+| 6. Existing uploaded-asset links usable; no uploading | Automated: ordinary `![alt](https://…)` and `[![badge](img)](href)` forms; the retired attachment address in `network.md` | The linked badge's `https://example.com/badge` remains in the block's keyboard link cycle (`MarkdownLinkBlock-<id>` value, *existing*) and contextual menu (*existing* M1-11); nothing in the UI offers upload/drag-in of assets (no toolbar, no drop target other than the existing Markdown file drop). Manual: `network.md` displays GitHub's documented sun/moon assets and shows alt text for the retired attachment | Existing link tests + manual network check |
+
+### Appearance, keyboard, accessibility, read-only
+
+- Light/Dark: criterion 3 test runs in one session across both; also run the local test once with `NEOMD_UI_TEST_APPEARANCE=Dark` and attach screenshots.
+- Width/full-screen: resize the window narrower than 1200 pt; the wide image tracks the column width and the reading position restoration (M1-04, *existing*) still lands.
+- Keyboard: Option-Tab / arrows / Return on the inline linked badge activates its link exactly as M1-09/M1-11; `Allow folder access` is a native button reachable by Tab and Space.
+- AX: image-only paragraphs are single elements with `.isImage`, label = alt (or `Image` when alt is empty) and value = `Image displayed` / `Image loading` / `Image unavailable`; inline images inside sentences carry their alt as the attachment's accessibility label; placeholders keep the alt as real text so VoiceOver reads it. VoiceOver speech order stays deferred.
+- Read-only: bytes/mtimes unchanged; no bookmark or preference written; no cache files inside the fixture.
+- Security: `vector.svg` script never executes; remote loads are `URLSession` fetches decoded by ImageIO/NSImage only; no image click launches an application; `data:` and non-HTTP(S)/file schemes are never fetched.
+- Not covered by automation: real sandbox grant, real system appearance switch, real network, animated playback (not a criterion), VoiceOver.
+
+### Manual checks (plain build, real sandbox and network; final milestone)
+
+1. Build with `xcodebuild … build`; `codesign -d --entitlements :-` lists `com.apple.security.network.client` and user-selected read-only, no absolute-path exception. Copy the fixture to `~/Documents/NeoMD-M1-12/`, open `illustrated.md` from Finder.
+2. Every local image shows alt text with `Allow folder access` (no automatic panel); text is fully readable. Click one `Allow folder access` → panel preselects `img/` → choose it → all images in the document display without another prompt; Cancel instead keeps placeholders.
+3. Switch System Settings → Appearance: picture blocks swap sun/moon; orange, green, magenta, purple images keep their colours.
+4. Open `network.md` online: documented assets display; the retired attachment shows alt text. Then go offline (Wi-Fi off) and reopen: alt text for all, text readable immediately.
+5. Quit and relaunch: opening `illustrated.md` prompts again through the button (no persisted grant). Console shows no sandbox violation during step 2.
+
+### Actual commands/results
+
+Recovery checkpoint (2026-09-08), branch `story/12-images`, base/HEAD `265cd3e30fd94e859d6811705caff09ae48de132`, uncommitted implementation; **not a validated final head or acceptance**. The tables above preserve the authored plan, not execution claims. Binding revisions: [eager system decoding](https://github.com/redrossa/neomd/issues/12#issuecomment-5584997087), [screenshot bitmap oracle](https://github.com/redrossa/neomd/issues/12#issuecomment-5585145630), [external test controller](https://github.com/redrossa/neomd/issues/12#issuecomment-5585488204), [narrow linked-image native leaf](https://github.com/redrossa/neomd/issues/12#issuecomment-5585720602).
+
+Corrections to the planned setup/oracles: remote fixtures use the external `Scripts/image_test_controller.py`, fresh token/nonzero port/readiness and explicit delayed-response release, **not** an in-runner listener or a fixed four-second delivery delay. Bitmap dimensions come from solid-colour screenshot footprints converted to points, with independently expected fitted dimensions and the unchanged ±2pt threshold; native text AX frames are checked separately. Linked-image leaves (including headings) use the approved NSTextView attachment adapter, not the ordinary unlinked-image SwiftUI path. `fallback.png` is blue-gray (#8c959f), not neutral gray. See `docs/image-test-controller.md` for current commands and clipboard safety limitations.
+
+Recovered exact-source evidence before the new clipboard test-harness changes:
+- Controller: `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s Scripts -p 'test_image_test_controller.py' -v`: 5/0, `/tmp/neomd-12-final-controller.log`.
+- App: command prefix above, Debug, `-derivedDataPath /tmp/NeoMD-12-Plain-DerivedData build`: succeeded, `/tmp/neomd-12-final-source-build.log`.
+- All units: command prefix above, `-derivedDataPath /tmp/NeoMD-12-DerivedData -resultBundlePath /tmp/NeoMD-12-FinalUnits.xcresult -only-testing:NeoMDTests test`: 136 passed, 0 failed/skipped, `/tmp/neomd-12-final-source-units.log`.
+- Image UI: `TEST_RUNNER_NEOMD_PLAIN_APP_PATH=/tmp/NeoMD-12-Plain-DerivedData/Build/Products/Debug/NeoMD.app PYTHONDONTWRITEBYTECODE=1 python3 Scripts/image_test_controller.py --timeout 420 -- xcodebuild` with the project/scheme/macOS destination above, `-derivedDataPath /tmp/NeoMD-12-DerivedData -resultBundlePath /tmp/NeoMD-12-FinalImages.xcresult -only-testing:NeoMDUITests/DocumentImageUITests test`: 11 passed/0 failed, 272.730s, `/tmp/neomd-12-final-source-images.log`.
+- Actual image selectors include the four original methods plus `testImagesRefitDuringActualWindowResize`, `testLinkedBadgeRetainsActivationAndContextMenu`, `testLinkedHeadingRetainsProseAndKeyboardNavigationInBothThemes`, `testNativeLinkedImageParagraphKeepsProseSelectionReadOnly`, `testNativeLinkedImagesWrapAndResizeWithoutUpscalingInBothThemes`, `testImageReaderRepeatedScrollingRetainsResponsiveContent`, and `testPlainSandboxFolderGrantsAndArbitraryHostNetworking`.
+- Plain test (68.710s within that 11/0 result) verified signed sandbox/network.client/user-selected-read-only and no temporary-exception entitlement; real `http://httpbin.org/image/png` and `https://httpbin.org/image/png` displayed from the separate plain artifact. It exercised keyboard access action, Cancel, unrelated folder, successful image-folder grant, retained text and the suite's source byte/mtime teardown. This is not a claim that every public host works or that all final-milestone manual steps were run.
+- Latest combined serialized regression attempt, `/tmp/NeoMD-12-FinalRegressions.xcresult`, timed out at 1500s: navigation class 8/0 completed; structure/emphasis failed at line148 amid Terminal interruption and later missing-window snapshots. The entire attempt **did not pass**. Recovery sampled its exact orphan PID18597: idle AppKit loop, 94.7MB footprint (not earlier 6.5GB SwiftUI churn); terminated only that owned process.
+- Recovery reran only `-only-testing:NeoMDUITests/DocumentReaderLayoutUITests/testDocumentStructureAndEmphasis` with `-parallel-testing-enabled NO`, the same project/scheme/destination/DerivedData and `/tmp/NeoMD-12-ResumeStructure.xcresult`: 1/0, 35.413s; `/tmp/neomd-12-resume-structure.log`. No source repair was inferred from the interrupted run.
+- Earlier smaller regressions passed: WebLinkUITests 5/0 in67.463s (`/tmp/neomd-12-web-regressions.log`); three layout resize/restoration tests 3/0 in106.768s (`/tmp/neomd-12-layout-regressions.log`). These predate final quoted-style adjustments; they are not substitutes for final-head evidence.
+
+Original layout failure remains preserved. Later controlled uninstrumented investigation found that disabling observers/single-root wrapping/top anchor did not cure it; removing the ScrollPosition binding passed, and retaining the binding with `ScrollPosition(edge: .top)` instead of continuous `idType` tracking passed. The inherited narrow initializer change is in `DocumentReaderView`, with explicit point/ID requests retained. Repeated scrolling also passed in the final image suite. This supplies controlled intervention evidence beyond the earlier instrumented pass; it does not establish SwiftUI's internal physical root cause or waive restoration regression gates.
+
+Post-clipboard-harness compilation/unit gate: same project/scheme/macOS destination, `-derivedDataPath /tmp/NeoMD-12-DerivedData -resultBundlePath /tmp/NeoMD-12-ResumeUnits.xcresult -only-testing:NeoMDTests test`: 136 passed, 0 failed/skipped; `/tmp/neomd-12-resume-units.log`. This compiles the new UI helper without running clipboard-mutating UI. `git diff --check` and the five Python lifecycle tests passed again.
+
+**Superseded clipboard checkpoint:** live integration subsequently passed 3/0/0 in the user-approved exclusive window and current-window restoration succeeded. The window is now released. Previously lost contents remain unrecoverable; the final check/write race is not eliminated by NSPasteboard. See [current evidence and source-delta assessment](m1-12-validation.md#clipboard-evidence-reuse--no-new-clipboard-window). Do not rerun general-clipboard tests without renewed agreement.
+
+### Deferred and cross-story
+
+- [#36 baseline reflow hang](https://github.com/redrossa/neomd/issues/36): unchanged `testReadingColumnReflowsAndKeepsCodeOverflowLocal` remains BLOCKED until final milestone validation. Reproduction, failed control evidence and cleanup are in [M1-12 validation](m1-12-validation.md#durable-baseline-reproduction-and-unresolved-milestone-gate). Focused margin checks do not replace it.
+- M1-13 alerts and M1-15 HTML: standalone `<img>` / `<p align="center"><img …></p>` blocks stay literal in this story (only Markdown images and the documented `<picture>` form are in scope); decide their treatment in M1-15.
+- M1-16: verify selection/copy across paragraphs containing inline images; M1-21: find must ignore the empty-alt carrier character.
+- M1-22 reading size and M1-23 external changes: image sizing under text scaling and cache invalidation on re-render are not exercised here.
+- Final sweep: combine image loading with resize restoration, multiple windows and Light/Dark; verify the folder grant from an image button also unlocks M1-10 links in the same folder.
+- Risk: `Text` inline-image attachment metrics differ from GitHub for very tall images inside sentences; block-level (image-only) paragraphs are the primary sizing contract.
+
 ## Future story entry template
 
 Copy and complete in every subsequent story PR; do not replace prior entries.

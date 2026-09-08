@@ -35,7 +35,8 @@ struct MarkdownContainerView: View {
     @ViewBuilder private func nodeView(_ node: MarkdownBlock,
                                       entry: MarkdownContainerGeometry.Entry, budget: CGFloat) -> some View {
         if node.isLeaf {
-            MarkdownBlockView(block: node, theme: theme, keyboardFocus: keyboardFocus, pageReader: pageReader)
+            MarkdownBlockView(block: node, theme: theme, keyboardFocus: keyboardFocus, pageReader: pageReader,
+                              availableWidth: entry.width, quoted: entry.quoted)
                 .foregroundStyle(entry.quoted ? Color.secondary : Color.primary)
         } else {
             switch node.kind {

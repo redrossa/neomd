@@ -162,25 +162,16 @@ final class WebLinkUITests: XCTestCase {
         let before = browserPIDs(browser)
         let (app, window) = try await open()
         let pasteboard = NSPasteboard.general
-        let saved = (pasteboard.pasteboardItems ?? []).map { item in
-            item.types.compactMap { type in item.data(forType: type).map { (type, $0) } }
-        }
-        defer {
-            pasteboard.clearContents()
-            pasteboard.writeObjects(saved.map { representations in
-                let item = NSPasteboardItem()
-                for (type, data) in representations { item.setData(data, forType: type) }
-                return item
-            })
-        }
         let link = window.links["Example site"]
         XCTAssertTrue(link.isHittable)
         let leading = link.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5))
         leading.withOffset(CGVector(dx: -25, dy: 0)).doubleClick()
         leading.withOffset(CGVector(dx: -50, dy: 0)).press(forDuration: 0.1,
             thenDragTo: leading.withOffset(CGVector(dx: -5, dy: 0)))
-        app.typeKey("c", modifierFlags: .command)
-        XCTAssertEqual(pasteboard.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines), "Labeled")
+        try await ClipboardTestLease.copy(expected: "Labeled") {
+            app.typeKey("c", modifierFlags: .command)
+            XCTAssertTrue(pasteboard.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines) == "Labeled", "Expected copied fixture prose")
+        }
         XCTAssertEqual(browserPIDs(browser), before)
         XCTAssertFalse(app.menuItems["Copy Link"].exists)
         XCTAssertTrue(link.isHittable)
@@ -190,19 +181,6 @@ final class WebLinkUITests: XCTestCase {
         let browser = try browserIdentifier()
         let before = browserPIDs(browser)
         let pasteboard = NSPasteboard.general
-        // Preserve every original representation, not just plain text.
-        let saved = (pasteboard.pasteboardItems ?? []).map { item in
-            item.types.compactMap { type in item.data(forType: type).map { (type, $0) } }
-        }
-        defer {
-            pasteboard.clearContents()
-            let items = saved.map { representations in
-                let item = NSPasteboardItem()
-                for (type, data) in representations { item.setData(data, forType: type) }
-                return item
-            }
-            pasteboard.writeObjects(items)
-        }
         for appearance in ["Light", "Dark"] {
             let (app, window) = try await open(appearance: appearance)
             if appearance == "Dark" {
@@ -219,8 +197,10 @@ final class WebLinkUITests: XCTestCase {
             attachment.name = "Web link context menu — \(appearance)"
             attachment.lifetime = .keepAlways
             add(attachment)
-            app.menuItems["Copy Link"].click()
-            XCTAssertEqual(pasteboard.string(forType: .string), "https://example.com/path?q=1")
+            try await ClipboardTestLease.copy(expected: "https://example.com/path?q=1") {
+                app.menuItems["Copy Link"].click()
+                XCTAssertTrue(pasteboard.string(forType: .string) == "https://example.com/path?q=1", "Expected copied fixture URL")
+            }
             XCTAssertEqual(browserPIDs(browser), before)
             XCTAssertEqual(app.windows.count, 1)
             window.links["First site"].rightClick()

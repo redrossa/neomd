@@ -25,13 +25,18 @@ struct DocumentReaderView: View {
     @Environment(\.openDocument) private var openDocument
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openURL) private var systemOpenURL
+    @State private var imageStore = MarkdownImageStore()
     @State private var renderedDocument = MarkdownRenderDocument.empty
     @State private var linkNotice: String?
     @State private var noticeGeneration = 0
     @State private var navigationGeneration = 0
     @State private var isRendered = false
     @State private var windowID = UUID()
-    @State private var scrollPosition = ScrollPosition(idType: Int.self)
+    // Let ScrollView establish its initial viewport as rendered content arrives,
+    // rather than requesting an edge while the loading placeholder is present.
+    // The default Never ID type avoids continuous row-ID tracking; explicit
+    // navigation and resize restoration still issue their point/ID requests.
+    @State private var scrollPosition = ScrollPosition()
     @State private var scrollMetrics = DocumentReaderScrollMetrics.zero
     @State private var blockFrames: [Int: CGRect] = [:]
     @State private var navigationBridge = DocumentNavigationBridge()
@@ -89,6 +94,12 @@ struct DocumentReaderView: View {
                 handleBlockFrames(frames, viewportSize: geometry.size)
             }
         }
+        .environment(imageStore)
+        .environment(\.documentImageAccess, { url in
+            guard let fileURL else { return }
+            _ = await openingCoordinator?.folderAccess.requestReadAccess(for: url, documentURL: fileURL)
+            imageStore.retryInaccessible()
+        })
         .environment(\.documentNavigationBridge, navigationBridge)
         .environment(\.documentNavigationGeneration, documentGeneration)
         .environment(\.openURL, OpenURLAction { url in handleLink(url) })
@@ -115,6 +126,7 @@ struct DocumentReaderView: View {
             dismissWindow(id: DocumentOpeningCoordinator.noDocumentWindowSceneID)
         }
         .onDisappear {
+            imageStore.reset()
             resizeRestoration.invalidate()
             navigationGeneration += 1
             navigationBridge.cancel()
@@ -222,6 +234,7 @@ struct DocumentReaderView: View {
 
     /// Renders `source` away from the main actor and publishes the result.
     private func render(_ source: String) async {
+        imageStore.reset()
         isRendered = false
         navigationBridge.replaceDocument()
         documentGeneration = navigationBridge.generation
