@@ -101,7 +101,11 @@ final class DocumentOpeningUITests: XCTestCase {
     @MainActor
     private func openFromNativePanel(_ url: URL, in app: XCUIApplication) {
         invokeMenuOpen(in: app)
+        selectFromNativePanel(url, in: app)
+    }
 
+    @MainActor
+    private func selectFromNativePanel(_ url: URL, in app: XCUIApplication) {
         let panel = openPanel(in: app)
         XCTAssertTrue(panel.waitForExistence(timeout: 5))
         app.typeKey("g", modifierFlags: [.command, .shift])
@@ -125,7 +129,7 @@ final class DocumentOpeningUITests: XCTestCase {
 
     @MainActor
     private func readerWindow(containing text: String, in app: XCUIApplication) -> XCUIElement {
-        app.windows.containing(.staticText, identifier: text).firstMatch
+        app.windows.containing(.textView, identifier: text).firstMatch
     }
 
     @MainActor
@@ -252,6 +256,16 @@ final class DocumentOpeningUITests: XCTestCase {
         return url
     }
 
+    private func makeStartupFixture(named name: String) throws -> URL {
+        let fixtures = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("docs/fixtures/m1-p1-startup")
+        return try makeDocument(
+            named: name,
+            content: String(contentsOf: fixtures.appendingPathComponent(name), encoding: .utf8)
+        )
+    }
+
     private func snapshot(of url: URL) throws -> (data: Data, modificationDate: Date) {
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
         return (
@@ -321,8 +335,12 @@ final class DocumentOpeningUITests: XCTestCase {
         let app = configuredApplication()
         app.launch()
 
-        XCTAssertTrue(noDocumentWindow(in: app).waitForExistence(timeout: 10))
-        XCTAssertFalse(openPanel(in: app).exists, "Launch should not force an Open panel.")
+        XCTAssertTrue(openPanel(in: app).waitForExistence(timeout: 10))
+        XCTAssertFalse(noDocumentWindow(in: app).exists)
+        XCTAssertEqual(app.windows.count, 1, "Only the native startup panel should be visible.")
+        cancelOpenPanel(in: app)
+        XCTAssertEqual(app.windows.count, 0)
+        XCTAssertEqual(app.state, .runningForeground)
 
         invokeMenuOpen(in: app)
         XCTAssertTrue(
@@ -337,21 +355,20 @@ final class DocumentOpeningUITests: XCTestCase {
             "Command-O should present the native Open panel."
         )
         cancelOpenPanel(in: app)
+        XCTAssertEqual(app.windows.count, 0)
     }
 
     @MainActor
     func testNoFileLifecycleAndEmptyDocumentStayDistinct() async throws {
-        let emptyDocument = try makeDocument(named: "empty.md", content: "")
+        let emptyDocument = try makeStartupFixture(named: "empty.md")
         let app = configuredApplication()
         app.launch()
 
         let instruction = app.staticTexts["NoDocumentInstruction"]
-        XCTAssertTrue(instruction.waitForExistence(timeout: 10))
-
-        app.typeKey("o", modifierFlags: .command)
-        XCTAssertTrue(openPanel(in: app).waitForExistence(timeout: 5))
+        XCTAssertTrue(openPanel(in: app).waitForExistence(timeout: 10))
+        XCTAssertFalse(instruction.exists)
         cancelOpenPanel(in: app)
-        XCTAssertTrue(instruction.exists, "Canceling without a document keeps the instruction.")
+        XCTAssertEqual(app.windows.count, 0, "Cancellation must leave no starter window.")
 
         try await openWhileRunning(emptyDocument, in: app)
         let emptyMessage = app.staticTexts["This document is empty."]
@@ -364,6 +381,39 @@ final class DocumentOpeningUITests: XCTestCase {
             "Closing the final document should return to the no-file instruction."
         )
         XCTAssertFalse(emptyMessage.exists)
+    }
+
+    @MainActor
+    func testStartupPickerSelectsDocumentWithoutStarterWindow() throws {
+        let url = try makeStartupFixture(named: "launch.md")
+        let before = try snapshot(of: url)
+        let app = configuredApplication()
+        app.launch()
+        XCTAssertTrue(openPanel(in: app).waitForExistence(timeout: 10))
+        XCTAssertEqual(app.windows.count, 1)
+        XCTAssertFalse(noDocumentWindow(in: app).exists)
+        selectFromNativePanel(url, in: app)
+        XCTAssertTrue(app.textViews["M1-P1 EXPLICIT FILE CONTENT."].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.windows.count, 1)
+        XCTAssertFalse(noDocumentWindow(in: app).exists)
+        let after = try snapshot(of: url)
+        XCTAssertEqual(after.data, before.data)
+        XCTAssertEqual(after.modificationDate, before.modificationDate)
+    }
+
+    @MainActor
+    func testColdExplicitUnicodeFileOpensWithoutStartupPanel() throws {
+        let url = try makeStartupFixture(named: "Meeting café.MD")
+        let before = try snapshot(of: url)
+        let app = configuredApplication()
+        app.open(url)
+        XCTAssertTrue(app.textViews["M1-P1 UNICODE FILE CONTENT."].waitForExistence(timeout: 10))
+        XCTAssertFalse(openPanel(in: app).exists)
+        XCTAssertFalse(noDocumentWindow(in: app).exists)
+        XCTAssertEqual(app.windows.count, 1)
+        let after = try snapshot(of: url)
+        XCTAssertEqual(after.data, before.data)
+        XCTAssertEqual(after.modificationDate, before.modificationDate)
     }
 
     @MainActor
@@ -380,9 +430,9 @@ final class DocumentOpeningUITests: XCTestCase {
 
         // Opening a URL while stopped exercises the cold native open-document path.
         app.open(url)
-        XCTAssertTrue(app.staticTexts["Start"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "value == %@", "Start")).firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["NoDocumentInstruction"].waitForNonExistence(timeout: 5))
-        let marker = app.staticTexts["SCROLL POSITION MARKER"]
+        let marker = app.textViews["SCROLL POSITION MARKER"]
         scrollToElement(marker, in: app.scrollViews.firstMatch)
         let markerFrameBeforeCancellation = marker.frame
 
@@ -405,15 +455,15 @@ final class DocumentOpeningUITests: XCTestCase {
         let app = configuredApplication()
 
         app.open(firstURL)
-        XCTAssertTrue(app.staticTexts["FIRST WINDOW CONTENT"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.textViews["FIRST WINDOW CONTENT"].waitForExistence(timeout: 10))
         try await openWhileRunning(secondURL, in: app)
-        XCTAssertTrue(app.staticTexts["SECOND WINDOW CONTENT"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.textViews["SECOND WINDOW CONTENT"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.windows[firstURL.lastPathComponent].exists)
         XCTAssertTrue(app.windows[secondURL.lastPathComponent].exists)
 
         closeWindow(app.windows[secondURL.lastPathComponent])
-        XCTAssertTrue(app.staticTexts["SECOND WINDOW CONTENT"].waitForNonExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["FIRST WINDOW CONTENT"].exists)
+        XCTAssertTrue(app.textViews["SECOND WINDOW CONTENT"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.textViews["FIRST WINDOW CONTENT"].exists)
         XCTAssertFalse(app.staticTexts["NoDocumentInstruction"].exists)
 
         closeWindow(app.windows[firstURL.lastPathComponent])
@@ -446,9 +496,9 @@ final class DocumentOpeningUITests: XCTestCase {
         let app = configuredApplication()
 
         app.open(firstURL)
-        XCTAssertTrue(app.staticTexts["FIRST SHARED DOCUMENT"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.textViews["FIRST SHARED DOCUMENT"].waitForExistence(timeout: 10))
         try await openWhileRunning(secondURL, in: app)
-        XCTAssertTrue(app.staticTexts["SECOND SHARED DOCUMENT"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.textViews["SECOND SHARED DOCUMENT"].waitForExistence(timeout: 10))
 
         let firstWindow = readerWindow(containing: "FIRST SHARED DOCUMENT", in: app)
         let secondWindow = readerWindow(containing: "SECOND SHARED DOCUMENT", in: app)
@@ -501,14 +551,14 @@ final class DocumentOpeningUITests: XCTestCase {
         let app = configuredApplication()
 
         app.open(firstURL)
-        XCTAssertTrue(app.staticTexts["SAME FILE START"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.textViews["SAME FILE START"].waitForExistence(timeout: 10))
         let firstWindow = app.windows[firstURL.lastPathComponent]
-        let position = app.staticTexts["SAME FILE POSITION"]
+        let position = app.textViews["SAME FILE POSITION"]
         scrollToElement(position, in: firstWindow.scrollViews.firstMatch)
         let positionYBeforeReopening = position.frame.minY
 
         try await openWhileRunning(secondURL, in: app)
-        XCTAssertTrue(app.staticTexts["OTHER READER SURVIVES"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.textViews["OTHER READER SURVIVES"].waitForExistence(timeout: 10))
         let secondWindow = app.windows[secondURL.lastPathComponent]
         XCTAssertTrue(secondWindow.waitForExistence(timeout: 5))
         assertFrontmost(named: secondURL.lastPathComponent, in: app)
@@ -603,11 +653,15 @@ final class DocumentOpeningUITests: XCTestCase {
         let url = try makeDocument(named: "drop-empty.md", content: "EMPTY DROP CONTENT")
         let before = try snapshot(of: url)
         let app = configuredApplication()
-        app.launch()
+        // The instruction scene is retained only after last close until #41.
+        let seed = try makeDocument(named: "drop-seed.md", content: "")
+        app.open(seed)
+        XCTAssertTrue(app.staticTexts["This document is empty."].waitForExistence(timeout: 10))
+        closeWindow(app.windows[seed.lastPathComponent])
 
         dragFromFinder(url, to: noDocumentWindow(in: app))
 
-        XCTAssertTrue(app.staticTexts["EMPTY DROP CONTENT"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.textViews["EMPTY DROP CONTENT"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["NoDocumentInstruction"].waitForNonExistence(timeout: 5))
         let after = try snapshot(of: url)
         XCTAssertEqual(after.data, before.data)
@@ -632,15 +686,15 @@ final class DocumentOpeningUITests: XCTestCase {
         let app = configuredApplication()
 
         app.open(firstURL)
-        XCTAssertTrue(app.staticTexts["FIRST DROP WINDOW"].waitForExistence(timeout: 10))
-        let position = app.staticTexts["FIRST DROP POSITION"]
+        XCTAssertTrue(app.textViews["FIRST DROP WINDOW"].waitForExistence(timeout: 10))
+        let position = app.textViews["FIRST DROP POSITION"]
         scrollToElement(position, in: app.scrollViews.firstMatch)
         let positionYBeforeDrop = position.frame.minY
         let firstWindow = app.windows[firstURL.lastPathComponent]
 
         dragFromFinder(secondURL, to: firstWindow)
 
-        XCTAssertTrue(app.staticTexts["SECOND DROP WINDOW"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.textViews["SECOND DROP WINDOW"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.windows[firstURL.lastPathComponent].exists)
         XCTAssertTrue(app.windows[secondURL.lastPathComponent].exists)
 
@@ -668,7 +722,7 @@ final class DocumentOpeningUITests: XCTestCase {
         let app = configuredApplication()
 
         app.open(url)
-        let content = app.staticTexts["CLOSE WITHOUT SAVE PROMPT"]
+        let content = app.textViews["CLOSE WITHOUT SAVE PROMPT"]
         XCTAssertTrue(content.waitForExistence(timeout: 10))
         let reader = app.windows[url.lastPathComponent]
         XCTAssertTrue(reader.waitForExistence(timeout: 5))
@@ -692,9 +746,7 @@ final class DocumentOpeningUITests: XCTestCase {
         app.launch()
 
         let instruction = app.staticTexts["NoDocumentInstruction"]
-        XCTAssertTrue(instruction.waitForExistence(timeout: 10))
-
-        app.typeKey("o", modifierFlags: .command)
+        XCTAssertFalse(instruction.exists)
         let panel = openPanel(in: app)
         XCTAssertTrue(panel.waitForExistence(timeout: 5))
         app.typeKey("w", modifierFlags: .command)
@@ -702,9 +754,7 @@ final class DocumentOpeningUITests: XCTestCase {
             panel.waitForNonExistence(timeout: 5),
             "Command-W should close the native Open panel first."
         )
-        XCTAssertTrue(instruction.exists, "Closing the panel must not close its reader window.")
-
-        app.typeKey("w", modifierFlags: .command)
+        XCTAssertFalse(instruction.exists, "Closing the startup panel must not create a window.")
         XCTAssertTrue(app.windows.firstMatch.waitForNonExistence(timeout: 5))
 
         let fileMenu = app.menuBars.menuBarItems["File"]
@@ -722,6 +772,8 @@ final class DocumentOpeningUITests: XCTestCase {
         // up as disabled commands rather than missing ones.
         let app = configuredApplication()
         app.launch()
+        XCTAssertTrue(openPanel(in: app).waitForExistence(timeout: 10))
+        cancelOpenPanel(in: app)
 
         let fileMenu = app.menuBars.menuBarItems["File"]
         XCTAssertTrue(fileMenu.waitForExistence(timeout: 10))

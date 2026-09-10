@@ -106,7 +106,9 @@ final class AppearanceUITests: XCTestCase {
             let scrollView = window.scrollViews["DocumentReaderScrollView"]
             XCTAssertTrue(scrollView.waitForExistence(timeout: 10))
 
-            let heading = window.staticTexts["Appearance checks"]
+            let heading = window.descendants(matching: .any).matching(
+                NSPredicate(format: "value == %@", "Appearance checks")
+            ).firstMatch
             let singleLine = staticText("SINGLE LINE PROSE", in: window)
             let body = staticText(Self.bodyProse, in: window)
             let link = try element(containing: Self.linkLabel, in: window)
@@ -297,6 +299,20 @@ final class AppearanceUITests: XCTestCase {
             let app = configuredApplication(appearance: appearance)
 
             app.launch()
+            let panel = app.windows["open-panel"]
+            XCTAssertTrue(panel.waitForExistence(timeout: 10))
+            XCTAssertEqual(app.windows.count, 1)
+            XCTAssertFalse(app.staticTexts["NoDocumentInstruction"].exists)
+            attachScreenshot(of: panel, named: "Startup Open panel — \(appearance.rawValue)")
+            app.typeKey(.escape, modifierFlags: [])
+            XCTAssertTrue(panel.waitForNonExistence(timeout: 5))
+            XCTAssertEqual(app.windows.count, 0)
+
+            // Preserve transitional last-close instruction coverage until #41.
+            try await openWhileRunning(url, in: app)
+            let seedWindow = app.windows[url.lastPathComponent]
+            XCTAssertTrue(seedWindow.waitForExistence(timeout: 10))
+            seedWindow.buttons.matching(identifier: "_XCUI:CloseWindow").firstMatch.click()
             let instructionWindow = app.windows.containing(
                 .staticText,
                 identifier: "NoDocumentInstruction"
@@ -345,7 +361,12 @@ final class AppearanceUITests: XCTestCase {
             )
             let app = configuredApplication(appearance: appearance)
 
-            app.launch()
+            // Reach the retained instruction through last close, not startup.
+            let seed = try makeDocument(named: "drop-seed.md", content: "")
+            app.open(seed)
+            let seedWindow = app.windows[seed.lastPathComponent]
+            XCTAssertTrue(seedWindow.waitForExistence(timeout: 10))
+            seedWindow.buttons.matching(identifier: "_XCUI:CloseWindow").firstMatch.click()
             let instructionWindow = app.windows.containing(
                 .staticText,
                 identifier: "NoDocumentInstruction"
@@ -772,6 +793,13 @@ final class AppearanceUITests: XCTestCase {
     @MainActor
     private func openWhileRunning(_ url: URL, in app: XCUIApplication) async throws {
         app.activate()
+        let panel = app.windows["open-panel"]
+        if panel.exists {
+            let cancel = panel.buttons["Cancel"]
+            XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+            cancel.click()
+            XCTAssertTrue(panel.waitForNonExistence(timeout: 5))
+        }
         let runningApplication = try XCTUnwrap(NSWorkspace.shared.frontmostApplication)
         XCTAssertEqual(runningApplication.bundleIdentifier, "io.neomd.NeoMD")
         let applicationURL = try XCTUnwrap(runningApplication.bundleURL)
@@ -826,7 +854,7 @@ final class AppearanceUITests: XCTestCase {
 
     @MainActor
     private func staticText(_ value: String, in container: XCUIElement) -> XCUIElement {
-        container.staticTexts.matching(
+        container.textViews.matching(
             NSPredicate(format: "value == %@", value)
         ).firstMatch
     }

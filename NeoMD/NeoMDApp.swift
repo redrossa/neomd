@@ -27,17 +27,15 @@ struct NeoMDApp: App {
             .focusedSceneValue(\.closeWindowTargetAvailable, true)
         }
         .defaultSize(width: 900, height: 720)
-        // A viewer normally forces an Open panel at launch. The instruction scene is
-        // the default instead; explicit Finder, Dock, menu, and keyboard opens still
-        // create document scenes.
-        .defaultLaunchBehavior(.suppressed)
+        // Preserve the native viewer startup: Open panel when no file was requested,
+        // or the requested document directly for Finder and other explicit opens.
 
         Window("NeoMD", id: DocumentOpeningCoordinator.noDocumentWindowSceneID) {
             NoDocumentView(openingCoordinator: applicationDelegate.openingCoordinator)
                 .focusedSceneValue(\.closeWindowTargetAvailable, true)
         }
         .defaultSize(width: 900, height: 720)
-        .defaultLaunchBehavior(.presented)
+        .defaultLaunchBehavior(.suppressed)
         .commands {
             ReadOnlyFileCommands()
         }
