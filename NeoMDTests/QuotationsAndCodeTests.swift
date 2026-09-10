@@ -100,7 +100,12 @@ struct QuotationsAndCodeTests {
         let presented = ReaderTheme().presentationText(for: text)
         #expect(presented.unicodeScalars.elementsEqual(text.unicodeScalars))
         let code = try #require(presented.range(of: "code"))
-        #expect(presented[code].font == .system(.body, design: .monospaced))
+        let context = EnvironmentValues().fontResolutionContext
+        let actual = try #require(presented[code].font).resolve(in: context)
+        let baseline = Font.system(.body, design: .monospaced).resolve(in: context)
+        #expect(actual.pointSize == baseline.pointSize)
+        #expect(actual.weight == baseline.weight)
+        #expect(actual.isMonospaced == baseline.isMonospaced)
         #expect(presented[code].backgroundColor != nil)
         #expect(presented[presented.range(of: "keyword")!].foregroundColor != nil)
         #expect(presented[presented.range(of: "plain")!].foregroundColor == nil)

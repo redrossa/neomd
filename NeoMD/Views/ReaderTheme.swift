@@ -30,6 +30,28 @@ import SwiftUI
 ///   tint cannot be seen or is not perceived as a difference. Syntax highlighting is
 ///   supplementary: literal code remains understandable without token colors.
 nonisolated struct ReaderTheme: Equatable, Sendable {
+    var scale: CGFloat = 1
+
+    func font(headingLevel: Int? = nil, monospaced: Bool = false) -> Font {
+        let style = Self.textStyle(headingLevel: headingLevel)
+        let size = NSFont.preferredFont(forTextStyle: style).pointSize * scale
+        // The baseline semantic .headline monospaced font resolves to bold.
+        let weight: Font.Weight = monospaced && headingLevel == 5 ? .bold : (headingLevel == nil ? .regular : .semibold)
+        return .system(size: size, weight: weight,
+                       design: monospaced ? .monospaced : .default)
+    }
+
+    static func textStyle(headingLevel: Int?) -> NSFont.TextStyle {
+        switch headingLevel {
+        case 1: .largeTitle
+        case 2: .title1
+        case 3: .title2
+        case 4: .title3
+        case 5: .headline
+        case 6: .subheadline
+        default: .body
+        }
+    }
 
     /// Applies the appearance policy that inline text carries.
     ///
@@ -58,7 +80,7 @@ nonisolated struct ReaderTheme: Equatable, Sendable {
             if let style = run.markdownInlineStyle,
                style == .subscriptText || style == .superscriptText {
                 presented[run.range].font = scriptFont(headingLevel: headingLevel)
-                presented[run.range].baselineOffset = style == .subscriptText ? -3 : 5
+                presented[run.range].baselineOffset = (style == .subscriptText ? -3 : 5) * scale
             }
         }
         return presented
@@ -82,6 +104,20 @@ nonisolated struct ReaderTheme: Equatable, Sendable {
         }
     }
 
+    static func alertRGB(_ alert: MarkdownAlert, dark: Bool) -> UInt32 {
+        switch alert {
+        case .note: dark ? 0x79c0ff : 0x0550ae
+        case .tip: dark ? 0x7ee787 : 0x116329
+        case .important: dark ? 0xd2a8ff : 0x6639ba
+        case .warning: dark ? 0xe3b341 : 0x7d4e00
+        case .caution: dark ? 0xff7b72 : 0xa31525
+        }
+    }
+
+    static func alertColor(_ alert: MarkdownAlert) -> Color {
+        adaptive(light: alertRGB(alert, dark: false), dark: alertRGB(alert, dark: true))
+    }
+
     private static func tokenColor(_ token: MarkdownCodeToken) -> Color {
         adaptive(light: tokenRGB(token, dark: false), dark: tokenRGB(token, dark: true))
     }
@@ -96,24 +132,19 @@ nonisolated struct ReaderTheme: Equatable, Sendable {
     }
 
     private func inlineCodeFont(headingLevel: Int?) -> Font {
-        switch headingLevel {
-        case 1: .system(.largeTitle, design: .monospaced, weight: .semibold)
-        case 2: .system(.title, design: .monospaced, weight: .semibold)
-        case 3: .system(.title2, design: .monospaced, weight: .semibold)
-        case 4: .system(.title3, design: .monospaced, weight: .semibold)
-        case 5: .system(.headline, design: .monospaced)
-        case 6: .system(.subheadline, design: .monospaced, weight: .semibold)
-        default: .system(.body, design: .monospaced)
-        }
+        font(headingLevel: headingLevel, monospaced: true)
     }
 
     private func scriptFont(headingLevel: Int?) -> Font {
+        let style: NSFont.TextStyle
         switch headingLevel {
-        case 1: .system(.title3, weight: .semibold)
-        case 2: .system(.headline, weight: .semibold)
-        case 3, 4: .system(.subheadline, weight: .semibold)
-        case 5, 6: .system(.caption, weight: .semibold)
-        default: .footnote
+        case 1: style = .title3
+        case 2: style = .headline
+        case 3, 4: style = .subheadline
+        case 5, 6: style = .caption1
+        default: style = .footnote
         }
+        return .system(size: NSFont.preferredFont(forTextStyle: style).pointSize * scale,
+                       weight: headingLevel == nil ? .regular : .semibold)
     }
 }

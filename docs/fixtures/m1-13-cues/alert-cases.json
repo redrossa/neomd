@@ -1,0 +1,328 @@
+[
+  {
+    "id": "A-NOTE",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> [!NOTE]\n> Body NOTE.\n",
+    "expected_alert_types": [
+      "NOTE"
+    ],
+    "reason": "Literal standalone first marker on a root quote; consume marker plus its first separator, not body content."
+  },
+  {
+    "id": "A-TIP",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> [!TIP]\n> Body TIP.\n",
+    "expected_alert_types": [
+      "TIP"
+    ],
+    "reason": "Literal standalone first marker on a root quote; consume marker plus its first separator, not body content."
+  },
+  {
+    "id": "A-IMPORTANT",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> [!IMPORTANT]\n> Body IMPORTANT.\n",
+    "expected_alert_types": [
+      "IMPORTANT"
+    ],
+    "reason": "Literal standalone first marker on a root quote; consume marker plus its first separator, not body content."
+  },
+  {
+    "id": "A-WARNING",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> [!WARNING]\n> Body WARNING.\n",
+    "expected_alert_types": [
+      "WARNING"
+    ],
+    "reason": "Literal standalone first marker on a root quote; consume marker plus its first separator, not body content."
+  },
+  {
+    "id": "A-CAUTION",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> [!CAUTION]\n> Body CAUTION.\n",
+    "expected_alert_types": [
+      "CAUTION"
+    ],
+    "reason": "Literal standalone first marker on a root quote; consume marker plus its first separator, not body content."
+  },
+  {
+    "id": "A-CRLF",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> [!NOTE]\r\n> CRLF body.\r\n",
+    "expected_alert_types": [
+      "NOTE"
+    ],
+    "reason": "Line-ending-independent literal recognition."
+  },
+  {
+    "id": "A-indent-trailing",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "   > [!TIP] \t\n   > Spaced body.\n",
+    "expected_alert_types": [
+      "TIP"
+    ],
+    "reason": "cmark-owned root quote, optional horizontal whitespace after the whole marker."
+  },
+  {
+    "id": "A-marker-only",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> [!IMPORTANT]\n",
+    "expected_alert_types": [
+      "IMPORTANT"
+    ],
+    "reason": "Show the label even without body; do not prune the semantic alert away."
+  },
+  {
+    "id": "A-no-escaped-open",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> \\[!NOTE]\n> Escaped opening bracket.\n",
+    "expected_alert_types": [],
+    "reason": "Keep ordinary cmark semantics/text. No alert recognition or marker deletion; escaped/entity punctuation may display unescaped but must remain ineligible."
+  },
+  {
+    "id": "A-no-escaped-bang",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> [\\!NOTE]\n> Escaped bang.\n",
+    "expected_alert_types": [],
+    "reason": "Keep ordinary cmark semantics/text. No alert recognition or marker deletion; escaped/entity punctuation may display unescaped but must remain ineligible."
+  },
+  {
+    "id": "A-no-escaped-close",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> [!NOTE\\]\n> Escaped closing bracket.\n",
+    "expected_alert_types": [],
+    "reason": "Keep ordinary cmark semantics/text. No alert recognition or marker deletion; escaped/entity punctuation may display unescaped but must remain ineligible."
+  },
+  {
+    "id": "A-no-entity-open",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> &#91;!NOTE]\n> Entity opening bracket.\n",
+    "expected_alert_types": [],
+    "reason": "Keep ordinary cmark semantics/text. No alert recognition or marker deletion; escaped/entity punctuation may display unescaped but must remain ineligible."
+  },
+  {
+    "id": "A-no-entity-bang",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> [&#33;NOTE]\n> Entity bang.\n",
+    "expected_alert_types": [],
+    "reason": "Keep ordinary cmark semantics/text. No alert recognition or marker deletion; escaped/entity punctuation may display unescaped but must remain ineligible."
+  },
+  {
+    "id": "A-no-entity-name",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> [!NO&#84;E]\n> Entity in name.\n",
+    "expected_alert_types": [],
+    "reason": "Keep ordinary cmark semantics/text. No alert recognition or marker deletion; escaped/entity punctuation may display unescaped but must remain ineligible."
+  },
+  {
+    "id": "A-no-entity-close",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> [!NOTE&#93;\n> Entity close.\n",
+    "expected_alert_types": [],
+    "reason": "Keep ordinary cmark semantics/text. No alert recognition or marker deletion; escaped/entity punctuation may display unescaped but must remain ineligible."
+  },
+  {
+    "id": "A-no-code",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> `[!NOTE]`\n> Inline code marker.\n",
+    "expected_alert_types": [],
+    "reason": "Keep ordinary cmark semantics/text. No alert recognition or marker deletion; escaped/entity punctuation may display unescaped but must remain ineligible."
+  },
+  {
+    "id": "A-no-fence",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "```md\n> [!NOTE]\n> Fenced body.\n```\n",
+    "expected_alert_types": [],
+    "reason": "Keep ordinary cmark semantics/text. No alert recognition or marker deletion; escaped/entity punctuation may display unescaped but must remain ineligible."
+  },
+  {
+    "id": "A-no-formatted",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> **[!NOTE]**\n> Formatted marker.\n",
+    "expected_alert_types": [],
+    "reason": "Keep ordinary cmark semantics/text. No alert recognition or marker deletion; escaped/entity punctuation may display unescaped but must remain ineligible."
+  },
+  {
+    "id": "A-no-linked",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> [[!NOTE]](#target)\n> Linked marker.\n",
+    "expected_alert_types": [],
+    "reason": "Keep ordinary cmark semantics/text. No alert recognition or marker deletion; escaped/entity punctuation may display unescaped but must remain ineligible."
+  },
+  {
+    "id": "A-no-reference-linked",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> [!NOTE]\n> Reference-linked marker.\n\n[!NOTE]: https://example.com\n",
+    "expected_alert_types": [],
+    "reason": "Keep ordinary cmark semantics/text. No alert recognition or marker deletion; escaped/entity punctuation may display unescaped but must remain ineligible."
+  },
+  {
+    "id": "A-no-unknown",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> [!DANGER]\n> Unknown type.\n",
+    "expected_alert_types": [],
+    "reason": "Keep ordinary cmark semantics/text. No alert recognition or marker deletion; escaped/entity punctuation may display unescaped but must remain ineligible."
+  },
+  {
+    "id": "A-no-lowercase",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> [!note]\n> Lowercase type.\n",
+    "expected_alert_types": [],
+    "reason": "Keep ordinary cmark semantics/text. No alert recognition or marker deletion; escaped/entity punctuation may display unescaped but must remain ineligible."
+  },
+  {
+    "id": "A-no-extra-title",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> [!NOTE] Custom title\n> Extra marker-line prose.\n",
+    "expected_alert_types": [],
+    "reason": "Keep ordinary cmark semantics/text. No alert recognition or marker deletion; escaped/entity punctuation may display unescaped but must remain ineligible."
+  },
+  {
+    "id": "A-no-mid-paragraph",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> First paragraph line.\n> [!NOTE]\n> Later marker.\n",
+    "expected_alert_types": [],
+    "reason": "Keep ordinary cmark semantics/text. No alert recognition or marker deletion; escaped/entity punctuation may display unescaped but must remain ineligible."
+  },
+  {
+    "id": "A-no-later-paragraph",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> First paragraph.\n>\n> [!NOTE]\n> Later paragraph.\n",
+    "expected_alert_types": [],
+    "reason": "Keep ordinary cmark semantics/text. No alert recognition or marker deletion; escaped/entity punctuation may display unescaped but must remain ineligible."
+  },
+  {
+    "id": "A-no-leading-blank",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": ">\n> [!NOTE]\n> Quote did not open with marker.\n",
+    "expected_alert_types": [],
+    "reason": "Keep ordinary cmark semantics/text. No alert recognition or marker deletion; escaped/entity punctuation may display unescaped but must remain ineligible."
+  },
+  {
+    "id": "A-no-nested-quote",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> > [!NOTE]\n> > Nested quote.\n",
+    "expected_alert_types": [],
+    "reason": "Keep ordinary cmark semantics/text. No alert recognition or marker deletion; escaped/entity punctuation may display unescaped but must remain ineligible."
+  },
+  {
+    "id": "A-no-list-contained",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "- > [!NOTE]\n  > List-contained quote.\n",
+    "expected_alert_types": [],
+    "reason": "Keep ordinary cmark semantics/text. No alert recognition or marker deletion; escaped/entity punctuation may display unescaped but must remain ineligible."
+  },
+  {
+    "id": "A-no-footnote-contained",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "Reference[^n].\n\n[^n]:\n    > [!NOTE]\n    > Note-contained quote.\n",
+    "expected_alert_types": [],
+    "reason": "Keep ordinary cmark semantics/text. No alert recognition or marker deletion; escaped/entity punctuation may display unescaped but must remain ineligible."
+  },
+  {
+    "id": "A-no-definition-first",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "> [ref]: https://example.com\n>\n> [!NOTE]\n> Removed definition must not promote later marker.\n",
+    "expected_alert_types": [],
+    "reason": "Keep ordinary cmark semantics/text. No alert recognition or marker deletion; escaped/entity punctuation may display unescaped but must remain ineligible."
+  },
+  {
+    "id": "A-no-nonquote",
+    "criteria": [
+      "C1",
+      "C2"
+    ],
+    "markdown": "[!NOTE]\nNot a quote.\n",
+    "expected_alert_types": [],
+    "reason": "Keep ordinary cmark semantics/text. No alert recognition or marker deletion; escaped/entity punctuation may display unescaped but must remain ineligible."
+  }
+]

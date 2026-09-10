@@ -44,6 +44,8 @@ struct DocumentReaderView: View {
     @State private var readingAnchor: DocumentReadingAnchor?
     @State private var resizeRestoration = DocumentReaderResizeRestoration()
     @FocusState private var keyboardFocus: DocumentReaderFocusTarget?
+    @State private var traversalTask: Task<Void, Never>?
+    @State private var traversalStartID: Int?
 
     init(
         document: MarkdownDocument,
@@ -79,6 +81,12 @@ struct DocumentReaderView: View {
             .focusable(true, interactions: .edit)
             .focused($keyboardFocus, equals: .reader)
             .scrollPosition($scrollPosition)
+            .onKeyPress(keys: [.tab]) { press in
+                guard let reverse = DocumentReaderTraversal.direction(press),
+                      keyboardFocus == .reader else { return .ignored }
+                traverse(from: .reader, reverse: reverse)
+                return .handled
+            }
             .onKeyPress(keys: [.pageUp, .pageDown]) { keyPress in
                 handleVerticalPageKeyPress(keyPress)
             }
@@ -121,11 +129,14 @@ struct DocumentReaderView: View {
             consumeSectionRequest()
         }
         .onAppear {
+            bindTraversal()
             guard openingCoordinator?.documentWindowDidAppear(id: windowID)
                     == .hideNoDocumentWindow else { return }
             dismissWindow(id: DocumentOpeningCoordinator.noDocumentWindowSceneID)
         }
         .onDisappear {
+            traversalTask?.cancel()
+            navigationBridge.detachTraversal()
             imageStore.reset()
             resizeRestoration.invalidate()
             navigationGeneration += 1
@@ -192,7 +203,15 @@ struct DocumentReaderView: View {
     /// Adaptive system styles already follow the Mac's light and dark appearance, so
     /// the theme only carries what a semantic style cannot express, and it applies the
     /// same way to every reader on every Mac.
-    private var theme: ReaderTheme { ReaderTheme() }
+    private var theme: ReaderTheme {
+        #if DEBUG
+        if let value = ProcessInfo.processInfo.environment["NEOMD_TEST_READING_SCALE"],
+           let scale = Double(value), [1, 1.5, 2].contains(scale) {
+            return ReaderTheme(scale: scale)
+        }
+        #endif
+        return ReaderTheme()
+    }
 
     private func handleVerticalPageKeyPress(
         _ keyPress: KeyPress
@@ -219,6 +238,7 @@ struct DocumentReaderView: View {
     }
 
     private func scrollReaderPage(_ direction: DocumentReaderPageDirection) {
+        traversalTask?.cancel()
         navigationGeneration += 1
         navigationBridge.cancel()
         resizeRestoration.cancelForUserScroll()
@@ -234,6 +254,8 @@ struct DocumentReaderView: View {
 
     /// Renders `source` away from the main actor and publishes the result.
     private func render(_ source: String) async {
+        traversalTask?.cancel()
+        traversalStartID = nil
         imageStore.reset()
         isRendered = false
         navigationBridge.replaceDocument()
@@ -247,6 +269,7 @@ struct DocumentReaderView: View {
         }.value
         guard !Task.isCancelled else { return }
         renderedDocument = rendered
+        bindTraversal()
         isRendered = true
         consumeSectionRequest()
     }
@@ -257,6 +280,7 @@ struct DocumentReaderView: View {
     ) {
         let viewportChanged = oldMetrics.viewportSize != newMetrics.viewportSize
         if viewportChanged {
+            traversalTask?.cancel()
             navigationGeneration += 1
             navigationBridge.cancel()
         }
@@ -287,6 +311,8 @@ struct DocumentReaderView: View {
 
     private func handleScrollPhaseChange(_ phase: ScrollPhase) {
         if phase == .interacting {
+            traversalTask?.cancel()
+            traversalStartID = nil
             navigationGeneration += 1
             navigationBridge.cancel()
             resizeRestoration.cancelForUserScroll()
@@ -381,6 +407,10 @@ struct DocumentReaderView: View {
     }
 
     private func navigate(to id: Int?, keyboardDriven: Bool) {
+        traversalTask?.cancel()
+        traversalStartID = id.flatMap {
+            renderedDocument.nodes.indices.contains($0) ? renderedDocument.firstLeafIDs[$0] : nil
+        }
         resizeRestoration.invalidate()
         navigationGeneration += 1
         let generation = navigationGeneration
@@ -410,6 +440,110 @@ struct DocumentReaderView: View {
                renderedDocument[id].text.runs.contains(where: { $0.link != nil }) {
                 keyboardFocus = .links(id)
             }
+        }
+    }
+
+    private func bindTraversal() {
+        let generation = documentGeneration
+        navigationBridge.traverse = { [weak bridge = navigationBridge] origin, reverse in
+            guard bridge?.generation == generation, bridge?.traverse != nil else { return }
+            traverse(from: origin, reverse: reverse)
+        }
+    }
+
+    private func traverse(from origin: DocumentReaderFocusTarget?, reverse: Bool) {
+        traversalTask?.cancel()
+        navigationGeneration += 1
+        navigationBridge.cancel()
+        resizeRestoration.invalidate()
+        let generation = documentGeneration
+        let request = navigationBridge.request
+        let candidates = DocumentReaderTraversal.candidates(in: renderedDocument)
+        let start: Int
+        if let origin, let index = candidates.firstIndex(of: origin) {
+            start = index + (reverse ? -1 : 1)
+        } else if let id = traversalStartID,
+                  let index = candidates.firstIndex(where: { $0.leafID == id }) {
+            start = index
+        } else {
+            start = reverse ? candidates.count - 1 : 0
+        }
+        traversalTask = Task { @MainActor in
+            var index = start
+            while candidates.indices.contains(index) {
+                guard !Task.isCancelled, documentGeneration == generation,
+                      navigationBridge.request == request else { return }
+                let target = candidates[index]
+                navigationBridge.prepareTraversal(to: target)
+                guard let id = target.leafID else { return }
+                if blockFrames[id] == nil {
+                    scrollPosition.scrollTo(id: lazyRoot(for: id), anchor: .center)
+                }
+                // A bounded acquisition wait, not a success inferred from FocusState.
+                for _ in 0..<12 {
+                    guard !Task.isCancelled, documentGeneration == generation,
+                          navigationBridge.request == request else { return }
+                    if case .text = target, navigationBridge.textLeaf(id) != nil { break }
+                    if case .links = target, blockFrames[id] != nil { break }
+                    if case .codeBlock = target, navigationBridge.codeOverflow(id) != nil { break }
+                    try? await Task.sleep(for: .milliseconds(50))
+                }
+                guard !Task.isCancelled, documentGeneration == generation,
+                      navigationBridge.request == request else { return }
+                if case .codeBlock = target, navigationBridge.codeOverflow(id) == false {
+                    index += reverse ? -1 : 1
+                    continue
+                }
+                if case .text = target {
+                    keyboardFocus = nil
+                    await Task.yield()
+                    guard !Task.isCancelled, navigationBridge.request == request else { return }
+                    if navigationBridge.focusText(id) {
+                        traversalStartID = id
+                    } else {
+                        restoreTraversalOrigin(origin)
+                        showNotice("Keyboard focus could not reach this block. Try selecting it again.")
+                    }
+                } else if let frame = blockFrames[id] {
+                    if !scrollMetrics.visibleRect.contains(frame) {
+                        scrollPosition.scrollTo(y: scrollMetrics.clampedVerticalOffset(frame.minY))
+                    }
+                    keyboardFocus = target
+                    for _ in 0..<12 {
+                        guard !Task.isCancelled, navigationBridge.request == request else { return }
+                        if navigationBridge.hasActionFocus(target) {
+                            traversalStartID = id
+                            return
+                        }
+                        try? await Task.sleep(for: .milliseconds(50))
+                    }
+                    restoreTraversalOrigin(origin)
+                    showNotice("Keyboard focus could not reach this block. Try selecting it again.")
+                } else {
+                    restoreTraversalOrigin(origin)
+                    showNotice("Keyboard focus could not reach this block. Try selecting it again.")
+                }
+                return
+            }
+            guard !Task.isCancelled, navigationBridge.request == request else { return }
+            keyboardFocus = nil
+            await Task.yield()
+            guard !Task.isCancelled, navigationBridge.request == request else { return }
+            if !navigationBridge.leaveDocument(reverse: reverse) {
+                // A failed native-control handoff must not silently wrap into the document.
+                restoreTraversalOrigin(origin)
+                showNotice("No window control is available for keyboard focus.")
+            }
+        }
+    }
+
+    private func restoreTraversalOrigin(_ origin: DocumentReaderFocusTarget?) {
+        if case .text(let id) = origin {
+            // Text has a native responder, not a SwiftUI .focused binding.
+            keyboardFocus = nil
+            if !navigationBridge.focusText(id) { keyboardFocus = .reader }
+        } else {
+            keyboardFocus = origin ?? .reader
         }
     }
 
@@ -581,6 +715,35 @@ nonisolated enum DocumentReaderFocusTarget: Hashable {
     case reader
     case codeBlock(Int)
     case links(Int)
+    case text(Int)
+
+    var leafID: Int? {
+        switch self {
+        case .reader: nil
+        case .codeBlock(let id), .links(let id), .text(let id): id
+        }
+    }
+}
+
+enum DocumentReaderTraversal {
+    static func direction(_ press: KeyPress) -> Bool? {
+        guard press.key == .tab else { return nil }
+        let modifiers = press.modifiers.intersection([.option, .shift, .control, .command])
+        if modifiers == .option { return false }
+        if modifiers == [.option, .shift] { return true }
+        return nil
+    }
+
+    static func candidates(in document: MarkdownRenderDocument) -> [DocumentReaderFocusTarget] {
+        document.leafIDs.flatMap { id -> [DocumentReaderFocusTarget] in
+            let block = document[id]
+            if case .codeBlock = block.kind { return [.codeBlock(id)] }
+            var targets: [DocumentReaderFocusTarget] = []
+            if MarkdownLinkedImageText.requiresNativeText(block.text) { targets.append(.text(id)) }
+            if block.text.runs.contains(where: { $0.link != nil }) { targets.append(.links(id)) }
+            return targets
+        }
+    }
 }
 
 nonisolated enum DocumentReaderPageDirection {

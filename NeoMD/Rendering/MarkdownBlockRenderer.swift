@@ -28,6 +28,7 @@ extension AttributeScopes {
     nonisolated struct MarkdownAttributes: AttributeScope {
         let markdownInlineStyle: MarkdownInlineStyleAttribute
         let markdownCodeToken: MarkdownCodeTokenAttribute
+        let markdownColorReference: MarkdownColorReferenceAttribute
         let markdownImage: MarkdownImageAttribute
         let markdownGeneratedReference: MarkdownGeneratedReferenceAttribute
     }
@@ -55,10 +56,16 @@ nonisolated struct MarkdownBlock: Identifiable, Sendable {
         case heading(level: Int)
         case codeBlock(language: String?)
         case blockQuote
+        case alert(MarkdownAlert)
         case listItem(marker: String, depth: Int)
         case thematicBreak
         case footnote(ordinal: Int)
         case anchor
+
+        var alert: MarkdownAlert? {
+            if case .alert(let alert) = self { return alert }
+            return nil
+        }
     }
 
     /// Position of the block in the document, stable for the lifetime of a rendering.
@@ -83,7 +90,7 @@ nonisolated struct MarkdownBlock: Identifiable, Sendable {
         self.anchors = anchors
     }
 
-    var isLeaf: Bool { childIDs.isEmpty }
+    var isLeaf: Bool { childIDs.isEmpty && kind.alert == nil }
 }
 
 /// Converts Markdown source into presentable blocks.

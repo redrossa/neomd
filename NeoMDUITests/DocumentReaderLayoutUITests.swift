@@ -191,9 +191,18 @@ final class DocumentReaderLayoutUITests: XCTestCase {
             let scroll = window.scrollViews["DocumentReaderScrollView"]
             XCTAssertTrue(scroll.waitForExistence(timeout: 10))
             let title = window.staticTexts["Initial margin"]
-            let paragraph = staticText(prose, in: window)
+            // Native prose exposes TextView rather than StaticText. XCUI's
+            // predicate snapshot truncates long values; the value accessor does
+            // not. Compare the complete authored value, never a prefix.
+            let paragraphs = window.textViews.allElementsBoundByIndex.filter {
+                ($0.value as? String) == prose
+            }
+            XCTAssertEqual(paragraphs.count, 1)
+            let paragraph = try XCTUnwrap(paragraphs.first)
             XCTAssertTrue(title.waitForExistence(timeout: 10))
             XCTAssertTrue(paragraph.waitForExistence(timeout: 5))
+            XCTAssertEqual(paragraphs.count, 1)
+            XCTAssertEqual(paragraph.value as? String, prose)
             XCTAssertGreaterThanOrEqual(title.frame.minY - scroll.frame.minY, 30)
             assertInsideReadingMargins(title.frame, scrollView: scroll)
 

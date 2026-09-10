@@ -25,6 +25,7 @@ nonisolated final class CMarkBlockAdapter {
     private var roots: [Int] = []
     private var taskDescriptions: Set<Int> = []
     private var listOrdinals: [OpaquePointer: Int] = [:]
+    private var alertMarkerNodes: [OpaquePointer: Int] = [:]
 
     init(document: CMarkDocument, documentURL: URL? = nil) {
         self.document = document
@@ -140,7 +141,12 @@ nonisolated final class CMarkBlockAdapter {
             var childDepth = depth
             switch type {
             case "block_quote":
-                childParent = append(Draft(kind: .blockQuote, node: node), parent: parent)
+                var kind = MarkdownBlock.Kind.blockQuote
+                if let (alert, paragraph, count) = document.alert(node) {
+                    kind = .alert(alert)
+                    alertMarkerNodes[paragraph] = count
+                }
+                childParent = append(Draft(kind: kind, node: node), parent: parent)
             case "item", "tasklist":
                 childDepth += 1
                 let list = cmark_node_parent(node)!
@@ -195,30 +201,37 @@ nonisolated final class CMarkBlockAdapter {
             return (MarkdownBlockRenderer.trimmed(text, keepingIndentation: false), [])
         }
         if type == "thematic_break" { return (AttributedString(), []) }
-        let styled = MarkdownBlockRenderer.inlineHTML(inline(CMarkDocument.children(node)))
+        let children = CMarkDocument.children(node).dropFirst(alertMarkerNodes[node] ?? 0)
+        let styled = MarkdownBlockRenderer.inlineHTML(inline(Array(children)))
         return (MarkdownBlockRenderer.trimmed(styled.text, keepingIndentation: false), styled.anchors)
     }
 
     private func inline(_ nodes: [OpaquePointer]) -> AttributedString {
         var result = AttributedString()
-        var stack = nodes.reversed().map { ($0, AttributeContainer(), false) }
-        while let (node, inherited, ineligible) = stack.popLast() {
+        var stack = nodes.reversed().map { ($0, AttributeContainer(), false, false) }
+        while let (node, inherited, ineligible, imageAlternative) = stack.popLast() {
             let type = CMarkDocument.typeName(node)
             var attributes = inherited
             var literal: String?
             var blocked = ineligible
+            var imageBlocked = imageAlternative
             var intent = attributes.inlinePresentationIntent ?? []
             switch type {
+            case "custom_inline": literal = CMarkEmojiExtension.text(node, imageAlternative: imageAlternative)
             case "text": literal = CMarkDocument.literal(node)
             case "softbreak": literal = " "; intent.insert(.softBreak)
             case "linebreak": literal = "\n"; intent.insert(.lineBreak)
-            case "code": literal = CMarkDocument.literal(node); intent.insert(.code)
+            case "code":
+                literal = CMarkDocument.literal(node)
+                intent.insert(.code)
+                if !imageAlternative { attributes.markdownColorReference = literal.flatMap(MarkdownColorReference.parse) }
             case "html_inline": literal = CMarkDocument.literal(node); intent.insert(.inlineHTML)
             case "emph": intent.insert(.emphasized)
             case "strong": intent.insert(.stronglyEmphasized)
             case "strikethrough": intent.insert(.strikethrough)
             case "link", "image":
                 blocked = true
+                imageBlocked = imageBlocked || type == "image"
                 let destination = cmark_node_get_url(node).map { String(cString: $0) } ?? ""
                 if !destination.isEmpty, let url = URL(string: destination) {
                     if type == "link" { attributes.link = url }
@@ -246,7 +259,7 @@ nonisolated final class CMarkBlockAdapter {
             }
             attributes.inlinePresentationIntent = intent.isEmpty ? nil : intent
             if let literal { result.append(AttributedString(literal, attributes: attributes)) }
-            else { stack.append(contentsOf: CMarkDocument.children(node).reversed().map { ($0, attributes, blocked) }) }
+            else { stack.append(contentsOf: CMarkDocument.children(node).reversed().map { ($0, attributes, blocked, imageBlocked) }) }
         }
         return result
     }
@@ -278,11 +291,11 @@ nonisolated final class CMarkBlockAdapter {
             let draft = drafts[index]
             let container: Bool
             switch draft.kind {
-            case .blockQuote, .listItem, .footnote: container = true
+            case .blockQuote, .listItem, .footnote, .alert: container = true
             default: container = false
             }
             if container {
-                if draft.children.contains(where: keep.contains) { keep.insert(index) }
+                if draft.kind.alert != nil || draft.children.contains(where: keep.contains) { keep.insert(index) }
             } else if !draft.text.characters.isEmpty || draft.kind == .thematicBreak ||
                         (draft.node == nil) || taskDescriptions.contains(index) {
                 keep.insert(index)

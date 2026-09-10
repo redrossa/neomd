@@ -150,8 +150,15 @@ struct ReaderThemeTests {
         let sup = try #require(body.range(of: "3"))
         #expect(body[sub].baselineOffset == -3)
         #expect(body[sup].baselineOffset == 5)
-        #expect(body[sub].font == .footnote)
-        #expect(heading[try #require(heading.range(of: "2"))].font == .system(.title3, weight: .semibold))
+        let context = EnvironmentValues().fontResolutionContext
+        for (font, baseline) in [(body[sub].font, Font.footnote),
+                                 (heading[try #require(heading.range(of: "2"))].font, Font.system(.title3, weight: .semibold))] {
+            let actual = try #require(font).resolve(in: context)
+            let expected = baseline.resolve(in: context)
+            #expect(actual.pointSize == expected.pointSize)
+            #expect(actual.weight == expected.weight)
+            #expect(actual.isMonospaced == expected.isMonospaced)
+        }
         #expect(body[try #require(body.range(of: "under"))].underlineStyle == .single)
         #expect(body.runs.filter { $0.link != nil }.allSatisfy { $0.underlineStyle == .single })
         #expect(String(body.characters) == String(text.characters))

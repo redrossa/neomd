@@ -1092,7 +1092,7 @@ final class AppearanceUITests: XCTestCase {
 /// for, and the controller *answers* with a file this side only has to read. Neither
 /// side has to guess what was asked for or whether it happened, and no path is trusted
 /// until the real setting has been read back.
-private enum SystemAppearance {
+enum SystemAppearance {
     enum Failure: LocalizedError {
         case notPermitted(String)
         case notObserved(String)
@@ -1379,7 +1379,7 @@ private enum SystemAppearance {
 // MARK: - Pixel sampling
 
 /// One sampled sRGB pixel.
-private struct PixelSample {
+struct PixelSample {
     let red: CGFloat
     let green: CGFloat
     let blue: CGFloat
@@ -1417,7 +1417,7 @@ private struct PixelSample {
 ///
 /// Every pixel of a requested region is read. Text strokes are thin, so a sampled
 /// subset can miss the glyph cores entirely and make a legible page look blank.
-private struct WindowPixels {
+struct WindowPixels {
     private let width: Int
     private let height: Int
     private let pixels: [UInt8]

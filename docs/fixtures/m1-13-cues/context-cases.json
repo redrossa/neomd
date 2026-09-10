@@ -1,0 +1,101 @@
+[
+  {
+    "id": "X-heading-collision",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": "# Plan :smile:\n\n# Plan 😄\n",
+    "expected_heading_text": [
+      "Plan 😄",
+      "Plan 😄"
+    ],
+    "expected_heading_anchors": [
+      "plan-",
+      "plan--1"
+    ],
+    "reason": "Existing slugger runs on transformed semantic text, excludes symbols and deterministically suffixes duplicate slugs. Never put a decorative swatch character into semantic heading text."
+  },
+  {
+    "id": "X-reference-link",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": "[:smile:][ref]\n\n[ref]: https://example.com/:heart: \"Title :smile:\"\n",
+    "expected_text": "😄",
+    "expected_link": "https://example.com/:heart:",
+    "reason": "Authored reference label is eligible, definition URL/title are not rewritten."
+  },
+  {
+    "id": "X-image-alt",
+    "criteria": [
+      "C3",
+      "C5"
+    ],
+    "markdown": "![Alt :smile:](img/badge.png) :smile:\n",
+    "expected_image_alt": "Alt :smile:",
+    "expected_adjacent_text": " 😄",
+    "reason": "Image metadata/alternative strings are not ordinary inline prose. Preserve them consistently in loaded, loading and unavailable image paths."
+  },
+  {
+    "id": "X-code-link",
+    "criteria": [
+      "C4",
+      "C5"
+    ],
+    "markdown": "[`#0969DA`](#target)\n",
+    "expected_text": "#0969DA",
+    "expected_link": "#target",
+    "swatches": 1,
+    "reason": "Keep the authored text link and original code string. Decorative swatch itself has no independent link/focus/AX action."
+  },
+  {
+    "id": "X-normalized-code",
+    "criteria": [
+      "C4"
+    ],
+    "markdown": "` #0969DA `\n",
+    "normalized_code": "#0969DA",
+    "swatches": 1,
+    "reason": "cmark removes one matching leading/trailing space; eligibility uses parser-normalized code, not raw source."
+  },
+  {
+    "id": "X-retained-leading-code",
+    "criteria": [
+      "C4"
+    ],
+    "markdown": "`  #0969DA `\n",
+    "normalized_code": " #0969DA",
+    "swatches": 0,
+    "reason": "One leading space survives cmark normalization."
+  },
+  {
+    "id": "X-retained-trailing-code",
+    "criteria": [
+      "C4"
+    ],
+    "markdown": "` #0969DA  `\n",
+    "normalized_code": "#0969DA ",
+    "swatches": 0,
+    "reason": "One trailing space survives cmark normalization."
+  },
+  {
+    "id": "X-break-boundary",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": ":smi\nle:\n",
+    "expected_text": ":smi le:",
+    "replacements": 0,
+    "reason": "Do not recognize tokens across soft/hard breaks or formatting boundaries."
+  },
+  {
+    "id": "X-raw-markup",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": "Text <span title=\":smile:\">plain</span>.\n",
+    "expected_text": "Text <span title=\":smile:\">plain</span>.",
+    "replacements": 0,
+    "reason": "Unsupported raw HTML remains literal as on the base; no shortcode replacement inside markup attributes."
+  }
+]
