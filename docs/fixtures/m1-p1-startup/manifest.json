@@ -1,0 +1,23 @@
+{
+  "issue": "https://github.com/redrossa/neomd/issues/40",
+  "base": "861a1ca4c6c3efa7621333c5db19fac0aa0ad772",
+  "status": "Authored data only; all behavior validation unrun",
+  "files": {
+    "launch.md": {
+      "bytes": 49,
+      "sha256": "1e97785ff7bb6d81cf0ba66c68349e7774f1d9137fa4ffffd3f2b966bd82e928"
+    },
+    "Meeting café.MD": {
+      "bytes": 56,
+      "sha256": "d16d5f8950155779fcdd43518c4bb06e94fce26331d34cc68c972261d75247e7"
+    },
+    "empty.md": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "README-fixture.md": {
+      "bytes": 1288,
+      "sha256": "7645a8385035d91d9e612261dab4678ad8aacc5faa9ff8c0c3cd7f83ef7b5bba"
+    }
+  }
+}

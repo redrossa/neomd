@@ -702,3 +702,65 @@ These are unit-only commands (default Xcode parallel setting); no UI, clipboard,
 Human combined run: open the mixed fixture from Finder, navigate alert/task/footnote and native image links, resize/switch real appearance/multiple documents, then hear VoiceOver label→body order, emoji/color value meaning, no duplicate decorative speech and context exit. Record actual utterances and SHA/macOS/VoiceOver state, restore settings and recheck bytes/mtime. Comprehensive combined E2E and manual speech remain user-owned and unverified; this does not defer current-story AX/scale/live-system UI or any approved criterion.
 
 [#36](https://github.com/redrossa/neomd/issues/36)'s unchanged full reflow hang remains **BLOCKED/deferred, not passed or fixed**, with its reproduction and final investigation retained. It does not waive new cue reflow, normal resize/initial margins, image/native link or selection preservation. Earlier catalog entries are preserved byte-for-byte; their historical status remains historical rather than newly verified. No #14 work, public #22 controls, icons/DMG publication or milestone closure follows from this plan.
+
+## M1-P1 — Native startup Open dialog
+
+**Worker update / user waiver:** Further E2E/UI and manual scripted interaction testing was explicitly stopped by the user ("pls dont do e2e testing"). Final-head UI acceptance, transient-window/video inspection and remaining regressions are **deferred/unverified, not passed**. The following retains the triage plan for final milestone use; it is not authorization to run UI now. See [actual commands, pre-waiver outcomes and limitations](m1-p1-validation.md). Build and relevant unit tests remain the current gate.
+
+[Issue #40](https://github.com/redrossa/neomd/issues/40) · [milestone 1](https://github.com/redrossa/neomd/milestone/1).
+Accepted inspection base: `861a1ca4c6c3efa7621333c5db19fac0aa0ad772`. Astra/high runtime verified. The canonical issue has three unchecked criteria and no comments at triage. First open ordered story is #40, followed by #41–43, then #14–24. No reviewer stage under the current user policy. This entry is a **plan, not test evidence**; worker records the actual implementation SHA/PR/results below after executing it.
+
+### Scope and sequencing
+
+Startup only: launch with no requested document shows the native macOS Open panel, with no separate blank/instruction window; an explicit opening launch goes directly to its document; Cancel leaves the process running with no windows and usable File > Open / Command-O. Real empty files retain the empty-document reader. No custom browser, file-type/access change, renderer refactor or clipboard action.
+
+Do not delete the entire no-document lifecycle as a shortcut: #41 owns last-document-close behavior. At this base `DocumentReaderView.onDisappear` explicitly opens the instruction scene; retain that behavior for this story. A launch-suppressed instruction scene can remain as a transitional last-close destination while the document group's native startup behavior is restored. Prefer native launch arbitration rather than unconditional delayed panel presentation. If this separation fails in actual SwiftUI execution, report the overlap for user/coordinator resolution rather than quietly implementing #41. Dock reactivation is not newly specified.
+
+### Durable data, isolation and observable oracles
+
+Canonical data: `docs/fixtures/m1-p1-startup/`, exact files and setup in `README-fixture.md`, hashes in `manifest.json`. Copy to an owned temporary directory, use fixed mtime, capture bytes/mtime, and compare after interactions. Nothing requires network or a permission grant.
+
+Use an owned tested app, `-ApplePersistenceIgnoreState YES` for deterministic launch (existing `DocumentOpeningUITests.configuredApplication`), and a fresh stopped process for every cold-launch case. Do not infer cold opening from `app.launch()` followed by `NSWorkspace.open`: that is a warm-file event. Existing `app.open(url)` is the cold explicit-document pattern; verify process is stopped first. Also exercise a real Finder Open With or explicit `open -a "$APP" "$COPY/launch.md"` launch against the exact separately built bundle, without changing the host's default app association. Do not kill other NeoMD copies by bundle-wide/PID-name commands.
+
+Known native selectors on the inspected base: `app.windows.matching(identifier: "open-panel").firstMatch`; File menu item title starts with `Open` but not `Open Recent`; Go to Folder field `PathTextField`; reader window named by `url.lastPathComponent`; empty message `This document is empty.`; old instruction `NoDocumentInstruction`. Scope native Cancel/Open button queries to the panel, not Touch Bar duplicates. Use actual native keyboard events for Command-O and Escape, no direct action-method substitute.
+
+Document paragraphs now use native selectable text: query an exact full text value using its observed AX role (often `textViews`), not only the old `staticTexts` role. Require a unique visible marker, filename window and reader surface; do not weaken content/position assertions to window existence alone.
+
+For absence requirements, inspect all owned visible windows, not just absence of `NoDocumentInstruction`. Poll boundedly during launch and after content becomes readable, and retain startup video/window observations to catch transient starter/panel flashes. A single eventual screenshot does not prove no startup flash. No-window checks must include app still running plus zero visible app windows; the native panel is itself a window while open.
+
+### Criteria → actions → expected outcome
+
+| Criterion | Actions | Required observable outcome | Planned selector (not implemented at triage) |
+| --- | --- | --- | --- |
+| C1 | Cold launch with no file in Light and Dark; inspect windows; choose `launch.md` through the already-present native panel using Go to Folder and Open | Exactly the native Open panel, no extra starter/reader; selection opens the correct rendered document once and dismisses panel; unchanged bytes/mtime | `NeoMDUITests/DocumentOpeningUITests/testStartupPickerSelectsDocumentWithoutStarterWindow` |
+| C2 | Cold open `launch.md`, then separate cold launch with `Meeting café.MD`; observe startup and settled state | Correct filename/content, one reader, no unnecessary Open panel or starter, no raw-source starter flash | `NeoMDUITests/DocumentOpeningUITests/testColdExplicitUnicodeFileOpensWithoutStartupPanel` |
+| C3 | Cold launch; cancel startup panel with Escape; observe process/windows; invoke File > Open, cancel; invoke Command-O, choose `launch.md` | Still running with zero windows after each cancellation; each command presents a native usable picker; selection creates the correct reader without extra starter | `NeoMDUITests/DocumentOpeningUITests/testMenuAndCommandOInvokeTheNativeOpenPanel` |
+| Scope preservation | Cold explicit open `empty.md`; repeat via startup picker if practical | Real filename-titled reader with `This document is empty.`, no startup picker remaining; source remains zero bytes with same mtime | `NeoMDUITests/DocumentOpeningUITests/testNoFileLifecycleAndEmptyDocumentStayDistinct` |
+
+The table now uses actual worker selectors. The startup picker test covers the default appearance; the appearance suite covers pinned Light/Dark. The command test cancels both reopened panels (selection is separately covered by the startup-picker test). Empty-document coverage opens via a warm explicit request after cancellation, then preserves the current last-close instruction. Cold empty-file and transient-window/video observations remain deferred. These selectors are retained for future authorized validation, not current execution.
+
+### Build, unit and story UI commands — all UNRUN by triage
+
+Run from the worker checkout; perform proactive Swift diagnostics first. Use fresh external result paths and serialize UI; keep plain build and test products separate. Xcode 26.3 / macOS 26.5.1 were inspected, but graphical automation usability has NOT been tested by triage. Stop/report actual automation/signing failure; do not grant permissions.
+
+```sh
+xcodebuild -project NeoMD.xcodeproj -scheme NeoMD -configuration Debug   -destination 'platform=macOS' -derivedDataPath /tmp/NeoMD-P1-Plain build
+xcodebuild -project NeoMD.xcodeproj -scheme NeoMD   -destination 'platform=macOS' -derivedDataPath /tmp/NeoMD-P1-Tests   -parallel-testing-enabled NO -only-testing:NeoMDTests/DocumentOpeningTests   -only-testing:NeoMDTests/MarkdownFileTypeTests -only-testing:NeoMDTests/MarkdownTextDecoderTests   -resultBundlePath /tmp/neomd-p1-units.xcresult test
+```
+
+Use the same project/scheme/macOS/test DerivedData prefix with `-parallel-testing-enabled NO`, a fresh result bundle and `test` for story UI. Select the four proposed methods above **after implementation**, plus existing regressions below. Add relevant units for any new launch-arbitration state; native scene defaults alone are not meaningfully proven by mocked launch state.
+
+Existing regression selectors under `NeoMDUITests/DocumentOpeningUITests/`:
+- `testPickerCancellationPreservesScrolledReaderAndSourceFile` — ordinary reader/picker cancellation, actual marker position and bytes/mtime. Native text-role adaptation may be needed after #13; preserve the full oracle.
+- `testClosingOneOfMultipleDocumentsKeepsTheOtherReader` and `testCommandWClosesReaderWithoutPromptOrSourceChange` — preserve current last-close behavior in #40, no save prompt, immutable sources; #41 changes expectations later.
+- `testCommandWTargetsTheOpenPanelAndCloseDisablesWithoutWindows` and `testSavingCommandsAreUnavailable` — update obsolete startup setup, preserve read-only command semantics and actual native events.
+
+Existing opening/appearance tests contain now-superseded startup-instruction assumptions: migrate the startup portions of `testMenuAndCommandOInvokeTheNativeOpenPanel`, `testNoFileLifecycleAndEmptyDocumentStayDistinct`, `testDroppingOnNoFileWindowOpensTheDocument`, and `AppearanceUITests.testEmptyDocumentAndNoFileWindowStayLegibleInLightAndDark` / `testDropErrorStaysLegibleInLightAndDark`. Keep real empty-file/last-close/error/drop coverage: for a specifically retained last-close instruction test, first open and close a real disposable document. Do not delete all assertions to make them pass. Run any test whose behavior is edited.
+
+Many historical rendering suites launch without a file then deliver a warm NSWorkspace open. Check that their setup is not blocked by the new startup modal; handle the expected initial panel explicitly in test setup if needed, never introduce a production test-only skip-startup flag. Do not broadly rerun clipboard suites, deferred #36 reflow or #38 scaling gates. Their historical failures and permissions limitations are unchanged; #13's keyboard waiver does not cover this story's Command-O/Escape tests.
+
+### Required worker evidence and final combined milestone checks
+
+Worker fills in: exact tested source head/PR; actual commands; nonzero pass/failure/skip counts; xcresult/log paths; observed native AX/window timelines; inspected Light/Dark startup screenshots and explicit-file startup video; immutable-file checks; precise automation limitations and any repairs. No test/build/UI execution or screenshot inspection was performed at triage.
+
+At final milestone acceptance, repeat no-file launch → Cancel → menu/Command-O → document; Finder cold/warm requests including Unicode filename; actual empty file; explicit Quit and relaunch; then combine with #41 last-close no-window/no-panel behavior after it is implemented. Verify native menu discoverability without a key reader. Check fresh launches and the user's ordinary saved-state environment without deleting preferences/history, recording restoration behavior separately from requested new #24 persistence. User owns business acceptance. Full VoiceOver and combined appearance/resize/navigation checks remain final-milestone work, not claims of this startup-only gate.

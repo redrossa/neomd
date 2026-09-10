@@ -1,6 +1,6 @@
 # Milestone 1 brainstorm: Open and read Markdown
 
-Status: Draft for review. These are proposed stories and acceptance criteria, not published GitHub issues or an implementation commitment.
+Status: Historical brainstorm; unresolved proposals remain draft. Published GitHub issues are the implementation contracts. Stories #1–13 are closed. The user-approved [priority pivot](milestone-1-priority-pivot.md) inserts #40–43 before #14–24 and supersedes the historical starter-window/local-link policies only as explicitly recorded there; #43 permission and supported-file-type decisions remain unresolved.
 
 ## Product outcome
 
