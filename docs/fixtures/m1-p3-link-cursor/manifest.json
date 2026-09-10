@@ -1,0 +1,34 @@
+{
+  "status": "fixture data only; all interactions unrun/deferred",
+  "base_sha": "56ca6e622ae4e6c1996c160347f4624a3bbb3d1b",
+  "files": [
+    {
+      "path": "README-fixture.md",
+      "sha256": "beded9537055013d6abbbecf1efafff34a35bba795daf22a90f6f986e93dd85a",
+      "bytes": 4255
+    },
+    {
+      "path": "cursor.md",
+      "sha256": "34915602654d6ee9398c24e76eb38822c2ebc0c0b0b53591d13f34f2e97440e9",
+      "bytes": 1430
+    },
+    {
+      "path": "img/badge.png",
+      "sha256": "dc8d2add59fd871317a5b208f3d155e0e05b3d4dfe9a57a71fdcbf7cd12217fa",
+      "bytes": 229
+    },
+    {
+      "path": "nearby.md",
+      "sha256": "28132e34fb0ad501044386db889cd51b787ab72efdfa92c65bb47ff61f47c2c0",
+      "bytes": 154
+    }
+  ],
+  "reused_asset": {
+    "path": "img/badge.png",
+    "source": "docs/fixtures/m1-12-images/img/small.png",
+    "source_sha256": "dc8d2add59fd871317a5b208f3d155e0e05b3d4dfe9a57a71fdcbf7cd12217fa"
+  },
+  "deliberately_absent": [
+    "img/absent.png"
+  ]
+}
