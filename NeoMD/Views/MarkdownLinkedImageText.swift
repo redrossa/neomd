@@ -119,7 +119,8 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
         textContainer?.heightTracksTextView = false
         isHorizontallyResizable = false
         isVerticallyResizable = false
-        linkTextAttributes = [.foregroundColor: NSColor.linkColor, .underlineStyle: NSUnderlineStyle.single.rawValue]
+        linkTextAttributes = [.foregroundColor: NSColor.linkColor, .underlineStyle: NSUnderlineStyle.single.rawValue,
+                              .cursor: NSCursor.pointingHand]
         delegate = self
         unregisterDraggedTypes()
     }

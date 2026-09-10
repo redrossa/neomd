@@ -797,3 +797,38 @@ Worker performs proactive Swift diagnostics, a separate Debug app build, then re
 Update the lifecycle units that currently demand reopening the instruction. Cover final close, one-of-many close, repeated/unknown callbacks, repeated close/reopen cycles, termination, and coordinator forwarding with intact canonical section requests. Preserve the viewing DocumentGroup, native Open/Quit commands, read-only document implementation, reader cleanup and session-only folder grants. Units can verify production state/policy; they do not prove native no-window menus, timing, save-dialog absence or actual source mtime preservation.
 
 Triage ran **no build, unit, UI/E2E or manual scripted app test**. Worker must append actual implementation/PR/head/build/unit evidence without converting the deferred interactions into passes. The complete earlier catalog, including #40 evidence, is retained unchanged.
+
+
+## M1-P3 — Pointing-hand link cursor
+
+[Issue #42](https://github.com/redrossa/neomd/issues/42) · [milestone 1](https://github.com/redrossa/neomd/milestone/1).
+Triage inspection base: `56ca6e622ae4e6c1996c160347f4624a3bbb3d1b`, merged [PR #45](https://github.com/redrossa/neomd/pull/45). Runtime `openai-codex/gpt-6-astra`, high. Verdict **ACCEPTED for implementation**, not interaction acceptance. Canonical ordered stories #1–13/#40/#41 are closed; #42 is first open, then #43; #14 is not authorized.
+
+### Current execution boundary
+
+The latest user instruction **“pls dont do e2e testing”** supersedes historical catalog/issue statements requiring per-story interaction testing. No reviewer stage; worker Astra/low, coordinator verifies/merges. Build and relevant units only. All UI/E2E and manual scripted interactions below are **UNRUN/DEFERRED, not passed**, pending renewed authorization. Triage ran no build, unit tests or app interactions. Preserve #40 historical failures, #13 C5/#38, #36 and final-human deferrals; this appendix neither erases them nor claims milestone acceptance.
+
+### Durable fixture and minimal implementation hypothesis
+
+New focused data: [fixture README](fixtures/m1-p3-link-cursor/README-fixture.md), `cursor.md`, `nearby.md`, `img/badge.png`, and hash inventory. The PNG is byte-identical reuse of `fixtures/m1-12-images/img/small.png`; `img/absent.png` is deliberately absent. No remote image/server dependency. The README specifies exact copy/snapshot/isolation, controls and final-testing expectations. Previous broader link/image/cue fixtures remain unchanged; this compact fixture combines cursor-critical cases without importing unrelated rendering gates.
+
+At this base, selectable ordinary text, generated footnotes and linked-image leaves use `MarkdownLinkedImageTextView`. Its initializer replaces `linkTextAttributes` with color and underline only, omitting the native cursor. The installed public AppKit `NSTextView.h` documents default link attributes as blue, single underline and pointing hand, applied temporarily to `.link` ranges; `NSAttributedString.h` documents cursor default as I-beam. This is source/API evidence for restoring `.cursor: NSCursor.pointingHand` in that existing dictionary, **not an observed baseline hover reproduction**. Keep AppKit owning text/attachment hit regions and cursor restoration; no overlay, global monitor, manual cursor stack or URL routing changes.
+
+### Each criterion → future observable evidence (all UNRUN/DEFERRED)
+
+| Criterion | Focused data/actions after renewed authorization | Expected observable outcome |
+| --- | --- | --- |
+| C1 text links | External reference, Local file, In-document target, long styled label (including each wrapped line), both footnote references and generated returns | Native pointing hand on actual linked text; no destination/panel opens or reading position change from hover. Quote/task links share the same behavior. |
+| C2 linked images | Image-only internal image and mixed local/external images; hover edges/interior after an existing explicit bitmap-folder grant; also missing/loading linked fallback text | Hand over current clickable bitmap/text area, not only baseline or surrounding paragraph. No new grant/fetch/open action from hover. |
+| C3 off-link restoration | Move to adjacent selectable prose, line-end whitespace, margins and unlinked pure/mixed images; repeat after scroll and 900/480 resize | Native normal cursor off links, selectable text not a hand region, no stuck hand or rectangular paragraph-wide capture. |
+| C4 preserve interaction | Separately select text across a link; use existing mouse activation, Option-Tab/arrows/Return/Space/Escape, authored-link right-click/Control-click menu | Selection/action/menu behavior remains unchanged. Generated footnotes keep their existing exclusion from authored-link menus. Command-click routing changes remain #43, not a new test oracle here. |
+
+Repeat representative cases in Light/Dark; record cursor shape through a genuinely pointer-observable method, not AX roles alone or screenshots without cursor. Record exact source/build/OS, actual results and copied-source bytes/mtime comparison. Preserve other app/browser sessions and clipboard; no copy action is necessary. These instructions are a future catalog, not permission to execute them now.
+
+### Current worker build/unit validation needs
+
+Add focused method-level regressions using real `MarkdownLinkedImageTextView`/`MarkdownLinkedImageContent` and parsed source, not a disconnected cursor-policy mock. Assert native `linkTextAttributes[.cursor]` is pointing hand while link color/underline remain; enumerate exact `.link` ranges for external/local/internal and generated references/returns; cover loaded linked attachments plus loading/unavailable fallback and unlinked text/image controls. Confirm no global cursor applied to text storage, no new dispatch on init/update/measure, stable selection and existing explicit dispatch/cleanup. A missing cursor expectation should catch this base configuration. These assertions establish configured native policy, **not real hover or off-link event behavior**. Add no event synthesis or hidden E2E substitute.
+
+Existing non-E2E regression suites: `NeoMDTests/MarkdownLinkedImageTextTests`, `NeoMDTests/NativeInlineLeafTests`, `NeoMDTests/MarkdownLinkAttachmentTests`, `NeoMDTests/MarkdownWebLinksTests`, `NeoMDTests/MarkdownFootnotesTests`, `NeoMDTests/DocumentLinkResolverTests`, and `NeoMDTests/KeyboardTraversalTests`. Read test source and retain the method-level/native-host boundary; do not run `NeoMDUITests` or full-suite historical commands. Use proactive Swift diagnostics, separate Debug app build and targeted units with external DerivedData/fresh xcresults. Worker supplies actual new selectors, exact tested SHA, build/test commands, nonzero counts and failures/skips. No cursor-specific executable selector exists at triage and none is claimed passed.
+
+Production scope should be the link-attribute dictionary in `NeoMD/Views/MarkdownLinkedImageText.swift`, necessary regression tests and these triage-owned fixture/docs. Preserve parser semantics, `.link` destinations, image loading/permissions, context-menu ownership, selection/key handlers, lifecycle, document identity, source immutability, and #43 permission/file-type decisions. If native public-attribute behavior proves insufficient, report that evidence before expanding to custom hit testing. Final combined milestone acceptance remains user-owned.
