@@ -192,11 +192,18 @@ Acceptance ideas:
 
 - Distinguish NOTE, TIP, IMPORTANT, WARNING, and CAUTION alerts in both themes using labels and visual treatment.
 - Alerts remain coherent with the page when opening in either theme and when system appearance changes; labels and structure communicate their distinctions without relying on color alone. (Moved here from M1-05 by the approved scope split.)
-- Display Unicode emoji and recognized GitHub emoji shortcodes; leave unknown shortcodes readable.
+- Display Unicode emoji and recognized Unicode-backed GitHub emoji shortcodes and aliases from a pinned offline corpus; leave unknown and image-only custom shortcodes (such as `:shipit:`) readable as text.
 - Display valid HEX, RGB, and HSL inline-code color references with a small noninteractive swatch and their text value. Invalid values remain ordinary code.
-- Keep cues aligned with text and accessible at larger reading sizes.
+- Keep cues aligned with text and accessible at larger reading sizes. **C5 is unchecked/deferred—not passed—to [#38](https://github.com/redrossa/neomd/issues/38)** by [user approval5610876429](https://github.com/redrossa/neomd/issues/13#issuecomment-5610876429). It no longer blocks #13 merge after C1–C4 and remaining nondeferred gates pass; full final milestone acceptance remains user-owned. Preserve known failures and tests; #36 equivalence is unproven.
 
-Color swatches are deliberately proposed as a NeoMD extension: GitHub documents them for conversations rather than `.md` file rendering. They remain included here because the requested scope covers the guide's formats. [Color-model reference](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax#supported-color-models).
+Color swatches are a user-approved NeoMD extension: GitHub documents them for conversations rather than `.md` file rendering. They remain included here because the requested scope covers the guide's formats. [Color-model reference](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax#supported-color-models).
+
+Approved scope decisions for M1-13 (issue [#13](https://github.com/redrossa/neomd/issues/13), [recorded approval](https://github.com/redrossa/neomd/issues/13#issuecomment-5594012782), 2026-09-09):
+
+- Exact whole parser-normalized inline-code `#RRGGBB`, lowercase `rgb(R,G,B)` with integer channels 0–255, and `hsl(H,S%,L%)` with finite numeric hue 0–360 and saturation/lightness 0–100%. Decimal HSL components and interior component spacing are allowed; no outer whitespace. Preserve the displayed value; unsupported, malformed and out-of-range values stay ordinary code without clamping.
+- A pinned offline Unicode-backed GitHub emoji corpus includes all its aliases. Unknown and image-only custom names remain readable shortcode text; no runtime network lookup or custom-image assets.
+- Actual cue/inline scaling at 1×, 1.5× and 2× through a small internal font-scale input/test mechanism is in this story. Public size menus, shortcuts and persistence remain M1-22.
+- Implementation is authorized only through M1-13, then pauses before M1-14; icon/DMG publication is not authorized. This records approved scope, not completed implementation or validation. See [accepted cue plan](m1-13-cues-plan.md) and [cumulative fixture catalog](milestone-1-e2e-fixtures.md).
 
 ### M1-14 — Interpret mentions without a GitHub account · Core
 
@@ -363,7 +370,7 @@ The guide's outline menu and authoring shortcuts are website interactions, not a
 
 1. Confirm that native window controls, the macOS menu bar, temporary system dialogs, and document links fit “no buttons.”
 2. Confirm separate windows for distinct documents. M1-10 now uses the current document's folder for leading-slash paths, with on-demand read-only enclosing-folder access for the current session (approved by email, 2026-09-08).
-3. Confirm the explicit color-swatch extension and account-free mention treatment.
+3. The explicit color-swatch extension and bounded M1-13 cue scope are approved on issue #13 (2026-09-09), as recorded above. Account-free mention treatment remains unresolved for M1-14; this approval does not settle it.
 4. Choose the minimum macOS version, baseline Mac, and performance target; these are not settled by this brainstorm. Supported image formats were settled for M1-12 on issue #12 (all system-decodable formats, documented tested subset).
 
 ## Suggested milestone review scenario

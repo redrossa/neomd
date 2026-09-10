@@ -14,6 +14,7 @@ struct MarkdownBlockView: View {
     var availableWidth: CGFloat = DocumentReaderLayout.maximumColumnWidth
     var quoted = false
 
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
     @Environment(\.documentKeyboardOpenURL) private var keyboardOpenURL
     @State private var selectedLink = 0
@@ -46,6 +47,7 @@ struct MarkdownBlockView: View {
 
     var body: some View {
         blockContent
+            .environment(\.documentLeafID, block.isLeaf ? block.id : nil)
             .background(alignment: .topLeading) {
                 if let navigationBridge, !block.anchors.isEmpty {
                     DocumentNavigationMarker(bridge: navigationBridge, id: block.id,
@@ -86,6 +88,11 @@ struct MarkdownBlockView: View {
 
     private func handleLinkKeyPress(_ press: KeyPress) -> KeyPress.Result {
         guard !links.isEmpty, keyboardFocus.wrappedValue == .links(block.id) else { return .ignored }
+        if let reverse = DocumentReaderTraversal.direction(press) {
+            guard let traverse = navigationBridge?.traverse else { return .ignored }
+            traverse(.links(block.id), reverse)
+            return .handled
+        }
         switch press.key {
         case .leftArrow: selectedLink = (selectedLink + links.count - 1) % links.count
         case .rightArrow: selectedLink = (selectedLink + 1) % links.count
@@ -101,13 +108,13 @@ struct MarkdownBlockView: View {
         switch block.kind {
         case .paragraph:
             inlineContent
-                .font(.body)
+                .font(theme.font())
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
         case .heading(let level):
             inlineContent
-                .font(Self.headingFont(level: level))
+                .font(theme.font(headingLevel: level))
                 .foregroundStyle(level >= 6 ? Color.secondary : Color.primary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -122,7 +129,7 @@ struct MarkdownBlockView: View {
                 pageReader: pageReader
             )
 
-        case .blockQuote, .listItem, .footnote:
+        case .blockQuote, .listItem, .footnote, .alert:
             // Container geometry/semantics are emitted by the flat root host.
             EmptyView()
 
@@ -139,7 +146,10 @@ struct MarkdownBlockView: View {
     @ViewBuilder private var inlineContent: some View {
         if text.runs.contains(where: { $0.markdownImage != nil }) {
             MarkdownImageParagraph(id: block.id, text: text, availableWidth: availableWidth,
-                                   headingLevel: imageHeadingLevel, quoted: quoted)
+                                   headingLevel: imageHeadingLevel, quoted: quoted, scale: theme.scale)
+        } else if MarkdownLinkedImageText.requiresNativeText(text) {
+            MarkdownLinkedImageText(input: .init(text: text, states: [:], dark: colorScheme == .dark,
+                width: availableWidth, headingLevel: imageHeadingLevel, quoted: quoted, scale: theme.scale))
         } else {
             Text(text)
         }
@@ -150,17 +160,6 @@ struct MarkdownBlockView: View {
         return nil
     }
 
-    /// The type scale used for each heading level.
-    private static func headingFont(level: Int) -> Font {
-        switch level {
-        case 1: .system(.largeTitle, weight: .semibold)
-        case 2: .system(.title, weight: .semibold)
-        case 3: .system(.title2, weight: .semibold)
-        case 4: .system(.title3, weight: .semibold)
-        case 5: .system(.headline)
-        default: .system(.subheadline, weight: .semibold)
-        }
-    }
 }
 
 /// Do not install a FocusState binding on containers: it would override the
@@ -175,7 +174,7 @@ private struct MarkdownLinkFocus: ViewModifier {
         if enabled {
             content.focusable(true, interactions: .edit)
                 .focused(keyboardFocus, equals: .links(id))
-                .onKeyPress(keys: [.leftArrow, .rightArrow, .return, .space, .escape], action: handleKeyPress)
+                .onKeyPress(keys: [.tab, .leftArrow, .rightArrow, .return, .space, .escape], action: handleKeyPress)
         } else { content }
     }
 }
@@ -204,11 +203,13 @@ private struct MarkdownCodeBlockView: View {
 
     @State private var scrollPosition = ScrollPosition(edge: .leading)
     @State private var scrollMetrics = CodeBlockScrollMetrics.zero
+    @Environment(\.documentNavigationBridge) private var navigationBridge
+    @Environment(\.documentNavigationGeneration) private var documentGeneration
 
     var body: some View {
         ScrollView(.horizontal) {
             Text(theme.presentationText(for: block.text))
-                .font(.system(.callout, design: .monospaced))
+                .font(.system(size: NSFont.preferredFont(forTextStyle: .callout).pointSize * theme.scale, design: .monospaced))
                 .fixedSize(horizontal: true, vertical: true)
                 .padding(12)
         }
@@ -226,11 +227,20 @@ private struct MarkdownCodeBlockView: View {
                 keyboardFocus.wrappedValue = .reader
             }
             scrollMetrics = newMetrics
+
+        }
+        .background {
+            if let navigationBridge {
+                DocumentNavigationMarker(bridge: navigationBridge, id: block.id,
+                    generation: documentGeneration, codeOverflow: scrollMetrics.canScrollHorizontally)
+                    .frame(width: 0, height: 0).allowsHitTesting(false)
+            }
         }
         .focusable(scrollMetrics.canScrollHorizontally, interactions: .edit)
         .focused(keyboardFocus, equals: .codeBlock(block.id))
         .onKeyPress(
             keys: [
+                .tab,
                 .leftArrow,
                 .rightArrow,
                 .home,
@@ -245,6 +255,11 @@ private struct MarkdownCodeBlockView: View {
     }
 
     private func handleKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {
+        if let reverse = DocumentReaderTraversal.direction(keyPress) {
+            guard let traverse = navigationBridge?.traverse else { return .ignored }
+            traverse(.codeBlock(block.id), reverse)
+            return .handled
+        }
         let selectionModifiers: EventModifiers = [.shift, .control]
         guard keyPress.modifiers.intersection(selectionModifiers).isEmpty else {
             return .ignored

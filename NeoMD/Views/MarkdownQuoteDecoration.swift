@@ -7,6 +7,27 @@ nonisolated final class MarkdownQuoteDecoration: @unchecked Sendable {
     @MainActor weak var surface: QuotePathView?
     private let lock = NSLock()
     private var storedBars: [CGRect] = []
+    struct AlertBar: Equatable, Sendable {
+        let rect: CGRect
+        let alert: MarkdownAlert
+    }
+    private var storedAlertBars: [AlertBar] = []
+
+    var alertBars: [AlertBar] {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return storedAlertBars
+        }
+        set {
+            lock.lock()
+            let changed = storedAlertBars != newValue
+            storedAlertBars = newValue
+            lock.unlock()
+            guard changed else { return }
+            Task { @MainActor [weak self] in self?.surface?.needsDisplay = true }
+        }
+    }
 
     var bars: [CGRect] {
         get {
@@ -63,5 +84,9 @@ final class QuotePathView: NSView {
         }
         NSColor.tertiaryLabelColor.setFill()
         path.fill()
+        for bar in decoration.alertBars where bar.rect.intersects(dirtyRect) {
+            NSColor(ReaderTheme.alertColor(bar.alert)).setFill()
+            NSBezierPath(rect: bar.rect).fill()
+        }
     }
 }

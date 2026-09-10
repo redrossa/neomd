@@ -31,7 +31,7 @@ struct MarkdownLinkedImageTextTests {
         quote.quoted = true
         let quoted = MarkdownLinkedImageContent.make(quote)
         #expect(quoted.attribute(.foregroundColor, at: string.range(of: "bold").location, effectiveRange: nil) as? NSColor == .secondaryLabelColor)
-        #expect(native.attribute(.baselineOffset, at: string.range(of: "up").location, effectiveRange: nil) as? Int == 5)
+        #expect((native.attribute(.baselineOffset, at: string.range(of: "up").location, effectiveRange: nil) as? NSNumber)?.doubleValue == 5)
     }
 
     @Test func dismantlingReleasesOwnedStateAndDisablesRetainedAccessibilityActions() throws {

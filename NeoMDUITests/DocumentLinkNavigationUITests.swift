@@ -441,7 +441,16 @@ final class DocumentLinkNavigationUITests: XCTestCase {
             }
             XCTAssertTrue(returnSelected, window.debugDescription)
             app.typeKey(.space, modifierFlags: [])
-            assertAtTop(text("Reference one1 and repeated1. Reference two2. Reference three3.", in: window), window: window)
+            let expected = "Reference one1 and repeated1. Reference two2. Reference three3."
+            var matches: [XCUIElement] = []
+            XCTAssertTrue(wait {
+                matches = window.textViews.allElementsBoundByIndex.filter { ($0.value as? String) == expected }
+                return matches.count == 1
+            }, window.debugDescription)
+            XCTAssertEqual(matches.count, 1)
+            let reference = try XCTUnwrap(matches.first)
+            XCTAssertEqual(reference.value as? String, expected)
+            assertAtTop(reference, window: window)
             app.terminate()
         }
     }

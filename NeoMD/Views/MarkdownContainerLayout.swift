@@ -25,6 +25,7 @@ nonisolated struct MarkdownContainerGeometry {
         let frames: [CGRect]
         let nodeFrames: [CGRect]
         let quoteBars: [CGRect]
+        let alertBars: [MarkdownQuoteDecoration.AlertBar]
         let size: CGSize
         let baseline: CGFloat
         let operations: Int
@@ -36,6 +37,7 @@ nonisolated struct MarkdownContainerGeometry {
     let budget: CGFloat
     let entries: [Entry]
     let preparationOperations: Int
+    let scale: CGFloat
 
     /// Semantic offsets, not a zip with all arena nodes. Decorations do not
     /// allocate native/AX views; anchored nodes still receive a real marker.
@@ -48,12 +50,13 @@ nonisolated struct MarkdownContainerGeometry {
         // carry no drawing; the width-bounded compressed interior has none.
         if node.kind == .blockQuote && !entry.compressed { return true }
         switch node.kind {
-        case .listItem, .footnote: return true
+        case .listItem, .footnote, .alert: return true
         default: return false
         }
     }
 
-    init(document: MarkdownRenderDocument, rootID: Int, width: CGFloat) {
+    init(document: MarkdownRenderDocument, rootID: Int, width: CGFloat, scale: CGFloat = 1) {
+        self.scale = scale
         self.document = document
         self.rootID = rootID
         self.width = max(0, width)
@@ -68,12 +71,12 @@ nonisolated struct MarkdownContainerGeometry {
             if let parentID = node.parentID, parentID >= rootID {
                 let parent = document[parentID]
                 let entry = entries[parentID - rootID]
-                naturalX = entry.naturalX + Self.inset(parent.kind)
-                if case .listItem = parent.kind, case .listItem = node.kind { naturalX -= 14 }
+                naturalX = entry.naturalX + Self.inset(parent.kind, scale: scale)
+                if case .listItem = parent.kind, case .listItem = node.kind { naturalX -= 14 * scale }
                 depth = entry.depth + 1
                 quoted = entry.quoted || parent.kind == .blockQuote
             }
-            let compressed = !node.isLeaf && naturalX + Self.inset(node.kind) > budget
+            let compressed = !node.isLeaf && naturalX + Self.inset(node.kind, scale: scale) > budget
             let x = min(naturalX, budget)
             entries.append(Entry(id: id, depth: depth, naturalX: naturalX, x: x,
                                  width: max(0, width - x), quoted: quoted,
@@ -113,10 +116,10 @@ nonisolated struct MarkdownContainerGeometry {
         preparationOperations = operations + entries.count
     }
 
-    private static func inset(_ kind: MarkdownBlock.Kind) -> CGFloat {
+    private static func inset(_ kind: MarkdownBlock.Kind, scale: CGFloat) -> CGFloat {
         switch kind {
-        case .blockQuote: 15
-        case .listItem, .footnote: 36
+        case .blockQuote, .alert: 15 * scale
+        case .listItem, .footnote: 36 * scale
         default: 0
         }
     }
@@ -146,8 +149,8 @@ nonisolated struct MarkdownContainerGeometry {
                     operations += 1
                 }
                 let firstBaseline = node.childIDs.first.map { baselines[$0 - rootID] } ?? 0
-                if entry.caption != nil {
-                    childOffsets[index] = own.size.height + 8
+                if entry.caption != nil || node.kind.alert != nil {
+                    childOffsets[index] = own.size.height + (node.childIDs.isEmpty ? 0 : 8 * scale)
                     heights[index] = childHeight + childOffsets[index]
                     baselines[index] = own.baseline
                 } else if case .listItem = node.kind, !entry.compressed {
@@ -167,6 +170,7 @@ nonisolated struct MarkdownContainerGeometry {
         var frames = [CGRect](repeating: .zero, count: entries.count)
         var nodeFrames = frames
         var bars: [CGRect] = []
+        var alertBars: [MarkdownQuoteDecoration.AlertBar] = []
         for entry in entries {
             let index = entry.id - rootID
             let node = document[entry.id]
@@ -183,9 +187,12 @@ nonisolated struct MarkdownContainerGeometry {
                 bars.append(CGRect(x: min(entry.naturalX, max(0, budget - 3)), y: origins[index],
                                    width: min(3, budget), height: heights[index]))
             }
+            if let alert = node.kind.alert {
+                alertBars.append(.init(rect: CGRect(x: entry.x, y: origins[index], width: 3, height: heights[index]), alert: alert))
+            }
             operations += 1
         }
-        return Result(frames: frames, nodeFrames: nodeFrames, quoteBars: bars,
+        return Result(frames: frames, nodeFrames: nodeFrames, quoteBars: bars, alertBars: alertBars,
                       size: CGSize(width: width, height: heights.first ?? 0),
                       baseline: baselines.first ?? 0, operations: operations)
     }
@@ -210,8 +217,8 @@ struct MarkdownContainerLayout: Layout {
             let node = geometry.document[entry.id]
             if node.kind == .blockQuote && entry.caption == nil { continue }
             let width: CGFloat
-            if !node.isLeaf, entry.caption == nil {
-                width = node.kind == .blockQuote || entry.compressed ? 0 : 28
+            if !node.isLeaf, entry.caption == nil, node.kind.alert == nil {
+                width = node.kind == .blockQuote || entry.compressed ? 0 : 28 * geometry.scale
             } else { width = entry.width }
             let dimension = view.dimensions(in: ProposedViewSize(width: width, height: nil))
             measurements[entry.id - geometry.rootID] = MarkdownContainerGeometry.Measurement(
@@ -229,6 +236,7 @@ struct MarkdownContainerLayout: Layout {
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) {
         let result = cache.result ?? measured(subviews)
         decoration.bars = result.quoteBars
+        decoration.alertBars = result.alertBars
         for (entry, view) in zip(geometry.viewEntries, subviews) {
             let index = entry.id - geometry.rootID
             let frame = geometry.document[entry.id].kind == .blockQuote && entry.caption == nil

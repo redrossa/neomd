@@ -1,0 +1,552 @@
+[
+  {
+    "id": "C-hex-blue",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "#0969DA",
+    "swatch": true,
+    "expected_srgb": [
+      0.03529411764705882,
+      0.4117647058823529,
+      0.8549019607843137
+    ],
+    "reason": "Whole supported model, no clamping."
+  },
+  {
+    "id": "C-hex-lower",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "#abcdef",
+    "swatch": true,
+    "expected_srgb": [
+      0.6705882352941176,
+      0.803921568627451,
+      0.9372549019607843
+    ],
+    "reason": "Whole supported model, no clamping."
+  },
+  {
+    "id": "C-white",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "#FFFFFF",
+    "swatch": true,
+    "expected_srgb": [
+      1,
+      1,
+      1
+    ],
+    "reason": "Whole supported model, no clamping."
+  },
+  {
+    "id": "C-black",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "#000000",
+    "swatch": true,
+    "expected_srgb": [
+      0,
+      0,
+      0
+    ],
+    "reason": "Whole supported model, no clamping."
+  },
+  {
+    "id": "C-rgb-blue",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "rgb(9, 105, 218)",
+    "swatch": true,
+    "expected_srgb": [
+      0.03529411764705882,
+      0.4117647058823529,
+      0.8549019607843137
+    ],
+    "reason": "Whole supported model, no clamping."
+  },
+  {
+    "id": "C-rgb-boundary",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "rgb(0,255,0)",
+    "swatch": true,
+    "expected_srgb": [
+      0,
+      1,
+      0
+    ],
+    "reason": "Whole supported model, no clamping."
+  },
+  {
+    "id": "C-rgb-space",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "rgb( 9 ,\t105 , 218 )",
+    "swatch": true,
+    "expected_srgb": [
+      0.03529411764705882,
+      0.4117647058823529,
+      0.8549019607843137
+    ],
+    "reason": "Whole supported model, no clamping."
+  },
+  {
+    "id": "C-hsl-red",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "hsl(0,100%,50%)",
+    "swatch": true,
+    "expected_srgb": [
+      1,
+      0,
+      0
+    ],
+    "reason": "Whole supported model, no clamping."
+  },
+  {
+    "id": "C-hsl-endpoint",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "hsl(360, 100%, 50%)",
+    "swatch": true,
+    "expected_srgb": [
+      1,
+      0,
+      0
+    ],
+    "reason": "Whole supported model, no clamping."
+  },
+  {
+    "id": "C-hsl-green",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "hsl(120,100%,50%)",
+    "swatch": true,
+    "expected_srgb": [
+      0,
+      1,
+      0
+    ],
+    "reason": "Whole supported model, no clamping."
+  },
+  {
+    "id": "C-hsl-blue",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "hsl(240,100%,50%)",
+    "swatch": true,
+    "expected_srgb": [
+      0,
+      0,
+      1
+    ],
+    "reason": "Whole supported model, no clamping."
+  },
+  {
+    "id": "C-hsl-gray",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "hsl(212.5, 0%, 45.5%)",
+    "swatch": true,
+    "expected_srgb": [
+      0.455,
+      0.455,
+      0.455
+    ],
+    "reason": "Whole supported model, no clamping."
+  },
+  {
+    "id": "C-hsl-decimal",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "hsl(212.5, 92.25%, 45.5%)",
+    "swatch": true,
+    "expected_srgb": [
+      0.035262500000000085,
+      0.42002187499999977,
+      0.8747375
+    ],
+    "reason": "Whole supported model, no clamping."
+  },
+  {
+    "id": "C-hsl-white",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "hsl(360,100%,100%)",
+    "swatch": true,
+    "expected_srgb": [
+      1,
+      1,
+      1
+    ],
+    "reason": "Whole supported model, no clamping."
+  },
+  {
+    "id": "C-hsl-black",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "hsl(0,0%,0%)",
+    "swatch": true,
+    "expected_srgb": [
+      0,
+      0,
+      0
+    ],
+    "reason": "Whole supported model, no clamping."
+  },
+  {
+    "id": "C-invalid-01",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "#fff",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-02",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "#FFFF",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-03",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "#12345678",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-04",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "#12GG56",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-05",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "red",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-06",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "prefix #0969DA",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-07",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "#0969DA suffix",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-08",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": " #0969DA",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-09",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "#0969DA ",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-10",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "RGB(9,105,218)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-11",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "rgb(256,0,0)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-12",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "rgb(-1,0,0)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-13",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "rgb(1.5,2,3)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-14",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "rgb(1%,2%,3%)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-15",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "rgb(1 2 3)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-16",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "rgba(1,2,3,1)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-17",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "rgb(1,2)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-18",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "rgb(1,2,3,4)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-19",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "rgb(NaN,0,0)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-20",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "rgb(1e2,0,0)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-21",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "hsl(361,100%,50%)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-22",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "hsl(-1,100%,50%)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-23",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "hsl(0,101%,50%)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-24",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "hsl(0,100%,-1%)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-25",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "hsl(0,50%,101%)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-26",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "hsl(NaN,50%,50%)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-27",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "hsl(inf,50%,50%)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-28",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "hsl(0,50,50)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-29",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "hsla(0,50%,50%,1)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-30",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "hsl(0 50% 50%)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-31",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "hsl(0,50%,50%)/1",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-32",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "hsl(calc(2),50%,50%)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-33",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "hsl(1e2,50%,50%)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  },
+  {
+    "id": "C-invalid-34",
+    "criteria": [
+      "C4"
+    ],
+    "normalized_code": "rgb(999999999999999999999999,0,0)",
+    "swatch": false,
+    "expected_srgb": null,
+    "reason": "Unsupported, malformed, outer whitespace, nonfinite or out-of-range: ordinary code."
+  }
+]

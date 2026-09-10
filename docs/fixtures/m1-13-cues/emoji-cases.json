@@ -1,0 +1,222 @@
+[
+  {
+    "id": "E-direct",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": "Direct 👩🏽‍💻 ❤️ 🇺🇸 é.",
+    "expected_text": "Direct 👩🏽‍💻 ❤️ 🇺🇸 é.",
+    "expected_replacements": 0,
+    "reason": "Direct Unicode scalar sequences remain unchanged."
+  },
+  {
+    "id": "E-alias",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": ":+1: :thumbsup: :-1: :thumbsdown:",
+    "expected_text": "👍 👍 👎 👎",
+    "expected_replacements": 4,
+    "reason": "Eligible raw shortcode only; preserve inherited attributes."
+  },
+  {
+    "id": "E-multiscalar",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": ":woman_technologist: :heart: :us:",
+    "expected_text": "👩‍💻 ❤️ 🇺🇸",
+    "expected_replacements": 3,
+    "reason": "Eligible raw shortcode only; preserve inherited attributes."
+  },
+  {
+    "id": "E-adjacent",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": ":smile::heart:",
+    "expected_text": "😄❤️",
+    "expected_replacements": 2,
+    "reason": "Eligible raw shortcode only; preserve inherited attributes."
+  },
+  {
+    "id": "E-unknown-custom",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": ":neomd_unknown: :shipit: :octocat: :SMILE:",
+    "expected_text": ":neomd_unknown: :shipit: :octocat: :SMILE:",
+    "expected_replacements": 0,
+    "reason": "Unknown, image-only custom and case-mismatched names stay readable."
+  },
+  {
+    "id": "E-escape-open",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": "\\:smile: :smile:",
+    "expected_text": ":smile: 😄",
+    "expected_replacements": 1,
+    "reason": "Eligible raw shortcode only; preserve inherited attributes."
+  },
+  {
+    "id": "E-escape-close",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": ":smile\\: :smile:",
+    "expected_text": ":smile: 😄",
+    "expected_replacements": 1,
+    "reason": "Eligible raw shortcode only; preserve inherited attributes."
+  },
+  {
+    "id": "E-escape-in-name",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": ":woman\\_technologist: :woman_technologist:",
+    "expected_text": ":woman_technologist: 👩‍💻",
+    "expected_replacements": 1,
+    "reason": "Eligible raw shortcode only; preserve inherited attributes."
+  },
+  {
+    "id": "E-entity-open",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": "&#58;smile: :smile:",
+    "expected_text": ":smile: 😄",
+    "expected_replacements": 1,
+    "reason": "Eligible raw shortcode only; preserve inherited attributes."
+  },
+  {
+    "id": "E-entity-close",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": ":smile&#58; :smile:",
+    "expected_text": ":smile: 😄",
+    "expected_replacements": 1,
+    "reason": "Eligible raw shortcode only; preserve inherited attributes."
+  },
+  {
+    "id": "E-entity-name",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": ":smi&#108;e: :smile:",
+    "expected_text": ":smile: 😄",
+    "expected_replacements": 1,
+    "reason": "Eligible raw shortcode only; preserve inherited attributes."
+  },
+  {
+    "id": "E-even-backslashes",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": "\\\\:smile:",
+    "expected_text": "\\😄",
+    "expected_replacements": 1,
+    "reason": "The two raw backslashes produce one literal backslash; the following raw colon remains eligible."
+  },
+  {
+    "id": "E-odd-backslashes",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": "\\\\\\:smile:",
+    "expected_text": "\\:smile:",
+    "expected_replacements": 0,
+    "reason": "Three raw backslashes produce one backslash and an escaped colon; do not promote."
+  },
+  {
+    "id": "E-code",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": "`:smile:` :smile:",
+    "expected_text": ":smile: 😄",
+    "expected_replacements": 1,
+    "reason": "Inline code remains literal."
+  },
+  {
+    "id": "E-fence",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": "```text\n:smile:\n```\n",
+    "expected_text": ":smile:\n",
+    "expected_replacements": 0,
+    "reason": "Code-block literal is unchanged, including parser-owned newline."
+  },
+  {
+    "id": "E-style",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": "**:smile:** *:heart:*",
+    "expected_text": "😄 ❤️",
+    "expected_replacements": 2,
+    "reason": "Retain strong/emphasis runs after replacement."
+  },
+  {
+    "id": "E-explicit-link",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": "[:smile:](https://example.com/:heart:)",
+    "expected_text": "😄",
+    "expected_replacements": 1,
+    "reason": "Label transforms; URL stays exactly https://example.com/:heart:."
+  },
+  {
+    "id": "E-angle-autolink",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": "<https://example.com/:smile:>",
+    "expected_text": "https://example.com/:smile:",
+    "expected_replacements": 0,
+    "reason": "An autolink URL label stays a literal URL."
+  },
+  {
+    "id": "E-bare-autolink",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": "https://example.com/:smile:",
+    "expected_text": "https://example.com/:smile:",
+    "expected_replacements": 0,
+    "reason": "Keep autolink label and URL; do not split/rewrite the URL."
+  },
+  {
+    "id": "E-supported-inline-html",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": "<sup>:smile:</sup>",
+    "expected_text": "😄",
+    "expected_replacements": 1,
+    "reason": "The eligible text between supported wrappers transforms and retains script style; markup/attributes do not."
+  },
+  {
+    "id": "E-repeat-provenance",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": "\\:smile: :smile: &#58;smile: :smile:",
+    "expected_text": ":smile: 😄 :smile: 😄",
+    "expected_replacements": 2,
+    "reason": "No substring search from document start or post-cmark literal regex can establish provenance."
+  },
+  {
+    "id": "E-multiline-unicode",
+    "criteria": [
+      "C3"
+    ],
+    "markdown": "é :smile:\n\t:heart:",
+    "expected_text": "é 😄 ❤️",
+    "expected_replacements": 2,
+    "reason": "Softbreak normalizes to space; tab indentation must not invalidate eligible continuation text."
+  }
+]

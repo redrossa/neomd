@@ -15,7 +15,7 @@ struct MarkdownContainerView: View {
     @Environment(\.documentNavigationGeneration) private var documentGeneration
 
     var body: some View {
-        let geometry = MarkdownContainerGeometry(document: document, rootID: rootID, width: width)
+        let geometry = MarkdownContainerGeometry(document: document, rootID: rootID, width: width, scale: theme.scale)
         MarkdownContainerLayout(geometry: geometry, decoration: decoration) {
             ForEach(geometry.viewEntries, id: \.id) { entry in
                 let node = document[entry.id]
@@ -40,6 +40,19 @@ struct MarkdownContainerView: View {
                 .foregroundStyle(entry.quoted ? Color.secondary : Color.primary)
         } else {
             switch node.kind {
+            case .alert(let alert):
+                HStack(alignment: .firstTextBaseline, spacing: 6 * theme.scale) {
+                    Image(systemName: alert.symbol).accessibilityHidden(true)
+                    Text(alert.label).fontWeight(.semibold)
+                }
+                .font(theme.font())
+                .foregroundStyle(ReaderTheme.alertColor(alert))
+                .padding(.leading, 15 * theme.scale)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(alert.label)
+                .accessibilityIdentifier("MarkdownAlert-\(alert.rawValue)-\(node.id)")
             case .blockQuote:
                 Group {
                     if let caption = entry.caption { depthLabel(caption).padding(.leading, 4) }
@@ -54,15 +67,15 @@ struct MarkdownContainerView: View {
             case .listItem(let marker, _):
                 if let caption = entry.caption {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        MarkdownListMarker(block: node, marker: marker).frame(width: 28, alignment: .trailing)
+                        MarkdownListMarker(block: node, marker: marker, scale: theme.scale).frame(width: 28 * theme.scale, alignment: .trailing)
                         depthLabel(caption)
                     }
                 } else {
-                    MarkdownListMarker(block: node, marker: marker).frame(width: 28, alignment: .trailing)
+                    MarkdownListMarker(block: node, marker: marker, scale: theme.scale).frame(width: 28 * theme.scale, alignment: .trailing)
                 }
             case .footnote(let ordinal):
                 HStack(alignment: .top, spacing: 8) {
-                    Text("\(ordinal).").accessibilityHidden(true).frame(width: 28, alignment: .trailing)
+                    Text("\(ordinal).").font(theme.font()).accessibilityHidden(true).frame(width: 28 * theme.scale, alignment: .trailing)
                     if let caption = entry.caption { depthLabel(caption) }
                 }
                 .accessibilityElement(children: .ignore)
@@ -75,7 +88,7 @@ struct MarkdownContainerView: View {
     }
 
     private func depthLabel(_ caption: String) -> some View {
-        Text(caption).font(.caption).foregroundStyle(.secondary)
+        Text(caption).font(.system(size: NSFont.preferredFont(forTextStyle: .caption1).pointSize * theme.scale)).foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityHint("Indentation is compressed to preserve readable text width. All content is retained in source order.")
@@ -85,11 +98,12 @@ struct MarkdownContainerView: View {
 struct MarkdownListMarker: View {
     let block: MarkdownBlock
     let marker: String
+    var scale: CGFloat = 1
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
             if block.task == nil || marker.hasSuffix(".") {
-                Text(marker).font(.body).foregroundStyle(.secondary).accessibilityHidden(true)
+                Text(marker).font(ReaderTheme(scale: scale).font()).foregroundStyle(.secondary).accessibilityHidden(true)
             }
             if let task = block.task {
                 Image(systemName: task == .complete ? "checkmark.square.fill" : "square")
@@ -98,6 +112,7 @@ struct MarkdownListMarker: View {
                     .accessibilityIdentifier("MarkdownTaskMarker-\(block.id)")
             }
         }
+        .font(ReaderTheme(scale: scale).font())
         .fixedSize()
     }
 }

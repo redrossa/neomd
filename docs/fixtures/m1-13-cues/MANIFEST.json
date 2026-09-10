@@ -1,0 +1,89 @@
+{
+  "schema": 1,
+  "story": "M1-13",
+  "accepted_base": "add27876bca4036ed0c6c023c08cf94f46481e6b",
+  "status": "data-only; app validation not run",
+  "self_excluded": true,
+  "files": [
+    {
+      "path": "README-fixture.md",
+      "bytes": 9052,
+      "sha256": "1b0de47af0782e91dc578903576ce4ddfc443d4f5bf475776555f288d69e69c7"
+    },
+    {
+      "path": "alert-cases.json",
+      "bytes": 10424,
+      "sha256": "9cbe3dbc5e4e82b67e71f940164a8061177065ff530c6c58d606421c5677165c"
+    },
+    {
+      "path": "alert-controls.md",
+      "bytes": 1491,
+      "sha256": "46f19b8bcbfcc3e73357a92c6cde7e5fc06608100ab695803bde73c432de1e5c"
+    },
+    {
+      "path": "alerts.md",
+      "bytes": 1078,
+      "sha256": "5ead7f7e772571ef19e5daa2f262ace8cbd2efee1c912f3a74d8439a705a9ff7"
+    },
+    {
+      "path": "color-cases.json",
+      "bytes": 12659,
+      "sha256": "c2529dd2fd720b309a7a252c516fda65e69fbd189aee3c662bf98eeffb7d98ec"
+    },
+    {
+      "path": "colors.md",
+      "bytes": 2000,
+      "sha256": "2be01209e715291e402982eb0765503a72ed252102be631b40759d1d5da11c65"
+    },
+    {
+      "path": "context-cases.json",
+      "bytes": 2896,
+      "sha256": "8760b0d1224590df12182ce62b26ac2c5df842645bec04960f912e66d0a17ff2"
+    },
+    {
+      "path": "corpus/expected-aliases.json",
+      "bytes": 50081,
+      "sha256": "d364423dc9da98e34ebe63fd3983c6e6b497e70761abc3255f13bb3530f0d597"
+    },
+    {
+      "path": "corpus/gemoji-LICENSE.txt",
+      "bytes": 1056,
+      "sha256": "7ea1d1fd0602e6623b9a65e791499a0ea5a2f5f60f91bfad78cbaeee19da26e6"
+    },
+    {
+      "path": "corpus/gemoji-emoji.json",
+      "bytes": 413367,
+      "sha256": "b174ae2aeb321b52f64adb9ff412f966a7f338839d780784dd15dcad702c2dd6"
+    },
+    {
+      "path": "corpus/provenance.json",
+      "bytes": 1858,
+      "sha256": "d2088466c479fbd3e81236b1731e4b47617a266a4832ba98a30a4f3e42192b81"
+    },
+    {
+      "path": "emoji-cases.json",
+      "bytes": 6024,
+      "sha256": "454acd311073627f1a39afa89a996a1bf580f9d2caa5e596cb592493a52c12fd"
+    },
+    {
+      "path": "emoji-corpus.md",
+      "bytes": 85167,
+      "sha256": "4f9f1bce78f464fd8b644c228fbaea1edcd64585fa00cade7336dc50e5b38aaa"
+    },
+    {
+      "path": "emoji.md",
+      "bytes": 1049,
+      "sha256": "b4ae96a118dda4053584e2c3f26e31cfb8d0159e5b257bcb40c0b08b8dca5da4"
+    },
+    {
+      "path": "img/badge.png",
+      "bytes": 76,
+      "sha256": "32ff0faeb3e86e24504b3e0793f264654af46a993be44c5d957525e2de3a300a"
+    },
+    {
+      "path": "mixed-cues.md",
+      "bytes": 5413,
+      "sha256": "5faca1d9a8268d166b6b4e65b8408b6e821efdde91d7c9a3ddfeef108005e4ef"
+    }
+  ]
+}
