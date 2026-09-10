@@ -1,0 +1,22 @@
+{
+  "issue": "https://github.com/redrossa/neomd/issues/41",
+  "base": "823809000f25a2c45ac4c2c8510d36962c6cdcbc",
+  "status": "Authored reuse manifest only; all M1-P2 UI/E2E/manual interactions DEFERRED/UNRUN, not passed",
+  "path_base": "repository root",
+  "reused_files": {
+    "docs/fixtures/m1-p1-startup/launch.md": {
+      "bytes": 49,
+      "sha256": "1e97785ff7bb6d81cf0ba66c68349e7774f1d9137fa4ffffd3f2b966bd82e928"
+    },
+    "docs/fixtures/m1-p1-startup/Meeting café.MD": {
+      "bytes": 56,
+      "sha256": "d16d5f8950155779fcdd43518c4bb06e94fce26331d34cc68c972261d75247e7"
+    },
+    "docs/fixtures/m1-p1-startup/empty.md": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "owned_copy_mtime_unix_seconds": 1700000000,
+  "copied_document_bytes": false
+}

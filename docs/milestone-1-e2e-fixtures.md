@@ -764,3 +764,36 @@ Many historical rendering suites launch without a file then deliver a warm NSWor
 Worker fills in: exact tested source head/PR; actual commands; nonzero pass/failure/skip counts; xcresult/log paths; observed native AX/window timelines; inspected Light/Dark startup screenshots and explicit-file startup video; immutable-file checks; precise automation limitations and any repairs. No test/build/UI execution or screenshot inspection was performed at triage.
 
 At final milestone acceptance, repeat no-file launch → Cancel → menu/Command-O → document; Finder cold/warm requests including Unicode filename; actual empty file; explicit Quit and relaunch; then combine with #41 last-close no-window/no-panel behavior after it is implemented. Verify native menu discoverability without a key reader. Check fresh launches and the user's ordinary saved-state environment without deleting preferences/history, recording restoration behavior separately from requested new #24 persistence. User owns business acceptance. Full VoiceOver and combined appearance/resize/navigation checks remain final-milestone work, not claims of this startup-only gate.
+
+## M1-P2 — Stay running without windows after last close
+
+[Issue #41](https://github.com/redrossa/neomd/issues/41) · [milestone 1](https://github.com/redrossa/neomd/milestone/1).
+Triage base: `823809000f25a2c45ac4c2c8510d36962c6cdcbc` (merged [PR #44](https://github.com/redrossa/neomd/pull/44)); runtime `openai-codex/gpt-6-astra`, high. Triage verdict **ACCEPTED for implementation**, not behavioral acceptance. #41 is the first open ordered story; #43 decisions are unchanged and pending.
+
+### Current validation amendment
+
+The latest user instruction, **“pls dont do e2e testing”**, applies now, superseding earlier per-story interaction mandates and the earlier #13-only waiver wording. Build and relevant units are the current implementation gates. All further UI/E2E and manual scripted end-to-end checks are **DEFERRED/UNRUN, not passed**, including the scenarios below. Historical catalog commands are reproduction references, not authorization to execute them now. Preserve all #40 pre-waiver passes, failures, incomplete bundles and unverified corrections in [M1-P1 validation](m1-p1-validation.md); preserve #13 C5/#38, #36 and earlier final-human deferrals. Final combined milestone acceptance remains user-owned and requires renewed authorization for deferred testing. No automatic milestone closure.
+
+### Durable fixtures and expected future observations
+
+Reuse [M1-P1 document bytes](fixtures/m1-p1-startup/README-fixture.md) through the [M1-P2 reuse manifest and setup](fixtures/m1-p2-last-close/README-fixture.md). No redundant document copies are added. Fresh owned copies use fixed mtime and exact byte/mtime snapshots; never alter originals. No network, clipboard or permission/appearance changes are required.
+
+**Every row is DEFERRED/UNRUN; no scenario was executed during triage.** These are final-milestone reproduction plans, not current commands or new product requirements.
+
+| Criterion | Future actions | Observable oracle |
+| --- | --- | --- |
+| C1/C2 | Open `launch.md`, close the sole reader using native close; repeat after reopening and with Command-W | Owned app remains running, zero visible reader/starter windows, zero Open panels/save dialogs. Observe the close transition and a bounded settled interval to catch delayed replacement windows, not only a final screenshot. Do not click Dock during the interval. |
+| C1/C2 preservation | Open both nonempty fixtures, close one and then the other; repeat with the real empty document | First close retains the correct remaining content; final close produces no replacement window/picker. Empty file had a real reader/message before close. |
+| C3 | From the post-close no-window state, invoke File > Open and cancel; invoke Command-O and select the Unicode fixture; repeat with menu selection | Each explicit action presents the native picker; cancellation remains windowless/running; selection produces exactly the correct filename/content reader, no starter. Native menu and keyboard events, not direct method calls, are the required future oracle. |
+| C4 | Snapshot all copied source files; close through each native path and repeat open/close; inspect alerts and recheck files | No save prompt; bytes and nanosecond mtime unchanged for every file, including zero-byte input. |
+| Scope preservation | Explicit Quit while windowless, then separate fresh no-file and explicit-file launches | Quit exits normally; #40 native startup arbitration remains intact. Dock reactivation remains native, not a newly specified pass/fail policy. |
+
+Existing `DocumentOpeningUITests` pointers requiring expectation migration before future execution: `testNoFileLifecycleAndEmptyDocumentStayDistinct`, `testClosingOneOfMultipleDocumentsKeepsTheOtherReader`, and `testCommandWClosesReaderWithoutPromptOrSourceChange` currently expect a starter after final close. `testDroppingOnNoFileWindowOpensTheDocument` and two `AppearanceUITests` (`testEmptyDocumentAndNoFileWindowStayLegibleInLightAndDark`, `testDropErrorStaysLegibleInLightAndDark`) use that obsolete starter as setup. Preserve actual empty-reader, reader-drop/error readability and source-immutability coverage when migrating these; do not delete substantive assertions merely to obtain a pass. Migration/run status remains deferred unless worker records an actual source update; no new UI selector is claimed here.
+
+### Current unit/build plan and evidence boundary
+
+Worker performs proactive Swift diagnostics, a separate Debug app build, then relevant units using the project Xcode commands. Select `NeoMDTests/DocumentOpeningTests`, `NeoMDTests/MarkdownDocumentTests`, `NeoMDTests/MarkdownFileTypeTests`, `NeoMDTests/MarkdownTextDecoderTests`, and `NeoMDTests/DocumentLinkResolverTests`. No UI target or broad full-suite command now. Use fresh external logs/result bundles and record exact tested SHA, counts, failures/skips and limitations.
+
+Update the lifecycle units that currently demand reopening the instruction. Cover final close, one-of-many close, repeated/unknown callbacks, repeated close/reopen cycles, termination, and coordinator forwarding with intact canonical section requests. Preserve the viewing DocumentGroup, native Open/Quit commands, read-only document implementation, reader cleanup and session-only folder grants. Units can verify production state/policy; they do not prove native no-window menus, timing, save-dialog absence or actual source mtime preservation.
+
+Triage ran **no build, unit, UI/E2E or manual scripted app test**. Worker must append actual implementation/PR/head/build/unit evidence without converting the deferred interactions into passes. The complete earlier catalog, including #40 evidence, is retained unchanged.
