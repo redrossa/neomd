@@ -32,14 +32,15 @@ struct DocumentOpeningTests {
     }
 
 
-    @Test func firstDocumentHidesTheInstructionAndLastCloseReturnsIt() {
+    @Test func firstDocumentHidesTheInstructionAndLastCloseStaysWindowless() {
         var lifecycle = DocumentWindowLifecycle()
         let windowID = UUID()
 
         #expect(lifecycle.documentWindowDidAppear(id: windowID) == .hideNoDocumentWindow)
         #expect(!lifecycle.shouldShowNoDocumentWindow)
-        #expect(lifecycle.documentWindowDidDisappear(id: windowID) == .showNoDocumentWindow)
-        #expect(lifecycle.shouldShowNoDocumentWindow)
+        #expect(lifecycle.documentWindowDidDisappear(id: windowID) == .none)
+        #expect(lifecycle.openDocumentWindowIDs.isEmpty)
+        #expect(!lifecycle.isTerminating)
     }
 
     @Test func closingOneOfMultipleDocumentsDoesNotShowTheInstruction() {
@@ -52,7 +53,8 @@ struct DocumentOpeningTests {
 
         #expect(lifecycle.documentWindowDidDisappear(id: firstWindowID) == .none)
         #expect(lifecycle.openDocumentWindowIDs == [secondWindowID])
-        #expect(lifecycle.documentWindowDidDisappear(id: secondWindowID) == .showNoDocumentWindow)
+        #expect(lifecycle.documentWindowDidDisappear(id: secondWindowID) == .none)
+        #expect(lifecycle.openDocumentWindowIDs.isEmpty)
     }
 
     @Test func repeatedAppearanceCallbacksAreIdempotent() {
@@ -63,8 +65,9 @@ struct DocumentOpeningTests {
         _ = lifecycle.documentWindowDidAppear(id: windowID)
 
         #expect(lifecycle.openDocumentWindowIDs.count == 1)
-        #expect(lifecycle.documentWindowDidDisappear(id: windowID) == .showNoDocumentWindow)
         #expect(lifecycle.documentWindowDidDisappear(id: windowID) == .none)
+        #expect(lifecycle.documentWindowDidDisappear(id: windowID) == .none)
+        #expect(lifecycle.openDocumentWindowIDs.isEmpty)
     }
 
     @Test func terminationSuppressesAReplacementWindow() {
@@ -75,6 +78,43 @@ struct DocumentOpeningTests {
         #expect(lifecycle.applicationWillTerminate() == .hideNoDocumentWindow)
         #expect(lifecycle.documentWindowDidDisappear(id: windowID) == .none)
         #expect(!lifecycle.shouldShowNoDocumentWindow)
+    }
+
+    @Test func unknownClosesAndRepeatedReopenCyclesNeverRequestReplacementUI() {
+        var lifecycle = DocumentWindowLifecycle()
+        let windowID = UUID()
+        #expect(lifecycle.documentWindowDidDisappear(id: UUID()) == .none)
+        for _ in 0..<3 {
+            #expect(lifecycle.documentWindowDidAppear(id: windowID) == .hideNoDocumentWindow)
+            #expect(lifecycle.documentWindowDidDisappear(id: UUID()) == .none)
+            #expect(lifecycle.openDocumentWindowIDs == [windowID])
+            #expect(lifecycle.documentWindowDidDisappear(id: windowID) == .none)
+            #expect(lifecycle.documentWindowDidDisappear(id: windowID) == .none)
+            #expect(lifecycle.openDocumentWindowIDs.isEmpty)
+            #expect(!lifecycle.isTerminating)
+        }
+        #expect(lifecycle.applicationWillTerminate() == .hideNoDocumentWindow)
+        #expect(lifecycle.applicationWillTerminate() == .hideNoDocumentWindow)
+        #expect(lifecycle.isTerminating)
+    }
+
+    @Test @MainActor func coordinatorForwardsWindowlessCloseReopenAndTermination() {
+        let coordinator = DocumentOpeningCoordinator()
+        let first = UUID()
+        let second = UUID()
+        #expect(coordinator.documentWindowDidDisappear(id: first) == .none)
+        for _ in 0..<3 {
+            #expect(coordinator.documentWindowDidAppear(id: first) == .hideNoDocumentWindow)
+            #expect(coordinator.documentWindowDidAppear(id: first) == .hideNoDocumentWindow)
+            #expect(coordinator.documentWindowDidAppear(id: second) == .hideNoDocumentWindow)
+            #expect(coordinator.documentWindowDidDisappear(id: first) == .none)
+            #expect(!coordinator.shouldShowNoDocumentWindow)
+            #expect(coordinator.documentWindowDidDisappear(id: second) == .none)
+            #expect(coordinator.documentWindowDidDisappear(id: second) == .none)
+        }
+        coordinator.applicationWillTerminate()
+        #expect(!coordinator.shouldShowNoDocumentWindow)
+        #expect(coordinator.documentWindowDidDisappear(id: first) == .none)
     }
 
     @Test func dropRoutingAcceptsOnlyClaimedFileURLsInOrder() {

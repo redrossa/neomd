@@ -12,7 +12,6 @@ import Foundation
 nonisolated struct DocumentWindowLifecycle {
     enum Directive: Equatable {
         case none
-        case showNoDocumentWindow
         case hideNoDocumentWindow
     }
 
@@ -29,8 +28,9 @@ nonisolated struct DocumentWindowLifecycle {
     }
 
     mutating func documentWindowDidDisappear(id: UUID) -> Directive {
-        guard openDocumentWindowIDs.remove(id) != nil else { return .none }
-        return shouldShowNoDocumentWindow ? .showNoDocumentWindow : .none
+        openDocumentWindowIDs.remove(id)
+        // Closing a reader never creates replacement UI, including on final close.
+        return .none
     }
 
     mutating func applicationWillTerminate() -> Directive {

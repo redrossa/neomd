@@ -23,7 +23,6 @@ struct DocumentReaderView: View {
 
     @Environment(\.dismissWindow) private var dismissWindow
     @Environment(\.openDocument) private var openDocument
-    @Environment(\.openWindow) private var openWindow
     @Environment(\.openURL) private var systemOpenURL
     @State private var imageStore = MarkdownImageStore()
     @State private var renderedDocument = MarkdownRenderDocument.empty
@@ -142,14 +141,7 @@ struct DocumentReaderView: View {
             navigationGeneration += 1
             navigationBridge.cancel()
             noticeGeneration += 1
-            guard openingCoordinator?.documentWindowDidDisappear(id: windowID)
-                    == .showNoDocumentWindow else { return }
-            let openingCoordinator = openingCoordinator
-            Task { @MainActor in
-                await Task.yield()
-                guard openingCoordinator?.shouldShowNoDocumentWindow == true else { return }
-                openWindow(id: DocumentOpeningCoordinator.noDocumentWindowSceneID)
-            }
+            openingCoordinator?.documentWindowDidDisappear(id: windowID)
         }
         .markdownFileDropDestination { url in
             try await openDocument(at: url)
