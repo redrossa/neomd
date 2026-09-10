@@ -1,0 +1,2 @@
+P4 SAFE EXTERNAL TEXT MARKER.
+This is an inert text document, not a program or command.

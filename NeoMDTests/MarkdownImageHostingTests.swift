@@ -4,7 +4,7 @@ import Testing
 @testable import NeoMD
 
 struct MarkdownImageHostingTests {
-    /// Owned-host probe: unavailable image text plus its access button, without
+    /// Owned-host probe: unavailable image text plus its retry button, without
     /// reader restoration, document geometry preferences, or custom container layout.
     @Test @MainActor func unavailableParagraphsHaveStableHeightWhileScrolling() async throws {
         let url = URL(fileURLWithPath: "/unavailable/probe.png")
@@ -24,7 +24,7 @@ struct MarkdownImageHostingTests {
             }
         }
         .environment(store)
-        .environment(\.documentImageAccess, { _ in })
+        // #43 removed the obsolete folder-access callback. Scrolling assertions remain unchanged.
         let host = NSHostingView(rootView: content)
         host.frame = CGRect(x: 0, y: 0, width: 500, height: 3000)
         let scroll = NSScrollView(frame: CGRect(x: 0, y: 0, width: 500, height: 400))

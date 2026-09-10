@@ -8,27 +8,25 @@ import Testing
 @testable import NeoMD
 
 struct DocumentOpeningTests {
-    @Test @MainActor func sectionRequestsAreKeyedByCanonicalURLAndConsumedOnce() throws {
-        let coordinator = DocumentOpeningCoordinator()
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: folder) }
-        let file = folder.appendingPathComponent("file.md")
-        try Data().write(to: file)
-        let alias = folder.appendingPathComponent("alias.md")
-        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: file)
-        let old = coordinator.requestSection("old", in: alias)
-        let newer = coordinator.requestSection("café%20#?", in: file)
-        coordinator.cancelSectionRequest(old, for: file)
-        #expect(coordinator.sectionRequest(for: alias) == newer)
-        #expect(coordinator.takeSectionRequest(for: alias) == newer)
-        #expect(coordinator.takeSectionRequest(for: file) == nil)
-        coordinator.requestSection("stale", in: file)
-        coordinator.requestSection(nil, in: alias)
-        #expect(coordinator.takeSectionRequest(for: file) == nil)
-        let failed = coordinator.requestSection("failed", in: file)
-        coordinator.cancelSectionRequest(failed, for: alias)
-        #expect(coordinator.takeSectionRequest(for: file) == nil)
+    // #43 supersedes URL-global fragments: two viewers must not consume each other's requests.
+    @Test @MainActor func sectionRequestsAreWindowScopedAndConsumedOnce() {
+        let url = URL(fileURLWithPath: "/tmp/file.md")
+        let input = PreparedReadingDocument(text: "# A", fileURL: url,
+            rendered: MarkdownBlockRenderer.render(from: "# A", documentURL: url))
+        let first = DocumentReadSession()
+        let second = DocumentReadSession()
+        #expect(first.commit(input, fragment: "old", token: first.begin()))
+        #expect(second.commit(input, fragment: "other", token: second.begin()))
+        let old = first.begin()
+        first.navigate("café%20#?")
+        #expect(!first.accepts(old))
+        #expect(first.takeSection(for: UUID()) == nil)
+        #expect(first.takeSection(for: input.id)?.fragment == "café%20#?")
+        #expect(first.takeSection(for: input.id) == nil)
+        #expect(second.takeSection(for: input.id)?.fragment == "other")
+        first.navigate("stale")
+        first.navigate(nil)
+        #expect(first.takeSection(for: input.id) == nil)
     }
 
 
