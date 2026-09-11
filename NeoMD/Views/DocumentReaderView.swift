@@ -37,6 +37,10 @@ struct DocumentReaderView: View {
     @FocusState private var keyboardFocus: DocumentReaderFocusTarget?
     @State private var traversalTask: Task<Void, Never>?
     @State private var traversalStartID: Int?
+    /// User scrolling and in-flight navigation/traversal work. A settled external
+    /// revision waits for a safe boundary instead of replacing the host mid-gesture.
+    @State private var isScrolling = false
+    @State private var interactiveWork = 0
 
     init(
         prepared: PreparedReadingDocument,
@@ -107,24 +111,41 @@ struct DocumentReaderView: View {
             _ = handleLink(url, pointerActivation: activation)
         })
         .overlay(alignment: .bottom) {
-            if let linkNotice {
-                Text(linkNotice)
-                    .padding(12)
-                    .background(.regularMaterial, in: .capsule)
-                    .padding()
-                    .accessibilityIdentifier("DocumentLinkNotice")
+            VStack(spacing: 8) {
+                // A quiet refresh status: it neither expires nor announces itself, and
+                // it is deliberately separate from the transient link notice below.
+                if let refreshStatus = session.refreshStatus {
+                    Text(refreshStatus)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .padding(12)
+                        .background(.regularMaterial, in: .capsule)
+                        .accessibilityIdentifier("DocumentRefreshStatus")
+                }
+                if let linkNotice {
+                    Text(linkNotice)
+                        .padding(12)
+                        .background(.regularMaterial, in: .capsule)
+                        .accessibilityIdentifier("DocumentLinkNotice")
+                }
             }
+            .padding()
         }
         .frame(minWidth: minimumSize.width, minHeight: minimumSize.height)
         .onChange(of: session.section) { consumeSectionRequest() }
         .onChange(of: session.notice) {
             if let notice = session.notice { showNotice(notice); session.notice = nil }
         }
+        .onChange(of: session.readingPosition) { consumeReadingPosition() }
         .onAppear {
             bindTraversal()
             consumeSectionRequest()
+            consumeReadingPosition()
         }
         .onDisappear {
+            // This presentation no longer owns the viewport; never leave a stale busy
+            // flag behind that would block every later refresh of this viewer.
+            session.isUserBusy = false
             traversalTask?.cancel()
             navigationBridge.detachTraversal()
             imageStore.reset()
@@ -224,6 +245,13 @@ struct DocumentReaderView: View {
         navigationGeneration += 1
         navigationBridge.cancel()
         resizeRestoration.cancelForUserScroll()
+        // A bounded hold, not a sticky flag: a programmatic page scroll that produces
+        // no phase change must never leave this viewer permanently busy.
+        beginInteraction()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            endInteraction()
+        }
         let pageDistance = max(40, scrollMetrics.viewportSize.height * 0.9)
         let offset = switch direction {
         case .up:
@@ -260,9 +288,11 @@ struct DocumentReaderView: View {
         scrollMetrics = newMetrics
 
         if viewportChanged, let generation = resizeRestoration.schedule() {
+            syncReadingActivity()
             Task { @MainActor in
                 try? await Task.sleep(for: Self.resizeRestorationDelay)
                 await restoreReadingPosition(for: generation)
+                syncReadingActivity()
             }
         } else if !resizeRestoration.isPending {
             updateReadingAnchor()
@@ -270,6 +300,7 @@ struct DocumentReaderView: View {
     }
 
     private func handleScrollPhaseChange(_ phase: ScrollPhase) {
+        isScrolling = phase != .idle
         if phase == .interacting {
             traversalTask?.cancel()
             traversalStartID = nil
@@ -279,6 +310,7 @@ struct DocumentReaderView: View {
         } else if phase == .idle, !resizeRestoration.isPending {
             updateReadingAnchor()
         }
+        syncReadingActivity()
     }
 
     private func handleLink(_ url: URL, keyboardDriven: Bool = false,
@@ -326,6 +358,43 @@ struct DocumentReaderView: View {
                       keyboardDriven: false)
     }
 
+    // MARK: External refresh
+
+    /// Reports whether this viewer is doing work a background revision must not
+    /// interrupt: scrolling, navigating, traversing or restoring a position.
+    private func syncReadingActivity() {
+        session.isUserBusy = isScrolling || interactiveWork > 0 || resizeRestoration.isPending
+    }
+
+    private func beginInteraction() {
+        interactiveWork += 1
+        syncReadingActivity()
+    }
+
+    private func endInteraction() {
+        interactiveWork = max(0, interactiveWork - 1)
+        syncReadingActivity()
+    }
+
+    /// Applies the reading position carried across one settled refresh.
+    ///
+    /// The request is consumed once, for this presentation only. An explicit section
+    /// request or a navigation the user already started outranks it, and the pending
+    /// anchor stops initial top geometry from overwriting the restored position.
+    private func consumeReadingPosition() {
+        guard let request = session.takeReadingPosition(for: prepared.id) else { return }
+        guard interactiveWork == 0, session.section == nil else { return }
+        resizeRestoration.invalidate()
+        resizeRestoration.beginIfNeeded(at: request.anchor)
+        readingAnchor = request.anchor
+        syncReadingActivity()
+        guard let generation = resizeRestoration.schedule() else { return }
+        Task { @MainActor in
+            await restoreReadingPosition(for: generation)
+            syncReadingActivity()
+        }
+    }
+
     private func showNotice(_ message: String) {
         linkNotice = message
         noticeGeneration += 1
@@ -354,7 +423,9 @@ struct DocumentReaderView: View {
         navigationBridge.cancel()
         let request = navigationBridge.request
         keyboardFocus = .reader
+        beginInteraction()
         Task { @MainActor in
+            defer { endInteraction() }
             guard generation == navigationGeneration else { return }
             if let id { scrollPosition.scrollTo(id: lazyRoot(for: id), anchor: .top) }
             else { scrollPosition.scrollTo(edge: .top) }
@@ -405,7 +476,9 @@ struct DocumentReaderView: View {
         } else {
             start = reverse ? candidates.count - 1 : 0
         }
+        beginInteraction()
         traversalTask = Task { @MainActor in
+            defer { endInteraction() }
             var index = start
             while candidates.indices.contains(index) {
                 guard !Task.isCancelled, documentGeneration == generation,
@@ -527,6 +600,12 @@ struct DocumentReaderView: View {
             isAtTop: scrollMetrics.isAtTop,
             isAtBottom: scrollMetrics.isAtBottom
         )
+        // Copy the position as content identity, never as this rendering's integer
+        // IDs: the next rendering renumbers every node after an insertion.
+        guard let readingAnchor,
+              let locator = DocumentContentLocator.capture(anchor: readingAnchor,
+                                                           in: prepared.index) else { return }
+        session.recordReadingPosition(locator, presentation: prepared.id)
     }
 
     /// Repositions the semantic point that was at the middle of the viewport before

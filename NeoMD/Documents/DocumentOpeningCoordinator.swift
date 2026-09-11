@@ -41,13 +41,18 @@ final class DocumentOpeningCoordinator {
         windows.removeValue(forKey: controller.session.id)
         documentWindowDidDisappear(id: controller.session.id)
         let old = controller.document as? ReadOnlyMarkdownNSDocument
+        old?.stopObservingExternalChanges(for: controller.session.id)
         old?.removeWindowController(controller)
         if let old { releaseIfUnused(old) }
     }
 
     func applicationWillTerminate() {
         _ = lifecycle.applicationWillTerminate()
-        for window in windows.values { window.session.close() }
+        for window in windows.values {
+            (window.document as? ReadOnlyMarkdownNSDocument)?
+                .stopObservingExternalChanges(for: window.session.id)
+            window.session.close()
+        }
         for session in reservedSessions.values { session.close() }
         firstReader.close()
         documentController?.cancelPanels()
@@ -118,12 +123,17 @@ final class DocumentOpeningCoordinator {
                                                                          placement: placement)
         let previous = controller.document as? ReadOnlyMarkdownNSDocument
         document.addWindowController(controller)
+        session.binding = document.bindingID
         _ = session.commit(input, fragment: fragment, token: serial)
         windows[session.id] = controller
         documentWindowDidAppear(id: session.id)
         controller.install(input)
         if session === firstReader { firstReader = DocumentReadSession() }
-        if let previous, previous !== document { releaseIfUnused(previous) }
+        if let previous, previous !== document {
+            previous.stopObservingExternalChanges(for: session.id)
+            releaseIfUnused(previous)
+        }
+        observeExternalChanges(of: document, in: session)
         documentController.recordCommitted(url)
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)
@@ -156,6 +166,52 @@ final class DocumentOpeningCoordinator {
             alert.messageText = "Couldn’t Open Document"
             alert.informativeText = message
             alert.runModal()
+        }
+    }
+
+    /// Subscribes one committed viewer to its native document's refresh pipeline.
+    private func observeExternalChanges(of document: ReadOnlyMarkdownNSDocument,
+                                        in session: DocumentReadSession) {
+        let viewer = session.id
+        let binding = document.bindingID
+        document.observeExternalChanges(for: viewer) { [weak self] outcome in
+            // Delivery arrives off the main actor; the coordinator is only ever
+            // touched on it, and a weak owner never resurrects a released one.
+            guard let coordinator = self else { return }
+            Task { @MainActor in coordinator.receiveRefresh(outcome, for: viewer, from: binding) }
+        }
+    }
+
+    /// Publishes one settled external revision to one viewer.
+    ///
+    /// From the ticket through `install` there is no suspension, no key-window
+    /// lookup, no window creation or raise, and no history update: this is a content
+    /// replacement in a reader the user already has open.
+    func receiveRefresh(_ outcome: DocumentRefreshOutcome, for viewer: UUID, from binding: UUID) {
+        guard !isTerminating, let controller = windows[viewer],
+              let document = controller.document as? ReadOnlyMarkdownNSDocument,
+              document.bindingID == binding else { return }
+        let session = controller.session
+        guard session.isOpen, session.prepared != nil else { return }
+        switch outcome {
+        case .unavailable(let failure):
+            // The last successful rendering and reading position stay exactly as they are.
+            session.reportRefreshFailure(failure.message)
+            document.refresh.acknowledge(viewer, failure: failure)
+        case .updated(let payload):
+            guard let ticket = session.refreshTicket(binding: binding, revision: payload.revision) else { return }
+            guard session.prepared?.text != payload.text
+                    || session.prepared?.fileURL != payload.fileURL else {
+                // Identical content: clear the quiet status without rehosting.
+                session.clearRefreshStatus()
+                document.refresh.acknowledge(viewer, revision: payload.revision)
+                return
+            }
+            let restoration = session.capturedPosition(for: ticket.presentation)?.resolve(in: payload.index)
+            let input = PreparedReadingDocument(payload)
+            guard session.commitRefresh(input, ticket: ticket, restoration: restoration) else { return }
+            controller.install(input)
+            document.refresh.acknowledge(viewer, revision: payload.revision)
         }
     }
 

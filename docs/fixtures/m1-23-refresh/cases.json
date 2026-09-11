@@ -1,0 +1,103 @@
+{
+  "schema": 1,
+  "story": "M1-23",
+  "sourceBase": "acc932318bda21a9cafde3e2ea53d612d1bcbe5a",
+  "status": "Inert recipes; all executable and native checks unrun at triage",
+  "logicalSchedulerParameters": {
+    "quietMilliseconds": 300,
+    "pollMilliseconds": 1000,
+    "note": "Proposed engineering constants. Logical tests inject a clock, never register or wait for a host watcher."
+  },
+  "positionCases": [
+    {
+      "id": "P1-metadata-insertion",
+      "oldSnapshot": "v1.md",
+      "newSnapshot": "v2-metadata-insert.md",
+      "targetPrefix": "WATCHED PASSAGE CAFÉ 日本語:",
+      "fraction": 0.65,
+      "oracle": "Resolve the exact same rendered paragraph in the new snapshot and preserve fraction 0.65. Its old integer ID is not the new identity."
+    },
+    {
+      "id": "P2-second-duplicate",
+      "oldSnapshot": "v1.md",
+      "newSnapshot": "v2-metadata-insert.md",
+      "targetText": "Repeated passage. Identical words alone cannot identify which occurrence the reader was viewing.",
+      "precedingText": "Second occurrence neighbor SOUTH is unique.",
+      "followingText": "Second occurrence following neighbor EAST is unique.",
+      "fraction": 0.4,
+      "oracle": "Resolve the second contextual occurrence, not the first text match or an unchecked duplicate heading slug."
+    },
+    {
+      "id": "P3-deleted-target",
+      "oldSnapshot": "v2-metadata-insert.md",
+      "newSnapshot": "v3-target-deleted.md",
+      "targetPrefix": "WATCHED PASSAGE CAFÉ 日本語:",
+      "fraction": 0.65,
+      "validNeighborPrefixes": ["BEFORE WATCH:", "AFTER WATCH:"],
+      "oracle": "Resolve a surviving immediate neighbor with a deterministic documented tie break, not the old integer ID or top of an otherwise long document."
+    },
+    {
+      "id": "P4-nested-leaf",
+      "oldSnapshot": "v1.md",
+      "newSnapshot": "v2-metadata-insert.md",
+      "targetPrefix": "Nested quotation LEAF",
+      "fraction": 0.5,
+      "oracle": "Resolve the matching nested leaf and use its new lazy root for materialization."
+    },
+    {
+      "id": "P5-empty-and-edges",
+      "oldSnapshot": "v3-target-deleted.md",
+      "newSnapshot": "empty.md",
+      "oracle": "Any missing-content locator resolves to a valid empty top edge. Top/bottom captures remain legal and never index an empty node array."
+    }
+  ],
+  "stateCases": [
+    {
+      "id": "S1-burst",
+      "steps": ["invalidate revision A at t=0", "invalidate revision B at t=100", "invalidate revision C at t=200", "advance to t=499", "advance through quiet and matching-stamp sample", "complete only current C preparation"],
+      "oracle": "No intermediate publication before final quiet boundary; at most one active preparation, one latest pending revision, one C commit per eligible viewer."
+    },
+    {
+      "id": "S2-late-completion",
+      "steps": ["suspend read/render A", "invalidate B", "complete A", "complete settled B"],
+      "oracle": "A never changes native payload, last-good session, status or locator after B invalidation. B remains eligible."
+    },
+    {
+      "id": "S3-unavailable-and-identical-recovery",
+      "steps": ["install v2", "inject ENOENT", "inject EACCES on retry tick", "retry without new notification", "return stable original v2 bytes"],
+      "oracle": "Keep v2 and position throughout; quiet failure state is deduplicated, retry persists, readable identical recovery clears only refresh status without rehosting."
+    },
+    {
+      "id": "S4-independent-viewers",
+      "steps": ["bind viewers A and B to same native source", "A captures watched paragraph at 0.65", "B captures second repeated paragraph at 0.4", "prepare v2", "A starts explicit fragment navigation", "deliver B", "A completes navigation", "retry current delivery for A"],
+      "oracle": "B receives its own remapped position without waiting for A; A's explicit fragment wins, no stale auto-restore overrides it, latest source revision is not permanently lost."
+    },
+    {
+      "id": "S5-ownership",
+      "steps": ["bind A and B", "suspend refresh", "A closes or commits a different document", "deliver old source", "B closes", "deliver another late callback"],
+      "oracle": "Old source cannot overwrite A; B remains live until its close; final detach stops work and late results cannot create windows or revive sessions."
+    },
+    {
+      "id": "S6-empty-is-readable",
+      "steps": ["install v1", "supply matching settled stamps and empty bytes"],
+      "oracle": "Publish valid empty rendering, not a synthetic failure or permanent last-good lock."
+    },
+    {
+      "id": "S7-poll-and-first-attach",
+      "steps": ["initial open reads v1", "path changes to v2 before first observer attachment", "attach and force settled check without presenter callback"],
+      "oracle": "Viewer catches up to v2; the stamp captured after initial read must not hide the missed change."
+    }
+  ],
+  "ownedFileRecipes": [
+    {
+      "id": "F1-atomic",
+      "steps": ["create owned temporary live.md from v1", "record bytes and precise mtime", "invoke fresh snapshot reader directly", "replace owned live.md atomically with v2 using fixture setup writer", "record new bytes and precise mtime", "invoke fresh snapshot reader directly again"],
+      "oracle": "Each read sees the current pathname inode/bytes and changes neither recorded bytes nor mtime. The fixture writer's deliberate changes are not attributed to NeoMD. No watcher or app is started."
+    },
+    {
+      "id": "F2-stamp-race",
+      "steps": ["inject opened stamp inode 11", "inject final path stamp inode 12"],
+      "oracle": "Reject as unstable; no stale publication. Identity-change model does not depend on native filesystem timestamp precision."
+    }
+  ]
+}
