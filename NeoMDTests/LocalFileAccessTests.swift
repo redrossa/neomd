@@ -30,8 +30,6 @@ struct LocalFileAccessTests {
         #expect(LocalFileAccessProbe.state(of: fifo) == .inaccessible)
     }
 
-    @Test @MainActor func folderSuggestionFallsBackToDocumentFolder() {
-        let document = URL(fileURLWithPath: "/tmp/guide.md")
-        #expect(FolderAccessSession.suggestedFolder(for: URL(fileURLWithPath: "/absent-\(UUID())/x.md"), documentURL: document) == document.deletingLastPathComponent())
-    }
+    // #43 removes the enclosing-folder grant policy; its folder-suggestion assertion is superseded.
+
 }

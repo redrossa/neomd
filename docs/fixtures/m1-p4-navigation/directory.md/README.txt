@@ -1,0 +1,1 @@
+This is a directory whose name ends in .md, not a regular Markdown file. It must not be read as document bytes. A file picker/drop document route must not replace the reader with its contents. A local link may retain the existing directory-to-Finder policy.

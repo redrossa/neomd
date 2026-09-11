@@ -1,5 +1,9 @@
 # Milestone 1 cumulative E2E fixture catalog
 
+## M1-P4 / #43 — same-window native navigation
+
+The triage-owned [M1-P4 fixture catalog](m1-p4-fixture-catalog.md) and [approved native ownership plan](m1-p4-native-navigation-plan.md) define the inert packet and future native oracles. Command-N picker and batch rejection are approved. [Worker evidence](m1-p4-validation.md) records non-interaction unit selectors/builds and exclusions. All #43 physical window/menu/Finder/drop/selection/OS-prompt behavior is **DEFERRED/UNRUN**, not passed. The latest no-reviewer/build-and-units-only instruction supersedes the historical interaction mandate below; preserve previous evidence, failures and #36/#38 deferrals. Final milestone acceptance remains user-owned.
+
 ## Validation policy and status
 
 User-approved amendment during [M1-08 / PR #32](https://github.com/redrossa/neomd/pull/32): per-story E2E is the **story-targeted native SwiftUI/XCTest UI coverage of the new or changed implementation**, alongside the required build and unit tests. A separate comprehensive cross-story E2E sweep is deferred to final milestone verification. This supersedes the earlier per-story full-suite requirement, not story acceptance criteria or required GitHub checks. A current-story defect or unverified required criterion still blocks acceptance.

@@ -1,6 +1,6 @@
 # Milestone 1 brainstorm: Open and read Markdown
 
-Status: Historical brainstorm; unresolved proposals remain draft. Published GitHub issues are the implementation contracts. Stories #1–13 are closed. The user-approved [priority pivot](milestone-1-priority-pivot.md) inserts #40–43 before #14–24 and supersedes the historical starter-window/local-link policies only as explicitly recorded there; #43 permission and supported-file-type decisions remain unresolved.
+Status: Historical brainstorm; unresolved proposals remain draft. Published GitHub issues are the implementation contracts. Stories #1–13 are closed. The user-approved [priority pivot](milestone-1-priority-pivot.md) inserts #40–43 before #14–24 and supersedes the historical starter-window/local-link policies only as explicitly recorded there; the revised #43 now approves Markdown-only native reading, active-window replacement and app Debug/Release sandbox removal without app-managed folder grants. Its staged native ownership/Command-N/batch design is not implemented or accepted yet.
 
 ## Product outcome
 
@@ -150,7 +150,7 @@ Acceptance ideas:
 
 Approved root-path policy (user email reply, 2026-09-08): resolve a path beginning with `/` from the current document's folder, without repository-root discovery. Apply this same policy to linked images. This deliberately differs from GitHub's repository-relative leading-slash links. [Relative-link reference](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax#relative-links).
 
-Local folder navigation does not imply branch switching, private-repository access, or fetching files from another repository. Approved (user email reply, 2026-09-08): when needed, offer an explicit native enclosing-folder permission request for read-only access held only for the current app session. Preserve the sandbox; no persisted bookmarks or access across launches is implied.
+Local folder navigation does not imply branch switching, private-repository access, or fetching files from another repository. Historical approval (user email reply, 2026-09-08): explicit native enclosing-folder requests for session-only read-only access while sandboxed. **Superseded for the approved #43 revision:** intentionally disable app Debug/Release App Sandbox and remove this app-managed folder flow, with no remembered grants/bookmarks. Keep read-only behavior and handle remaining OS privacy/filesystem restrictions; no Mac App Store compatibility or unrestricted access is promised. See the priority pivot for the replacement-window contract and unimplemented design status.
 
 ### M1-11 — Open web references · Core
 
@@ -181,6 +181,8 @@ Acceptance ideas:
 - Existing links to uploaded assets remain usable; uploading new assets is outside this reading milestone.
 
 Approved decisions (issue #12, 2026-09-08): accept every image format the system decoder accepts and document a tested subset (PNG, JPEG, GIF shown as a static first frame, SVG rendered statically by the system without running scripts); never prompt for folder permission automatically — inaccessible local images show their alternative text or a quiet placeholder with an explicit `Allow folder access` action that reuses the M1-10 session-only read-only grant; load both HTTP and HTTPS images, with the App Transport Security exception required for plain HTTP and the outgoing-network sandbox entitlement; support only GitHub's documented `<picture>`/`prefers-color-scheme` form with an `<img>` fallback, excluding the legacy `#gh-dark-mode-only`/`#gh-light-mode-only` fragments. [Picture-element reference](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax#the-picture-element); the `prefers-color-scheme` sun/moon example with its `user-images.githubusercontent.com` assets comes from the earlier revision of that section and is reproduced in `docs/fixtures/m1-12-images/network.md`. Local text rendering stays offline; only explicitly referenced remote images use the network.
+
+**#43 approved access-policy revision:** remove the image Allow-folder action and session grant consumer along with the document-link folder flow; keep alternative text and actionable OS-access feedback. This does not change image formats, source/color/layout/network policy or the historical M1-12 validation record. The revision is approved scope, not implemented behavior.
 
 Validation boundary approved for M1-12: [option B](https://github.com/redrossa/neomd/issues/12#issuecomment-5589023958) tracks the accepted-base full-reflow hang separately in [#36](https://github.com/redrossa/neomd/issues/36), without changing the ordered story sequence. The unchanged full test remains **BLOCKED/deferred** until final milestone validation, not passed; initial margins and all other image/navigation/resize obligations remain required. [Actual fixture/gate evidence](m1-12-validation.md). Implementation pauses after M1-12; this does not authorize M1-13 or milestone closure.
 
@@ -369,7 +371,7 @@ The guide's outline menu and authoring shortcuts are website interactions, not a
 ## Review decisions before creating GitHub issues
 
 1. Confirm that native window controls, the macOS menu bar, temporary system dialogs, and document links fit “no buttons.”
-2. Confirm separate windows for distinct documents. M1-10 now uses the current document's folder for leading-slash paths, with on-demand read-only enclosing-folder access for the current session (approved by email, 2026-09-08).
+2. Historical separate-window/session-folder-access proposals are superseded only by the explicit #43 approvals in the priority pivot: active-window replacements, Command-N-only additional-window intent, Markdown-only native reading and unsandboxed read-only access without app-managed grants. Current-folder leading-slash paths are unchanged. Confirm the remaining Command-N picker/batch defaults before implementing that design.
 3. The explicit color-swatch extension and bounded M1-13 cue scope are approved on issue #13 (2026-09-09), as recorded above. Account-free mention treatment remains unresolved for M1-14; this approval does not settle it.
 4. Choose the minimum macOS version, baseline Mac, and performance target; these are not settled by this brainstorm. Supported image formats were settled for M1-12 on issue #12 (all system-decodable formats, documented tested subset).
 

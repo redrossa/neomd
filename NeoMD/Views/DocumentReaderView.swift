@@ -8,29 +8,20 @@ import SwiftUI
 
 /// The reading surface for an open Markdown document.
 ///
-/// The view is handed already-decoded text by ``MarkdownDocument`` and renders it into
-/// blocks off the main thread, so raw Markdown source is never on screen — not while a
-/// document is loading and not if rendering fails.
+/// The native opening transaction supplies a fully prepared immutable presentation.
+/// Replacement never clears this subtree until read/decode/render have succeeded.
 struct DocumentReaderView: View {
-    let document: MarkdownDocument
-    let fileURL: URL?
-
-    private struct RenderInput: Hashable {
-        let text: String
-        let fileURL: URL?
-    }
-    let openingCoordinator: DocumentOpeningCoordinator?
-
-    @Environment(\.dismissWindow) private var dismissWindow
-    @Environment(\.openDocument) private var openDocument
+    let prepared: PreparedReadingDocument
+    let session: DocumentReadSession
+    let openingCoordinator: DocumentOpeningCoordinator
+    private var fileURL: URL? { prepared.fileURL }
     @Environment(\.openURL) private var systemOpenURL
     @State private var imageStore = MarkdownImageStore()
-    @State private var renderedDocument = MarkdownRenderDocument.empty
+    private var renderedDocument: MarkdownRenderDocument { prepared.rendered }
     @State private var linkNotice: String?
     @State private var noticeGeneration = 0
     @State private var navigationGeneration = 0
-    @State private var isRendered = false
-    @State private var windowID = UUID()
+    private let isRendered = true
     // Let ScrollView establish its initial viewport as rendered content arrives,
     // rather than requesting an edge while the loading placeholder is present.
     // The default Never ID type avoids continuous row-ID tracking; explicit
@@ -47,12 +38,12 @@ struct DocumentReaderView: View {
     @State private var traversalStartID: Int?
 
     init(
-        document: MarkdownDocument,
-        fileURL: URL? = nil,
-        openingCoordinator: DocumentOpeningCoordinator? = nil
+        prepared: PreparedReadingDocument,
+        session: DocumentReadSession,
+        openingCoordinator: DocumentOpeningCoordinator
     ) {
-        self.document = document
-        self.fileURL = fileURL
+        self.prepared = prepared
+        self.session = session
         self.openingCoordinator = openingCoordinator
     }
 
@@ -102,11 +93,6 @@ struct DocumentReaderView: View {
             }
         }
         .environment(imageStore)
-        .environment(\.documentImageAccess, { url in
-            guard let fileURL else { return }
-            _ = await openingCoordinator?.folderAccess.requestReadAccess(for: url, documentURL: fileURL)
-            imageStore.retryInaccessible()
-        })
         .environment(\.documentNavigationBridge, navigationBridge)
         .environment(\.documentNavigationGeneration, documentGeneration)
         .environment(\.openURL, OpenURLAction { url in handleLink(url) })
@@ -121,17 +107,13 @@ struct DocumentReaderView: View {
             }
         }
         .frame(minWidth: 480, minHeight: 320)
-        .task(id: RenderInput(text: document.text, fileURL: fileURL)) {
-            await render(document.text)
-        }
-        .onChange(of: fileURL.flatMap { openingCoordinator?.sectionRequest(for: $0) }) {
-            consumeSectionRequest()
+        .onChange(of: session.section) { consumeSectionRequest() }
+        .onChange(of: session.notice) {
+            if let notice = session.notice { showNotice(notice); session.notice = nil }
         }
         .onAppear {
             bindTraversal()
-            guard openingCoordinator?.documentWindowDidAppear(id: windowID)
-                    == .hideNoDocumentWindow else { return }
-            dismissWindow(id: DocumentOpeningCoordinator.noDocumentWindowSceneID)
+            consumeSectionRequest()
         }
         .onDisappear {
             traversalTask?.cancel()
@@ -141,10 +123,9 @@ struct DocumentReaderView: View {
             navigationGeneration += 1
             navigationBridge.cancel()
             noticeGeneration += 1
-            openingCoordinator?.documentWindowDidDisappear(id: windowID)
         }
-        .markdownFileDropDestination { url in
-            try await openDocument(at: url)
+        .markdownFileDropDestination { urls in
+            openingCoordinator.request(urls, in: session)
         }
     }
 
@@ -244,28 +225,6 @@ struct DocumentReaderView: View {
         scrollPosition.scrollTo(y: scrollMetrics.clampedVerticalOffset(offset))
     }
 
-    /// Renders `source` away from the main actor and publishes the result.
-    private func render(_ source: String) async {
-        traversalTask?.cancel()
-        traversalStartID = nil
-        imageStore.reset()
-        isRendered = false
-        navigationBridge.replaceDocument()
-        documentGeneration = navigationBridge.generation
-        navigationGeneration += 1
-        noticeGeneration += 1
-        linkNotice = nil
-        let documentURL = fileURL
-        let rendered = await Task.detached(priority: .userInitiated) {
-            MarkdownBlockRenderer.render(from: source, documentURL: documentURL)
-        }.value
-        guard !Task.isCancelled else { return }
-        renderedDocument = rendered
-        bindTraversal()
-        isRendered = true
-        consumeSectionRequest()
-    }
-
     private func handleScrollGeometryChange(
         from oldMetrics: DocumentReaderScrollMetrics,
         to newMetrics: DocumentReaderScrollMetrics
@@ -318,6 +277,14 @@ struct DocumentReaderView: View {
             url: url, anchors: renderedDocument.anchorTargets, documentURL: fileURL)
         switch destination {
         case .external:
+            if url.isFileURL {
+                var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                let fragment = components?.fragment
+                components?.fragment = nil
+                components?.query = nil
+                openLocalTarget(DocumentLocalTarget(fileURL: components?.url ?? url, fragment: fragment))
+                return .handled
+            }
             // A custom environment key does not receive SwiftUI's openURL
             // system fallback. Dispatch through the inherited action exactly
             // once; the descendant override above cannot recurse into this.
@@ -327,8 +294,10 @@ struct DocumentReaderView: View {
             }
             return .systemAction
         case .local(let target):
-            Task { @MainActor in await openLocalTarget(target) }
-        default: followSection(destination, keyboardDriven: keyboardDriven)
+            openLocalTarget(target)
+        default:
+            _ = session.begin()
+            followSection(destination, keyboardDriven: keyboardDriven)
         }
         return .handled
     }
@@ -343,8 +312,7 @@ struct DocumentReaderView: View {
     }
 
     private func consumeSectionRequest() {
-        guard isRendered, let fileURL,
-              let request = openingCoordinator?.takeSectionRequest(for: fileURL) else { return }
+        guard let request = session.takeSection(for: prepared.id) else { return }
         followSection(.resolve(fragment: request.fragment, anchors: renderedDocument.anchorTargets),
                       keyboardDriven: false)
     }
@@ -360,40 +328,26 @@ struct DocumentReaderView: View {
         }
     }
 
-    private func openLocalTarget(_ target: DocumentLocalTarget) async {
-        let url = target.fileURL
-        let name = url.lastPathComponent
-        var state = await Task.detached { LocalFileAccessProbe.state(of: url) }.value
-        if state == .inaccessible, let fileURL {
-            guard await openingCoordinator?.folderAccess.requestReadAccess(for: url, documentURL: fileURL) == true else {
-                showNotice("NeoMD doesn’t have permission to read “\(name)”.")
-                return
-            }
-            state = await Task.detached { LocalFileAccessProbe.state(of: url) }.value
-        }
-        switch state {
-        case .missing:
-            showNotice("Couldn’t find “\(name)” next to this document.")
-        case .inaccessible:
-            showNotice("NeoMD doesn’t have permission to read “\(name)”.")
-        case .readable(let isDirectory):
-            if !isDirectory, MarkdownFileType.claimsFile(at: url) {
-                let request = openingCoordinator?.requestSection(target.fragment, in: url)
-                do { try await openDocument(at: url) }
-                catch {
-                    openingCoordinator?.cancelSectionRequest(request, for: url)
-                    showNotice("Couldn’t open “\(name)”. \(error.localizedDescription)")
+    private func openLocalTarget(_ target: DocumentLocalTarget) {
+        let token = session.begin()
+        session.task = Task { @MainActor in
+            defer { session.finish(token) }
+            do {
+                let disposition = try await Task.detached {
+                    try LocalFileDisposition.resolve(target.fileURL)
+                }.value
+                guard session.accepts(token) else { return }
+                switch disposition {
+                case .markdown:
+                    _ = try await openingCoordinator.open(target.fileURL, fragment: target.fragment,
+                                                           in: session, token: token)
+                case .reveal:
+                    NSWorkspace.shared.activateFileViewerSelecting([target.fileURL])
+                case .external:
+                    _ = try await NSWorkspace.shared.open(target.fileURL, configuration: NSWorkspace.OpenConfiguration())
                 }
-            } else {
-                do {
-                    let values = try url.resourceValues(forKeys: [.isApplicationKey, .isExecutableKey])
-                    // Conservative disposition for executable content, not a ban on explicit launches.
-                    if values.isApplication == true || (!isDirectory && values.isExecutable == true) {
-                        NSWorkspace.shared.activateFileViewerSelecting([url])
-                    } else {
-                        _ = try await NSWorkspace.shared.open(url, configuration: NSWorkspace.OpenConfiguration())
-                    }
-                } catch { showNotice("Couldn’t open “\(name)”. \(error.localizedDescription)") }
+            } catch is CancellationError {} catch {
+                if session.accepts(token) { showNotice(DocumentOpeningCoordinator.failureMessage(target.fileURL)) }
             }
         }
     }
@@ -868,17 +822,4 @@ struct DocumentBlockFramePreferenceKey: PreferenceKey {
     ) {
         value.merge(nextValue(), uniquingKeysWith: { _, newValue in newValue })
     }
-}
-
-#Preview {
-    DocumentReaderView(
-        document: MarkdownDocument(text: """
-            # Quarterly summary
-
-            Opened straight from Finder, no import step.
-
-            1. Revenue held steady.
-            2. Churn fell slightly.
-            """)
-    )
 }

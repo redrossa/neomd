@@ -1,6 +1,6 @@
 # Milestone 1 priority pivot after M1-13
 
-Status: **User-requested goals and order approved; published.** Detailed unresolved decisions in M1-P4 remain open, not approved implementation choices. This amendment takes precedence over the original planning document's historical starter-window and local-link behavior where explicitly stated below.
+Status: **User-requested goals/order published; M1-P4 formats, replacement intent and sandbox removal explicitly approved.** This staged amendment records the revised live #43 contract, not implemented behavior or acceptance. The concrete [native ownership plan](m1-p4-native-navigation-plan.md), Command-N picker and one-file-at-a-time batch policy are [approved](https://github.com/redrossa/neomd/issues/43#issuecomment-5626782971). This amendment takes precedence over historical starter-window, separate-window and app-managed folder-access policies only as explicitly stated below.
 
 ## Business outcome
 
@@ -13,7 +13,7 @@ After completed #13, implement sequentially:
 1. [#40 — M1-P1: Native startup Open dialog](https://github.com/redrossa/neomd/issues/40)
 2. [#41 — M1-P2: Stay running without windows after last close](https://github.com/redrossa/neomd/issues/41)
 3. [#42 — M1-P3: Pointing-hand link cursor](https://github.com/redrossa/neomd/issues/42)
-4. [#43 — M1-P4: Local links in place and permission setup](https://github.com/redrossa/neomd/issues/43)
+4. [#43 — M1-P4: Active-window opening without app-managed folder grants](https://github.com/redrossa/neomd/issues/43)
 
 Then resume #14–24 in their original order. The [milestone description](https://github.com/redrossa/neomd/milestone/1) records the full numbered sequence. User explicitly requested creation and the priority pivot; no new milestone was created. Canonical GitHub issue statements/checklists are the implementation contracts.
 
@@ -51,25 +51,31 @@ As a reader following references, I want a pointing-hand cursor when hovering li
 
 Ordered after P2, no permission dependency. Cursor-only; P4 owns routing changes. Labels: `enhancement`, `user-story`.
 
-### M1-P4 — Local navigation and access
+### M1-P4 — Active-window navigation without app-managed folder grants
 
-As a reader following local file links, I want a normal click to open the target in the same window without repeated folder-permission requests, and Command-click to open it in a new window, so that navigating local documents feels direct.
+As a reader opening Markdown files, I want links, File > Open / Command-O and file drops to replace the current window’s document without app-managed folder-permission requests, and only Command-N to explicitly create another window, so that navigation feels direct.
 
-- [ ] Normal click opens a supported local document in the same window.
-- [ ] Command-click opens it in a new window without replacing the source.
-- [ ] Replace per-link folder requests with an explicitly agreed supported macOS permission/setup flow where access requires it.
-- [ ] Failed/missing/inaccessible opens preserve the readable document with actionable feedback and source immutability.
-- [ ] Preserve existing path/fragment resolution and explicit-only activation unless further changes are agreed.
+Live #43 acceptance criteria (all remain unverified):
 
-Ordered after P3; revises #10 access/opening and #3 separate-window behavior for link navigation only. Labels: `enhancement`, `user-story`.
+- [ ] A normal click on a supported local document link opens the target in the current reading window rather than creating a new window.
+- [ ] File > Open / Command-O and file drops replace the active window’s document. Command-click no longer requests a new window; only Command-N explicitly creates another window. Command-N shows a single-file picker and creates the additional reader only after successful selection/preparation; cancellation leaves existing windows unchanged. A successful open with no windows creates the first reader. Multi-file Finder/Dock/drop requests show one-file-at-a-time feedback without replacing current content or creating extra windows.
+- [ ] Disable App Sandbox for the NeoMD app in Debug and Release and remove the app-managed enclosing-folder permission workflow. Do not introduce remembered folder grants. Retain read-only application behavior and handle remaining macOS privacy/filesystem restrictions honestly; sandbox removal is not a promise of unrestricted access.
+- [ ] Failed, missing or inaccessible targets retain the last readable document and show actionable feedback; navigation remains read-only.
+- [ ] Preserve existing path/fragment resolution and explicit-only link activation unless a further product change is agreed.
 
-**Unresolved before P4 implementation:**
+Ordered after completed P3/#42 and before #14. Revises #10's opening/session-folder-grant policy and #3's separate-window policy for local links, File > Open / Command-O and drops. Labels: `enhancement`, `user-story`.
 
-- Markdown-only in-place viewing versus additional local file types; other formats currently open in default apps.
-- Supported macOS access model, denial/revocation and setup flow. Full Disk Access is not assumed to bypass App Sandbox. Sandbox removal, expanded entitlements or persisted broad access require an explicitly approved design; no automatic execution.
-- Already-open target handling if document identity conflicts with requested same/new-window navigation.
+**Explicit user decisions recorded in the revised issue:**
 
-P4 decisions do not block starting P1–P3. No scope expansion into images/other viewers or path semantics is implied.
+- Markdown-only native reading; other safe files use default apps and apps/executables are reveal-only in Finder. No additional embedded viewer.
+- “command open or File > open should also change the current window. drag and drop file should also change the current window opened file. you only open a new window if the user does a command n”. This supersedes the former Command-click-new-window criterion. An already-open target does not justify focusing another window instead of replacing this one.
+- After App Sandbox/distribution consequences were explained: “ok we need that disabled then”. App Debug/Release sandbox removal is intentional, not a test workaround. No Mac App Store compatibility, writes, arbitrary execution, other security-control changes, remembered-folder setup or bookmarks are approved.
+
+**Necessary design scope:** app-owned public NSDocument/NSWindowController ownership with SwiftUI reader hosting, one staged read/decode/render commit per captured destination window, and per-window fragment delivery. Keep source content/state on failure; no private DocumentGroup manipulation or open-then-close shortcut. Remove `FolderAccessSession` and its local-link and image consumers. Images retain alt/unavailable feedback with honest OS-access guidance instead of Allow-folder UI. OS privacy/POSIX/ACL/volume failures remain possible; NeoMD does not bypass them. Preserve the renderer, existing path semantics, native startup picker and windowless last close.
+
+**Final approved decisions:** The user answered “1. yes, 2. yes”. Command-N presents a native single-file picker and creates the additional reader only on success; zero-window opening creates the first reader on success. Open/New use single selection; multi-Markdown Finder/Dock/drop batches receive “one file at a time; use Command-N” feedback without replacing content or creating windows. Cancel changes no committed reader. These are requirements, not unresolved proposals. See the [design](m1-p4-native-navigation-plan.md) and [fixture catalog](m1-p4-fixture-catalog.md). No grant-persistence or format question remains open.
+
+P1–P3 are already closed; this design does not reopen them or authorize #14.
 
 ## Delivery and validation
 

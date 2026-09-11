@@ -10,8 +10,7 @@ struct MarkdownImageParagraph: View {
 
     @Environment(MarkdownImageStore.self) private var store
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.documentImageAccess) private var requestAccess
-    @FocusState private var accessIsFocused: Bool
+    @FocusState private var retryIsFocused: Bool
 
     private var segments: [(MarkdownImage?, AttributedString)] {
         text.runs[\.markdownImage].map { image, range in (image, AttributedString(text[range])) }
@@ -53,33 +52,31 @@ struct MarkdownImageParagraph: View {
             } else {
                 composedText
             }
-            if let url = urls.first(where: { store.states[$0] == .unavailable(.inaccessible) }), requestAccess != nil {
-                Button("Allow folder access") { requestFolderAccess(url) }
+            if urls.contains(where: { store.states[$0] == .unavailable(.inaccessible) }) {
+                Text("Check file permissions in Finder and NeoMD’s access in System Settings > Privacy & Security.")
+                    .font(.callout).foregroundStyle(.secondary)
+                Button("Retry image") { store.retryInaccessible() }
                 .buttonStyle(.borderless)
                 .focusable(true, interactions: .edit)
-                .focused($accessIsFocused)
+                .focused($retryIsFocused)
                 .overlay {
-                    if accessIsFocused {
+                    if retryIsFocused {
                         RoundedRectangle(cornerRadius: 3).stroke(Color.accentColor, lineWidth: 2)
                             .padding(-3).allowsHitTesting(false).accessibilityHidden(true)
                     }
                 }
                 .onKeyPress(keys: [.return, .space]) { _ in
-                    requestFolderAccess(url)
+                    store.retryInaccessible()
                     return .handled
                 }
                 .font(.callout)
-                .accessibilityIdentifier("MarkdownImageAccessButton-\(id)")
-                .accessibilityHint("Choose the folder that contains this document's images; access lasts until you quit.")
+                .accessibilityIdentifier("MarkdownImageRetryButton-\(id)")
+                .accessibilityHint("Retry reading the image after checking access in macOS. No folder picker is opened.")
             }
         }
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: urls) { for url in urls { store.load(url) } }
-    }
-
-    private func requestFolderAccess(_ url: URL) {
-        Task { await requestAccess?(url) }
     }
 
     private var composedText: Text {
@@ -98,8 +95,4 @@ struct MarkdownImageParagraph: View {
             return Text("\(result)\(attachment)")
         }
     }
-}
-
-extension EnvironmentValues {
-    @Entry var documentImageAccess: ((URL) async -> Void)? = nil
 }
