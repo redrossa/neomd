@@ -4,6 +4,10 @@ This file applies to the entire repository. Run the commands below from this dir
 
 The canonical remote is <https://github.com/redrossa/neomd>. Issues and milestones live there; a task that names an issue number refers to that repository.
 
+## Current milestone execution authority
+
+Follow [M1-DAG-001](docs/milestone-1-dependency-plan.md), including its current execution policy, before story work. #15 is merged; #16–24 are authorized subject to that DAG and accepted exact-base triage. #14 remains deferred/open. Independent work may proceed concurrently; no reviewer and no UI/E2E/manual scripted interactions or event/host substitutes. Worker gates are Debug build and inspected relevant non-interaction units only, overriding broader historical commands below. Triage owns staged fixtures/final-testing documentation. Native/visual/AX verification and milestone business acceptance remain user-owned. Unresolved choices in the plan are not approvals.
+
 ## Project context
 
 NeoMD is a native macOS app for reading Markdown as polished documents. The app opens Markdown files through a read-only SwiftUI `DocumentGroup`, so Finder's Open With, double-clicking, and `File > Open` all work. Rendering is a deliberately small first pass: block structure and inline emphasis are presented, and the GitHub-style typography, layout, and appearance work remains to be done.
