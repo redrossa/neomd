@@ -32,6 +32,10 @@ final class DocumentOpeningCoordinator {
         return firstReader
     }
 
+    func capturePlacement(for sourceID: UUID) -> DocumentWindowPlacement {
+        DocumentWindowPlacement.capture(window: windows[sourceID]?.window)
+    }
+
     func close(_ controller: DocumentWindowController) {
         controller.session.close()
         windows.removeValue(forKey: controller.session.id)
@@ -64,7 +68,7 @@ final class DocumentOpeningCoordinator {
     }
 
     func open(_ url: URL, fragment: String? = nil, in session: DocumentReadSession,
-              token: Int? = nil) async throws -> (ReadOnlyMarkdownNSDocument, Bool) {
+              token: Int? = nil, placement: DocumentWindowPlacement? = nil) async throws -> (ReadOnlyMarkdownNSDocument, Bool) {
         let serial = token ?? session.begin()
         defer {
             if session.generation == serial || !session.isOpen {
@@ -110,7 +114,8 @@ final class DocumentOpeningCoordinator {
         }
         guard !isTerminating, session.accepts(serial) else { throw CancellationError() }
         // No suspension from this guard through the entire commit.
-        let controller = windows[session.id] ?? DocumentWindowController(session: session, coordinator: self)
+        let controller = windows[session.id] ?? DocumentWindowController(session: session, coordinator: self,
+                                                                         placement: placement)
         let previous = controller.document as? ReadOnlyMarkdownNSDocument
         document.addWindowController(controller)
         _ = session.commit(input, fragment: fragment, token: serial)

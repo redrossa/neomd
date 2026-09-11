@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "status": "Inert triage-authored data; not executable tests and not run",
+  "coordinateSystem": "AppKit global points, bottom-left origin; rectangles [x, y, width, height]",
+  "offsetPoints": 24,
+  "sizeMeaning": "defaultFrameSize includes title bar; 742 and 750 are synthetic, not fixed macOS title-bar promises",
+  "geometryCases": [
+    {"id": "interior", "sourceFrame": [100,100,900,742], "visibleFrame": [0,40,1440,836], "defaultFrameSize": [900,742], "expectedFrame": [124,76,900,742]},
+    {"id": "unequal-source-height", "sourceFrame": [100,400,600,400], "visibleFrame": [0,0,1440,1000], "defaultFrameSize": [900,742], "expectedFrame": [124,34,900,742]},
+    {"id": "right-and-bottom-edges", "sourceFrame": [700,10,900,742], "visibleFrame": [0,40,1440,836], "defaultFrameSize": [900,742], "expectedFrame": [540,40,900,742]},
+    {"id": "offscreen-left-and-top", "sourceFrame": [-50,300,900,742], "visibleFrame": [0,40,1440,836], "defaultFrameSize": [900,742], "expectedFrame": [0,134,900,742]},
+    {"id": "negative-x-display", "sourceFrame": [-1400,150,900,742], "visibleFrame": [-1600,40,1600,960], "defaultFrameSize": [900,742], "expectedFrame": [-1376,126,900,742]},
+    {"id": "negative-y-display", "sourceFrame": [200,-900,900,742], "visibleFrame": [100,-1000,1440,900], "defaultFrameSize": [900,742], "expectedFrame": [224,-924,900,742]},
+    {"id": "nonzero-visible-origin-oversize-both", "sourceFrame": [100,80,900,742], "visibleFrame": [80,60,800,600], "defaultFrameSize": [900,742], "expectedFrame": [80,60,800,600]},
+    {"id": "below-existing-minimum", "sourceFrame": [0,0,900,742], "visibleFrame": [0,20,400,280], "defaultFrameSize": [900,742], "expectedFrame": [0,20,400,280]},
+    {"id": "titlebar-inclusive-height", "sourceFrame": [10,0,900,750], "visibleFrame": [0,0,1000,740], "defaultFrameSize": [900,750], "expectedFrame": [34,0,900,740]},
+    {"id": "width-only-shrink", "sourceFrame": [100,300,900,500], "visibleFrame": [0,0,800,1200], "defaultFrameSize": [900,742], "expectedFrame": [0,34,800,742]},
+    {"id": "height-only-shrink", "sourceFrame": [100,100,900,742], "visibleFrame": [0,40,1600,600], "defaultFrameSize": [900,742], "expectedFrame": [124,40,900,600]},
+    {"id": "exact-visible-fit", "sourceFrame": [10,10,900,742], "visibleFrame": [0,0,900,742], "defaultFrameSize": [900,742], "expectedFrame": [0,0,900,742]}
+  ],
+  "screenSelectionCases": [
+    {"id": "source-id-not-active-or-array-order", "capturedScreenID": 2, "sourceTopLeft": [-1400,892], "activeScreenIDNotAnInput": 1, "currentScreens": [{"id":1,"visibleFrame":[0,40,1440,836]},{"id":2,"visibleFrame":[-1600,80,1600,900]}], "expectedScreenID": 2, "expectedVisibleFrame": [-1600,80,1600,900]},
+    {"id": "removed-source-nearest-rectangle", "capturedScreenID": 2, "sourceTopLeft": [-1400,892], "currentScreens": [{"id":3,"visibleFrame":[2000,40,1440,836]},{"id":1,"visibleFrame":[0,40,1440,836]}], "expectedScreenID": 1},
+    {"id": "nil-source-screen-nearest", "capturedScreenID": null, "sourceTopLeft": [2100,800], "currentScreens": [{"id":1,"visibleFrame":[0,40,1440,836]},{"id":3,"visibleFrame":[2000,40,1440,836]}], "expectedScreenID": 3},
+    {"id": "equal-distance-stable-id", "capturedScreenID": 99, "sourceTopLeft": [0,50], "currentScreens": [{"id":8,"visibleFrame":[10,0,100,100]},{"id":4,"visibleFrame":[-110,0,100,100]}], "expectedScreenID": 4},
+    {"id": "no-source-frame-primary-not-key", "capturedScreenID": null, "sourceTopLeft": null, "activeScreenIDNotAnInput": 2, "currentScreens": [{"id":1,"visibleFrame":[0,40,1440,836]},{"id":2,"visibleFrame":[-1600,40,1600,960]}], "expectedScreenID": 1, "defaultFrameSize": [900,742], "expectedFrame": [270,87,900,742]},
+    {"id": "no-current-screen-captured-fallback", "capturedScreenID": 2, "sourceTopLeft": [-1400,892], "capturedVisibleFrame": [-1600,40,1600,960], "currentScreens": [], "expectedVisibleFrame": [-1600,40,1600,960], "physicalVisibility": "unverifiable without a screen"}
+  ],
+  "additionalRequiredPassiveCases": [
+    "Reject nonfinite/empty screen geometry; never emit inverted clamp ranges or nonfinite output",
+    "If neither current nor captured usable area exists, finite deterministic fallback with no active-window query; physical visibility unverified",
+    "Copied source geometry remains equal after source moves/resizes/closes or fake active reader changes during suspended work",
+    "Ordinary and Command-N model routes have no placement context; failure/cancel/non-Markdown never apply it",
+    "Cap scoped content minimum using actual frame-to-content conversion; no actual NSWindow construction in units"
+  ]
+}

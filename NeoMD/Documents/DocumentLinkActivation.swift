@@ -50,13 +50,17 @@ struct DocumentLocalLinkRequest {
     let destination: DocumentReadSession
     let token: Int
     let coordinator: DocumentOpeningCoordinator
+    let placement: DocumentWindowPlacement?
 
     init(source: DocumentReadSession, presentation: UUID, target: DocumentLocalTarget,
-         activation: DocumentLinkActivation, coordinator: DocumentOpeningCoordinator) {
+         activation: DocumentLinkActivation, coordinator: DocumentOpeningCoordinator,
+         capturePlacement: ((UUID) -> DocumentWindowPlacement)? = nil) {
         self.source = source
         self.presentation = presentation
         self.target = target
         self.coordinator = coordinator
+        placement = activation == .additionalReader
+            ? (capturePlacement?(source.id) ?? coordinator.capturePlacement(for: source.id)) : nil
         destination = activation == .additionalReader ? coordinator.destination(newWindow: true) : source
         token = destination.begin()
     }
@@ -65,7 +69,7 @@ struct DocumentLocalLinkRequest {
         classify: (URL) async throws -> LocalFileDisposition = { url in
             try await Task.detached { try LocalFileDisposition.resolve(url) }.value
         },
-        open: ((DocumentLocalTarget, DocumentReadSession, Int) async throws -> Void)? = nil,
+        open: ((DocumentLocalTarget, DocumentReadSession, Int, DocumentWindowPlacement?) async throws -> Void)? = nil,
         dispatch: (LocalFileDisposition, URL) async throws -> Void = { disposition, url in
             if disposition == .reveal { NSWorkspace.shared.activateFileViewerSelecting([url]) }
             else { _ = try await NSWorkspace.shared.open(url, configuration: NSWorkspace.OpenConfiguration()) }
@@ -77,10 +81,10 @@ struct DocumentLocalLinkRequest {
             let disposition = try await classify(target.fileURL)
             guard isCurrent else { return }
             if disposition == .markdown {
-                if let open { try await open(target, destination, token) }
+                if let open { try await open(target, destination, token, placement) }
                 else {
                     _ = try await coordinator.open(target.fileURL, fragment: target.fragment,
-                                                   in: destination, token: token)
+                                                   in: destination, token: token, placement: placement)
                 }
             } else {
                 try await dispatch(disposition, target.fileURL)

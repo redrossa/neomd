@@ -23,6 +23,74 @@ import Testing
             activation: activation, coordinator: coordinator)
     }
 
+    @Test func sourceIDPlacementIsCapturedBeforeReservationAndSurvivesSuspension() async {
+        for closeSource in [false, true] {
+            let coordinator = DocumentOpeningCoordinator()
+            let a = source()
+            let b = source()
+            let aGeneration = a.generation
+            let bGeneration = b.generation
+            let bSection = b.section
+            let snapshot = DocumentWindowPlacement(sourceFrame: CGRect(x: -1200, y: 100, width: 800, height: 700),
+                screenID: 2, capturedVisibleFrame: CGRect(x: -1600, y: 40, width: 1600, height: 960))
+            var geometry = [a.id: snapshot]
+            var lookups: [UUID] = []
+            let captured = DocumentLocalLinkRequest(source: a, presentation: a.prepared!.id,
+                target: DocumentLocalTarget(fileURL: a.prepared!.fileURL, fragment: "heading"),
+                activation: .additionalReader, coordinator: coordinator, capturePlacement: { id in
+                    #expect(coordinator.reservedSessions.isEmpty && a.generation == aGeneration)
+                    lookups.append(id)
+                    return geometry[id]!
+                })
+            #expect(lookups == [a.id] && captured.placement == snapshot)
+            var resume: CheckedContinuation<Void, Never>?
+            var opened = 0
+            let task = Task { await captured.run(classify: { _ in
+                await withCheckedContinuation { resume = $0 }
+                return .markdown
+            }, open: { target, destination, token, placement in
+                #expect(placement == snapshot)
+                #expect(destination !== a && destination !== b)
+                let staged = try await destination.stage(token: token) { prepared(target.fileURL) }
+                #expect(destination.commit(staged, fragment: target.fragment, token: token))
+                opened += 1
+            }) }
+            captured.destination.task = task
+            while resume == nil { await Task.yield() }
+            geometry[a.id] = DocumentWindowPlacement(sourceFrame: CGRect(x: 300, y: 200, width: 500, height: 400),
+                                                     screenID: 1, capturedVisibleFrame: nil)
+            geometry[b.id] = geometry[a.id] // A different/fake active reader is not a capture input.
+            if closeSource { a.close(); geometry.removeValue(forKey: a.id) }
+            else { #expect(a.commit(prepared(), fragment: "replacement", token: a.begin())) }
+            resume?.resume()
+            await task.value
+            #expect(opened == 1 && !task.isCancelled && lookups == [a.id])
+            #expect(captured.destination.section?.fragment == "heading")
+            #expect(b.generation == bGeneration && b.section == bSection && b.notice == "source-notice")
+            #expect(coordinator.reservedSessions.isEmpty && coordinator.windows.isEmpty)
+        }
+    }
+
+    @Test func ordinaryAndCommandNReservationsDoNotAcquirePlacementPolicy() async {
+        let coordinator = DocumentOpeningCoordinator()
+        let a = source()
+        var lookups = 0
+        let ordinary = DocumentLocalLinkRequest(source: a, presentation: a.prepared!.id,
+            target: DocumentLocalTarget(fileURL: a.prepared!.fileURL, fragment: nil), activation: .ordinary,
+            coordinator: coordinator, capturePlacement: { _ in
+                lookups += 1
+                return DocumentWindowPlacement(sourceFrame: nil, screenID: nil, capturedVisibleFrame: nil)
+            })
+        #expect(ordinary.placement == nil && lookups == 0 && ordinary.destination === a)
+        await ordinary.run(classify: { _ in .markdown }, open: { _, _, _, placement in #expect(placement == nil) })
+        let commandN = coordinator.destination(newWindow: true)
+        #expect(commandN !== a && commandN.prepared == nil && lookups == 0)
+        // The real default-nil open path exits before any native controller allocation.
+        do { _ = try await coordinator.open(a.prepared!.fileURL, in: commandN); Issue.record("Missing controller") }
+        catch is CancellationError {} catch { Issue.record("Unexpected error: \(error)") }
+        #expect(coordinator.reservedSessions.isEmpty && coordinator.windows.isEmpty)
+    }
+
     @Test func immutablePointerPolicyAndBoundedNestedCleanup() throws {
         var command = true
         let captured = DocumentLinkActivation(pointer: true, command: command, control: false)
@@ -65,7 +133,8 @@ import Testing
             #expect(captured.destination !== a && captured.destination !== b && captured.destination !== active)
             #expect(captured.destination.prepared == nil)
             var commits = 0
-            await captured.run(classify: { _ in .markdown }, open: { target, destination, token in
+            await captured.run(classify: { _ in .markdown }, open: { target, destination, token, placement in
+                #expect(placement == captured.placement && placement != nil)
                 #expect(destination === captured.destination)
                 let input = try await destination.stage(token: token) { prepared(target.fileURL) }
                 #expect(destination.commit(input, fragment: target.fragment, token: token))
@@ -103,7 +172,8 @@ import Testing
         _ = c.begin()
         #expect(captured.destination === a)
         #expect(coordinator.reservedSessions.isEmpty)
-        await captured.run(classify: { _ in .markdown }, open: { target, destination, token in
+        await captured.run(classify: { _ in .markdown }, open: { target, destination, token, placement in
+            #expect(placement == nil)
             #expect(destination === a)
             #expect(destination.commit(prepared(target.fileURL), fragment: target.fragment, token: token))
         })
@@ -126,7 +196,8 @@ import Testing
                 if phase == 2 { a.close() }
                 if phase == 3 { _ = a.commit(prepared(), fragment: "new", token: a.begin()) }
                 return .markdown
-            }, open: { _, destination, token in
+            }, open: { _, destination, token, placement in
+                #expect(placement == captured.placement)
                 _ = try await destination.stage(token: token) { throw MarkdownDocument.Failure.notAReadableFile }
                 commits += 1
             })
@@ -149,7 +220,7 @@ import Testing
             let task = Task { await captured.run(classify: { _ in
                 await withCheckedContinuation { resume = $0 }
                 return .markdown
-            }, open: { _, _, _ in Issue.record("Canceled classification must not open") }) }
+            }, open: { _, _, _, _ in Issue.record("Canceled classification must not open") }) }
             while resume == nil { await Task.yield() }
             if terminate { coordinator.applicationWillTerminate() } else { task.cancel() }
             resume?.resume()
@@ -168,7 +239,8 @@ import Testing
         let task = Task { await captured.run(classify: { _ in
             await withCheckedContinuation { resume = $0 }
             return .markdown
-        }, open: { _, destination, token in
+        }, open: { _, destination, token, placement in
+            #expect(placement == captured.placement)
             #expect(destination.accepts(token))
             opened += 1
         }) }
@@ -191,7 +263,7 @@ import Testing
             let captured = request(a, coordinator)
             var dispatches = 0
             await captured.run(classify: { _ in disposition },
-                open: { _, _, _ in Issue.record("Non-Markdown must not open a reader") },
+                open: { _, _, _, _ in Issue.record("Non-Markdown must not open a reader") },
                 dispatch: { actual, url in
                     #expect(actual == disposition && url == captured.target.fileURL)
                     dispatches += 1
@@ -224,7 +296,8 @@ import Testing
         let captured = request(a, coordinator)
         var resume: CheckedContinuation<Void, Never>?
         var commits = 0
-        let task = Task { await captured.run(classify: { _ in .markdown }, open: { target, destination, token in
+        let task = Task { await captured.run(classify: { _ in .markdown }, open: { target, destination, token, placement in
+            #expect(placement == captured.placement)
             let input = try await destination.stage(token: token) {
                 await withCheckedContinuation { resume = $0 }
                 return prepared(target.fileURL)
@@ -256,7 +329,8 @@ import Testing
                 target: DocumentLocalTarget(fileURL: url, fragment: nil), activation: .additionalReader,
                 coordinator: coordinator)
             var commits = 0
-            await captured.run(open: { target, destination, token in
+            await captured.run(open: { target, destination, token, placement in
+                #expect(placement == captured.placement)
                 let input = try await destination.stage(token: token) {
                     let text = try MarkdownTextDecoder.text(from: RegularMarkdownRead.data(at: target.fileURL))
                     return PreparedReadingDocument(text: text, fileURL: target.fileURL,
