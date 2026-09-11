@@ -1,5 +1,15 @@
 # Milestone 1 cumulative E2E fixture catalog
 
+## M1-P7 / #52 — source-relative Command-click window placement
+
+The [approved published window-cascade pivot](milestone-1-window-cascade-pivot.md) is next after completed #50 / PR #51 at `918cfa40f9fdb7323400021b3a06b11f1ff8cf69`. **Only #52 is authorized; #14 is entirely deferred and #15–24 remain paused even after #52.** #50 routing is implemented; its unconditional `window.center()` does not implement the requested source-relative placement. Earlier claims of completed placement are incorrect.
+
+The triage-owned [inert geometry packet and deferred final-testing recipe](fixtures/m1-p7-window-cascade/README-fixture.md) reuses the unchanged #50 content fixtures and adds full-frame numeric vectors. Oracles cover a small source-relative down/right shift (24 points is an engineering choice), source capture before async work, unequal source/new sizes and title-bar-inclusive bounds, current source-screen visibleFrame, menu bar/Dock, all edges/corners, negative/nonzero display coordinates, oversized windows and deterministic removed-screen/source-closure fallback. Source/other readers must not move/resize; #50 independent fragments/failure behavior and ordinary/Cmd-N/Open/drop routes stay unchanged.
+
+[Criterion mapping, source trace, concrete scope and allowed unit selectors](m1-p7-window-cascade-validation.md) records **ACCEPTED for implementation**, not passed behavior. Triage ran no builds, executable tests, prototypes or interactions. Later worker gates are Debug build and relevant non-interaction units only; no reviewer, UI/E2E, window-host probes, real/synthetic events, AX actions, pickers or manual scripted interactions. **All native/visual/physical-display/interaction checks remain DEFERRED/UNRUN**, not passed by geometry/model tests. The linked recipe is future user-owned testing, not current authorization. Preserve #36/#38 and all prior evidence/deferrals; combined milestone acceptance stays user-owned.
+
+The #50 entry immediately below and all earlier catalog content are retained verbatim as historical triage/evidence records. Their old “next/only authorized” wording is superseded by this header and the canonical milestone order, not authorization to rerun or advance.
+
 ## M1-P6 / #50 — Command-click local Markdown into an additional reader
 
 The [approved Command-click pivot](milestone-1-command-click-pivot.md) is next after completed #48 / PR #49 at `71cdd6acef777526f16f4020bc54fb273060b9a0`. **Only #50 is authorized; #14 is entirely deferred and #15–24 remain paused even after #50.** This supersedes only #43's Command-N-only additional-reader restriction. Ordinary links still replace the source reader; Command-click gets a distinct additional reader even when its destination is already open. Other readers and their fragments/state must remain untouched.

@@ -14,6 +14,7 @@ struct DocumentReaderView: View {
     let prepared: PreparedReadingDocument
     let session: DocumentReadSession
     let openingCoordinator: DocumentOpeningCoordinator
+    let minimumSize: CGSize
     private var fileURL: URL? { prepared.fileURL }
     @Environment(\.openURL) private var systemOpenURL
     @State private var imageStore = MarkdownImageStore()
@@ -40,11 +41,13 @@ struct DocumentReaderView: View {
     init(
         prepared: PreparedReadingDocument,
         session: DocumentReadSession,
-        openingCoordinator: DocumentOpeningCoordinator
+        openingCoordinator: DocumentOpeningCoordinator,
+        minimumSize: CGSize = DocumentWindowPlacement.readerMinimum
     ) {
         self.prepared = prepared
         self.session = session
         self.openingCoordinator = openingCoordinator
+        self.minimumSize = minimumSize
     }
 
     var body: some View {
@@ -112,7 +115,7 @@ struct DocumentReaderView: View {
                     .accessibilityIdentifier("DocumentLinkNotice")
             }
         }
-        .frame(minWidth: 480, minHeight: 320)
+        .frame(minWidth: minimumSize.width, minHeight: minimumSize.height)
         .onChange(of: session.section) { consumeSectionRequest() }
         .onChange(of: session.notice) {
             if let notice = session.notice { showNotice(notice); session.notice = nil }
