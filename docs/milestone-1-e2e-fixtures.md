@@ -1,4 +1,8 @@
-# Current milestone fixture authority — M1-15
+# Current milestone fixture authority — M1-DAG-001
+
+#15 is completed via PR #54; its native/visual/AX criteria remain unverified. The adopted [dependency plan](milestone-1-dependency-plan.md) governs parallel #16–24 triage/implementation, documented holds and narrow catalog integration leases. #14 remains deferred/open. No reviewer or UI/E2E/manual scripted interactions, prototypes or event/host substitutes. Later gates are Debug build and inspected relevant non-interaction units only. Triage stages unique per-story entries with hashes; do not replace this catalog from stale snapshots. Preserve all entries and #36/#38 failures/deferrals. Combined business acceptance remains user-owned. Historical authority statements below are superseded for scheduling, not rewritten as passing evidence.
+
+# Historical milestone fixture authority — M1-15
 
 Stories #1–13 and priorities #40–43/#48/#50/#52 are completed. The user renewed sequential **#15–24** implementation authorization, explicitly skipping **#14, still entirely deferred/open**. [Canonical milestone order](https://github.com/redrossa/neomd/milestone/1) controls sequencing; #15 is next. No reviewer. Later gates are Debug build and relevant NON-INTERACTION units only; **no UI/E2E/manual scripted interactions or prototypes**. Historical commands and old “only/next/paused” statements below are retained records/future recipes, not current permission or validation. #36 full-reflow failure/defer and #38 cue C5 unchecked/deferred status remain unchanged; neither is fixed or passed by this story. Combined business acceptance stays user-owned.
 
