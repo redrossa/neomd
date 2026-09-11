@@ -45,6 +45,8 @@ nonisolated struct MarkdownContainerGeometry {
 
     private static func requiresView(_ entry: Entry, document: MarkdownRenderDocument) -> Bool {
         let node = document[entry.id]
+        if let parent = node.parentID, case .table = document[parent].kind { return false }
+        if case .table = node.kind { return true }
         if node.isLeaf || entry.caption != nil || !node.anchors.isEmpty { return true }
         // Preserve the existing shallow quote AX context/identifier. These
         // carry no drawing; the width-bounded compressed interior has none.
@@ -137,7 +139,7 @@ nonisolated struct MarkdownContainerGeometry {
             let index = entry.id - rootID
             let node = document[entry.id]
             let own = measurements[index]
-            if node.isLeaf {
+            if node.isLeaf || node.isTable {
                 heights[index] = own.size.height
                 baselines[index] = own.baseline
             } else {
@@ -174,6 +176,7 @@ nonisolated struct MarkdownContainerGeometry {
         for entry in entries {
             let index = entry.id - rootID
             let node = document[entry.id]
+            if let parent = node.parentID, document[parent].isTable { continue }
             if let parent = node.parentID, parent >= rootID {
                 origins[index] = origins[parent - rootID] + childOffsets[parent - rootID] + childStarts[index]
             }
@@ -217,7 +220,7 @@ struct MarkdownContainerLayout: Layout {
             let node = geometry.document[entry.id]
             if node.kind == .blockQuote && entry.caption == nil { continue }
             let width: CGFloat
-            if !node.isLeaf, entry.caption == nil, node.kind.alert == nil {
+            if !node.isLeaf, !node.isTable, entry.caption == nil, node.kind.alert == nil {
                 width = node.kind == .blockQuote || entry.compressed ? 0 : 28 * geometry.scale
             } else { width = entry.width }
             let dimension = view.dimensions(in: ProposedViewSize(width: width, height: nil))

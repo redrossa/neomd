@@ -93,6 +93,32 @@ nonisolated struct ReaderTheme: Equatable, Sendable {
         adaptive(light: codeBackgroundRGB(dark: false), dark: codeBackgroundRGB(dark: true))
     }
 
+    /// Table surfaces follow the same explicit adaptive policy as code.
+    ///
+    /// A table's structure never depends on color alone: the header also carries a
+    /// heavier weight, and every cell is separated by a drawn rule.
+    static func tableHeaderBackgroundRGB(dark: Bool) -> UInt32 { dark ? 0x21262d : 0xf6f8fa }
+    static func tableAlternateRowRGB(dark: Bool) -> UInt32 { dark ? 0x1c2128 : 0xfafbfc }
+    static func tableBorderRGB(dark: Bool) -> UInt32 { dark ? 0x3d444d : 0xd0d7de }
+
+    static var tableHeaderBackground: NSColor {
+        adaptiveNSColor(light: tableHeaderBackgroundRGB(dark: false), dark: tableHeaderBackgroundRGB(dark: true))
+    }
+
+    static var tableAlternateRowBackground: NSColor {
+        adaptiveNSColor(light: tableAlternateRowRGB(dark: false), dark: tableAlternateRowRGB(dark: true))
+    }
+
+    static var tableBorder: NSColor {
+        adaptiveNSColor(light: tableBorderRGB(dark: false), dark: tableBorderRGB(dark: true))
+    }
+
+    /// Cell rules stay hairline-thin but never disappear at a larger reading scale.
+    static func tableBorderWidth(scale: CGFloat) -> CGFloat {
+        let value = scale.isFinite && scale > 0 ? scale : 1
+        return max(1, (value * 1).rounded(.down))
+    }
+
     static func tokenRGB(_ token: MarkdownCodeToken, dark: Bool) -> UInt32 {
         switch token {
         case .keyword, .marker: dark ? 0xff7b72 : 0xa31525
@@ -123,12 +149,17 @@ nonisolated struct ReaderTheme: Equatable, Sendable {
     }
 
     private static func adaptive(light: UInt32, dark: UInt32) -> Color {
-        Color(nsColor: NSColor(name: nil) { appearance in
+        Color(nsColor: adaptiveNSColor(light: light, dark: dark))
+    }
+
+    /// Native drawing resolves the same policy the SwiftUI surfaces use.
+    private static func adaptiveNSColor(light: UInt32, dark: UInt32) -> NSColor {
+        NSColor(name: nil) { appearance in
             let rgb = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
             return NSColor(srgbRed: Double((rgb >> 16) & 255) / 255,
                            green: Double((rgb >> 8) & 255) / 255,
                            blue: Double(rgb & 255) / 255, alpha: 1)
-        })
+        }
     }
 
     private func inlineCodeFont(headingLevel: Int?) -> Font {

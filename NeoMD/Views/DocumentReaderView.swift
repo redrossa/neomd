@@ -423,11 +423,17 @@ struct DocumentReaderView: View {
                     if case .text = target, navigationBridge.textLeaf(id) != nil { break }
                     if case .links = target, blockFrames[id] != nil { break }
                     if case .codeBlock = target, navigationBridge.codeOverflow(id) != nil { break }
+                    if case .tableOverflow = target, navigationBridge.tableOverflow(id) != nil { break }
                     try? await Task.sleep(for: .milliseconds(50))
                 }
                 guard !Task.isCancelled, documentGeneration == generation,
                       navigationBridge.request == request else { return }
                 if case .codeBlock = target, navigationBridge.codeOverflow(id) == false {
+                    index += reverse ? -1 : 1
+                    continue
+                }
+                // A table that already fits needs no local overflow stop.
+                if case .tableOverflow = target, navigationBridge.tableOverflow(id) != true {
                     index += reverse ? -1 : 1
                     continue
                 }
@@ -653,11 +659,15 @@ nonisolated enum DocumentReaderFocusTarget: Hashable {
     case codeBlock(Int)
     case links(Int)
     case text(Int)
+    /// A table's own local horizontal overflow stop, identified by the table node.
+    case tableOverflow(Int)
 
+    /// The identity of the target node. For `tableOverflow` that is the table
+    /// itself rather than one of its cell leaves.
     var leafID: Int? {
         switch self {
         case .reader: nil
-        case .codeBlock(let id), .links(let id), .text(let id): id
+        case .codeBlock(let id), .links(let id), .text(let id), .tableOverflow(let id): id
         }
     }
 }
@@ -672,10 +682,16 @@ enum DocumentReaderTraversal {
     }
 
     static func candidates(in document: MarkdownRenderDocument) -> [DocumentReaderFocusTarget] {
-        document.leafIDs.flatMap { id -> [DocumentReaderFocusTarget] in
+        var tables = Set<Int>()
+        return document.leafIDs.flatMap { id -> [DocumentReaderFocusTarget] in
             let block = document[id]
-            if case .codeBlock = block.kind { return [.codeBlock(id)] }
             var targets: [DocumentReaderFocusTarget] = []
+            // One local overflow stop precedes a table's own cells, in row-major
+            // order. It is skipped at traversal time while the table fits.
+            if let parent = block.parentID, document[parent].isTable, tables.insert(parent).inserted {
+                targets.append(.tableOverflow(parent))
+            }
+            if case .codeBlock = block.kind { return targets + [.codeBlock(id)] }
             if MarkdownLinkedImageText.requiresNativeText(block.text) { targets.append(.text(id)) }
             if block.text.runs.contains(where: { $0.link != nil }) { targets.append(.links(id)) }
             return targets
