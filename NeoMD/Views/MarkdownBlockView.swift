@@ -13,6 +13,7 @@ struct MarkdownBlockView: View {
     let pageReader: (DocumentReaderPageDirection) -> Void
     var availableWidth: CGFloat = DocumentReaderLayout.maximumColumnWidth
     var quoted = false
+    var tableCell: MarkdownTableCellPresentation? = nil
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
@@ -126,7 +127,7 @@ struct MarkdownBlockView: View {
                 pageReader: pageReader
             )
 
-        case .blockQuote, .listItem, .footnote, .alert:
+        case .blockQuote, .listItem, .footnote, .alert, .table:
             // Container geometry/semantics are emitted by the flat root host.
             EmptyView()
 
@@ -143,10 +144,12 @@ struct MarkdownBlockView: View {
     @ViewBuilder private var inlineContent: some View {
         if text.runs.contains(where: { $0.markdownImage != nil }) {
             MarkdownImageParagraph(id: block.id, text: text, availableWidth: availableWidth,
-                                   headingLevel: imageHeadingLevel, quoted: quoted, scale: theme.scale)
-        } else if MarkdownLinkedImageText.requiresNativeText(text) {
+                                   headingLevel: imageHeadingLevel, quoted: quoted, scale: theme.scale,
+                                   tableCell: tableCell)
+        } else if tableCell != nil || MarkdownLinkedImageText.requiresNativeText(text) {
             MarkdownLinkedImageText(input: .init(text: text, states: [:], dark: colorScheme == .dark,
-                width: availableWidth, headingLevel: imageHeadingLevel, quoted: quoted, scale: theme.scale))
+                width: availableWidth, headingLevel: imageHeadingLevel, quoted: quoted, scale: theme.scale,
+                tableCell: tableCell))
         } else {
             Text(text)
         }

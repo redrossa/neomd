@@ -25,6 +25,7 @@ nonisolated final class CMarkBlockAdapter {
     private var drafts: [Draft] = []
     private var roots: [Int] = []
     private var taskDescriptions: Set<Int> = []
+    private var tableCells: Set<Int> = []
     private var listOrdinals: [OpaquePointer: Int] = [:]
     private var alertMarkerNodes: [OpaquePointer: Int] = [:]
     private var filteredHTMLBlocks: [OpaquePointer: String] = [:]
@@ -147,6 +148,9 @@ nonisolated final class CMarkBlockAdapter {
             var childParent = parent
             var childDepth = depth
             switch type {
+            case "table":
+                appendTable(node, rows: children, parent: parent)
+                continue
             case "block_quote":
                 var kind = MarkdownBlock.Kind.blockQuote
                 if let (alert, paragraph, count) = document.alert(node) {
@@ -184,6 +188,30 @@ nonisolated final class CMarkBlockAdapter {
             }
             stack.append(contentsOf: children.reversed().map { ($0, childParent, childDepth) })
         }
+    }
+
+    /// Copies the parser's own column/alignment/header values while C ownership is
+    /// live, then appends the parser-produced cells in row-major order. Cells are
+    /// ordinary attributed leaves of the table; their nodes are never revisited by
+    /// the block walk, and empty cells are deliberately retained.
+    private func appendTable(_ node: OpaquePointer, rows: [OpaquePointer], parent: Int?) {
+        let count = Int(cmark_gfm_extensions_get_table_columns(node))
+        let values = cmark_gfm_extensions_get_table_alignments(node)
+        let alignments = (0..<count).map { column in
+            MarkdownTableStructure.Alignment(cmarkValue: values?[column] ?? 0)
+        }
+        // The table itself never owns an inline payload or parser leaf pointer.
+        let table = append(Draft(kind: .table(.init(alignments: alignments, rows: []))), parent: parent)
+        var descriptors: [MarkdownTableStructure.Row] = []
+        for row in rows {
+            let start = drafts[table].children.count
+            for cell in CMarkDocument.children(row) {
+                tableCells.insert(append(Draft(kind: .paragraph, node: cell), parent: table))
+            }
+            descriptors.append(.init(isHeader: cmark_gfm_extensions_get_table_row_is_header(row) != 0,
+                                     cells: start..<drafts[table].children.count))
+        }
+        drafts[table].kind = .table(.init(alignments: alignments, rows: descriptors))
     }
 
     private func prepareHTMLBlocks() {
@@ -338,13 +366,13 @@ nonisolated final class CMarkBlockAdapter {
             let draft = drafts[index]
             let container: Bool
             switch draft.kind {
-            case .blockQuote, .listItem, .footnote, .alert: container = true
+            case .blockQuote, .listItem, .footnote, .alert, .table: container = true
             default: container = false
             }
             if container {
                 if draft.kind.alert != nil || draft.children.contains(where: keep.contains) { keep.insert(index) }
             } else if !draft.text.characters.isEmpty || draft.kind == .thematicBreak ||
-                        (draft.node == nil) || taskDescriptions.contains(index) {
+                        (draft.node == nil) || taskDescriptions.contains(index) || tableCells.contains(index) {
                 keep.insert(index)
             }
         }

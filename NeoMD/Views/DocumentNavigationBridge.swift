@@ -15,6 +15,8 @@ final class DocumentNavigationBridge {
     private var textLeaves: [Int: Entry] = [:]
     private var codeViews: [Int: Entry] = [:]
     private var overflowValues: [Int: Bool] = [:]
+    private var tableViews: [Int: Entry] = [:]
+    private var tableOverflowValues: [Int: Bool] = [:]
     private var intentMonitor: Any?
     var traverse: ((DocumentReaderFocusTarget?, Bool) -> Void)?
     private(set) var traversalTarget: DocumentReaderFocusTarget?
@@ -43,6 +45,61 @@ final class DocumentNavigationBridge {
         return overflowValues[id]
     }
 
+    func registerTable(_ view: NSView, id: Int, generation: Int, overflow: Bool) {
+        guard generation == self.generation else { return }
+        tableViews[id] = Entry(view: view, generation: generation)
+        tableOverflowValues[id] = overflow
+    }
+
+    func unregisterTable(_ view: NSView, id: Int) {
+        guard tableViews[id]?.view === view else { return }
+        tableViews.removeValue(forKey: id)
+        tableOverflowValues.removeValue(forKey: id)
+        if traversalTarget == .tableOverflow(id) { cancel() }
+    }
+
+    /// nil until the table's own surface has measured itself; false when it fits.
+    func tableOverflow(_ id: Int) -> Bool? {
+        guard let entry = tableViews[id], entry.generation == generation,
+              let view = entry.view, let window = owner?.window,
+              view.window === window else { return nil }
+        return tableOverflowValues[id]
+    }
+
+    /// The reader owns exactly one viewport. A table owns a nested horizontal
+    /// scroller inside it, so ownership is an exact bounded ancestry check through
+    /// that known surface only. An arbitrary nested scroller is still rejected.
+    private func isOwned(_ view: NSView) -> Bool {
+        guard let owner, view.window === owner.window else { return false }
+        var scroll = view.enclosingScrollView
+        for _ in 0..<4 {
+            guard let current = scroll else { return false }
+            if current === owner { return true }
+            guard current is MarkdownTableScrollView else { return false }
+            scroll = current.enclosingScrollView
+        }
+        return false
+    }
+
+    /// Makes a target visible in every scroller that clips it, so a focused table
+    /// cell is revealed along its own local horizontal extent as well as the
+    /// reader's vertical row.
+    private func reveal(_ view: NSView, includingOwner: Bool) {
+        var target: NSView = view
+        var rect = view.bounds
+        for _ in 0..<4 {
+            guard let scroll = target.enclosingScrollView else { return }
+            if scroll === owner {
+                if includingOwner { target.scrollToVisible(rect) }
+                return
+            }
+            target.scrollToVisible(rect)
+            let local = scroll.convert(rect, from: target).intersection(scroll.bounds)
+            rect = local.isNull || local.isEmpty ? scroll.bounds : local
+            target = scroll
+        }
+    }
+
     /// Verify SwiftUI's native accessibility focus, not just its requested FocusState.
     func hasActionFocus(_ target: DocumentReaderFocusTarget) -> Bool {
         guard let window = owner?.window, window.firstResponder != nil else { return false }
@@ -50,6 +107,7 @@ final class DocumentNavigationBridge {
         switch target {
         case .links(let id): identifier = "MarkdownLinkBlock-\(id)"
         case .codeBlock(let id): identifier = "MarkdownCodeBlock-\(id)"
+        case .tableOverflow(let id): identifier = "MarkdownTable-\(id)"
         default: return false
         }
         var element = window.accessibilityFocusedUIElement as? any NSAccessibilityProtocol
@@ -98,8 +156,7 @@ final class DocumentNavigationBridge {
 
     func textLeaf(_ id: Int) -> NSView? {
         guard let entry = textLeaves[id], entry.generation == generation,
-              let view = entry.view, let owner,
-              view.enclosingScrollView === owner, view.window === owner.window else { return nil }
+              let view = entry.view, isOwned(view) else { return nil }
         return view
     }
 
@@ -112,7 +169,7 @@ final class DocumentNavigationBridge {
 
     func focusText(_ id: Int) -> Bool {
         guard let view = textLeaf(id), let window = view.window else { return false }
-        view.scrollToVisible(view.bounds)
+        reveal(view, includingOwner: true)
         return window.makeFirstResponder(view) && window.firstResponder === view
     }
 
@@ -134,6 +191,8 @@ final class DocumentNavigationBridge {
         textLeaves.removeAll()
         codeViews.removeAll()
         overflowValues.removeAll()
+        tableViews.removeAll()
+        tableOverflowValues.removeAll()
         detachTraversal()
         root = nil
     }
@@ -166,8 +225,7 @@ final class DocumentNavigationBridge {
 
     func destination(_ id: Int) -> NSView? {
         guard let entry = destinations[id], entry.generation == generation,
-              let view = entry.view, let owner,
-              view.enclosingScrollView === owner else { return nil }
+              let view = entry.view, isOwned(view) else { return nil }
         return view
     }
 
@@ -178,6 +236,9 @@ final class DocumentNavigationBridge {
         var bounds = clip.bounds
         if let id {
             guard let target = destination(id) else { return nil }
+            // An anchor inside a table cell must also arrive horizontally; the
+            // reader's own vertical convergence stays with the loop below.
+            reveal(target, includingOwner: false)
             let frame = target.convert(target.bounds, to: clip)
             bounds.origin.y = clip.isFlipped ? frame.minY - owner.contentInsets.top
                 : frame.maxY - bounds.height + owner.contentInsets.top
@@ -201,12 +262,30 @@ struct DocumentNavigationMarker: NSViewRepresentable {
     let id: Int?
     let generation: Int
     var codeOverflow: Bool? = nil
+    var tableOverflow: Bool? = nil
 
     final class Marker: NSView {
+        enum Kind: Equatable { case destination, code, table }
+
         weak var bridge: DocumentNavigationBridge?
         var id: Int?
-        var isCode = false
+        var kind: Kind = .destination
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        /// Replacing or dismantling a marker always releases its own registration.
+        func unregisterCurrent() {
+            switch kind {
+            case .code: if let id { bridge?.unregisterCode(self, id: id) }
+            case .table: if let id { bridge?.unregisterTable(self, id: id) }
+            case .destination: bridge?.unregister(self, id: id)
+            }
+        }
+    }
+
+    private var kind: Marker.Kind {
+        if codeOverflow != nil { return .code }
+        if tableOverflow != nil { return .table }
+        return .destination
     }
 
     func makeNSView(context: Context) -> Marker {
@@ -216,29 +295,28 @@ struct DocumentNavigationMarker: NSViewRepresentable {
     }
 
     func updateNSView(_ view: Marker, context: Context) {
-        if view.bridge !== bridge || view.id != id || view.isCode != (codeOverflow != nil) {
-            if view.isCode, let oldID = view.id {
-                view.bridge?.unregisterCode(view, id: oldID)
-            } else {
-                view.bridge?.unregister(view, id: view.id)
-            }
+        if view.bridge !== bridge || view.id != id || view.kind != kind {
+            view.unregisterCurrent()
         }
         view.bridge = bridge
         view.id = id
-        view.isCode = codeOverflow != nil
-        if let codeOverflow, let id {
-            bridge.registerCode(view, id: id, generation: generation, overflow: codeOverflow)
-        } else {
+        view.kind = kind
+        switch kind {
+        case .code:
+            if let id, let codeOverflow {
+                bridge.registerCode(view, id: id, generation: generation, overflow: codeOverflow)
+            }
+        case .table:
+            if let id, let tableOverflow {
+                bridge.registerTable(view, id: id, generation: generation, overflow: tableOverflow)
+            }
+        case .destination:
             bridge.register(view, id: id, generation: generation)
         }
     }
 
     static func dismantleNSView(_ view: Marker, coordinator: ()) {
-        if view.isCode, let id = view.id {
-            view.bridge?.unregisterCode(view, id: id)
-        } else {
-            view.bridge?.unregister(view, id: view.id)
-        }
+        view.unregisterCurrent()
     }
 }
 

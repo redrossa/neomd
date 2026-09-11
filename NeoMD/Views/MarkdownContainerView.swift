@@ -40,6 +40,12 @@ struct MarkdownContainerView: View {
                 .foregroundStyle(entry.quoted ? Color.secondary : Color.primary)
         } else {
             switch node.kind {
+            case .table:
+                // One atomic surface: the table owns its cells' geometry and
+                // accessibility, and the flat host emits no duplicate cell views.
+                MarkdownTableView(document: document, tableID: node.id, theme: theme,
+                                  keyboardFocus: keyboardFocus, pageReader: pageReader,
+                                  width: entry.width, quoted: entry.quoted)
             case .alert(let alert):
                 HStack(alignment: .firstTextBaseline, spacing: 6 * theme.scale) {
                     Image(systemName: alert.symbol).accessibilityHidden(true)

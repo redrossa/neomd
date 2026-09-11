@@ -18,15 +18,19 @@ struct CMarkParityTests {
         <div>literal</div>
         """)
         let blocks = document.roots
+        // A table is an owned structural root, not four flattened prose roots.
         #expect(blocks.map { String($0.text.characters) } == [
-            "https://example.com www.example.com user@example.com single & *", "A", "B", "C", "D", "image alt", "empty", "<div>literal</div>"
+            "https://example.com www.example.com user@example.com single & *", "", "image alt", "empty", "<div>literal</div>"
         ])
+        #expect(blocks[1].isTable)
+        #expect(document.leaves(in: blocks[1].id).map { String($0.text.characters) } == ["A", "B", "C", "D"])
+        #expect(document.tableStructure(blocks[1].id)?.rows.map(\.isHeader) == [true, false])
         #expect(Set(blocks[0].text.runs.compactMap { $0.link?.absoluteString }) == ["https://example.com", "http://www.example.com", "mailto:user@example.com"])
         #expect(blocks[0].text.runs.contains { $0.inlinePresentationIntent == .strikethrough })
-        #expect(blocks[5].text.runs.allSatisfy { $0.imageURL == URL(string: "photo.png") })
-        #expect(blocks[5].text.runs.contains { $0.inlinePresentationIntent == .stronglyEmphasized })
-        #expect(blocks[6].text.runs.allSatisfy { $0.link == nil })
-        #expect(blocks[7].text.inlinePresentationIntent == .blockHTML)
+        #expect(blocks[2].text.runs.allSatisfy { $0.imageURL == URL(string: "photo.png") })
+        #expect(blocks[2].text.runs.contains { $0.inlinePresentationIntent == .stronglyEmphasized })
+        #expect(blocks[3].text.runs.allSatisfy { $0.link == nil })
+        #expect(blocks[4].text.inlinePresentationIntent == .blockHTML)
     }
 
     @Test nonisolated func concurrentParsingPreservesExtensions() async {

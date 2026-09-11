@@ -21,6 +21,7 @@ struct MarkdownLinkedImageText: View {
         var headingLevel: Int?
         var quoted = false
         var scale: CGFloat = 1
+        var tableCell: MarkdownTableCellPresentation? = nil
     }
 
     let input: Input
@@ -73,6 +74,7 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
     }
     private(set) var input: MarkdownLinkedImageText.Input?
     private(set) var replacementCount = 0
+    private var displayProjection: MarkdownCellDisplayProjection?
     private var imageAccessibility: [MarkdownImageAccessibilityElement] = []
     private weak var traversalBridge: DocumentNavigationBridge?
     private var traversalID: Int?
@@ -142,11 +144,18 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
         guard input != next else { return }
         let selection = selectedRanges
         input = next
-        textStorage?.setAttributedString(MarkdownLinkedImageContent.make(next))
+        let projection = MarkdownLinkedImageContent.project(next)
+        let previous = displayProjection
+        textStorage?.setAttributedString(projection.content)
+        displayProjection = next.tableCell == nil ? nil : projection
         replacementCount += 1
         rebuildAccessibility()
         let length = textStorage?.length ?? 0
-        selectedRanges = selection.filter { NSMaxRange($0.rangeValue) <= length }
+        if next.tableCell != nil, let previous {
+            selectedRanges = selection.map { NSValue(range: projection.remap($0.rangeValue, from: previous)) }
+        } else {
+            selectedRanges = selection.filter { NSMaxRange($0.rangeValue) <= length }
+        }
     }
 
     /// Bounds of presentation-only swatches; indexes remain original native text indexes.
@@ -217,6 +226,7 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
     override func accessibilityChildren() -> [Any]? { imageAccessibility }
 
     private func rebuildAccessibility() {
+        for child in imageAccessibility { child.owner = nil }
         imageAccessibility = []
         guard let storage = textStorage else { return }
         let fullRange = NSRange(location: 0, length: storage.length)
@@ -245,6 +255,7 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
         pointerOpen = nil
         pointerScope.clear()
         input = nil
+        displayProjection = nil
         for child in imageAccessibility { child.owner = nil }
         imageAccessibility = []
         // Release attachment resources even if AppKit retains the native view.
@@ -307,10 +318,25 @@ enum MarkdownLinkedImageContent {
         return layout.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil).minY + layout.location(forGlyphAt: 0).y
     }
 
-    static func make(_ input: MarkdownLinkedImageText.Input) -> NSAttributedString {
+    static func make(_ input: MarkdownLinkedImageText.Input) -> NSAttributedString { project(input).content }
+
+    static func project(_ input: MarkdownLinkedImageText.Input) -> MarkdownCellDisplayProjection {
         let result = NSMutableAttributedString(string: "")
+        var segments: [MarkdownCellDisplayProjection.Segment] = []
+        var sourceOffset = 0
         for (image, range) in input.text.runs[\.markdownImage] {
             let source = AttributedString(input.text[range])
+            let sourceLength = String(source.characters).utf16.count
+            let start = result.length
+            defer {
+                let kind: MarkdownCellDisplayProjection.Kind
+                if image == nil { kind = .text }
+                else if result.length > start, result.attribute(.attachment, at: start, effectiveRange: nil) != nil { kind = .attachment }
+                else { kind = .fallback }
+                segments.append(.init(source: NSRange(location: sourceOffset, length: sourceLength),
+                    display: NSRange(location: start, length: result.length - start), occurrence: image?.occurrence, kind: kind))
+                sourceOffset += sourceLength
+            }
             guard let image else {
                 for run in source.runs {
                     let fragment = AttributedString(source[run.range])
@@ -351,7 +377,25 @@ enum MarkdownLinkedImageContent {
                 result.append(NSAttributedString(string: "\(label) (\(status))", attributes: fallback))
             }
         }
-        return result
+        if let cell = input.tableCell, result.length > 0 {
+            let full = NSRange(location: 0, length: result.length)
+            let paragraph = NSMutableParagraphStyle()
+            switch cell.alignment {
+            case .unspecified, .left: paragraph.alignment = .left
+            case .center: paragraph.alignment = .center
+            case .right: paragraph.alignment = .right
+            }
+            paragraph.lineBreakMode = .byWordWrapping
+            result.addAttribute(.paragraphStyle, value: paragraph, range: full)
+            if cell.header {
+                result.enumerateAttribute(.font, in: full) { value, range, _ in
+                    if let font = value as? NSFont {
+                        result.addAttribute(.font, value: NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask), range: range)
+                    }
+                }
+            }
+        }
+        return MarkdownCellDisplayProjection(source: String(input.text.characters), content: result, segments: segments)
     }
 
     private static func attributes(for text: AttributedString, headingLevel: Int?, quoted: Bool, scale: CGFloat) -> [NSAttributedString.Key: Any] {

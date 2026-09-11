@@ -54,6 +54,7 @@ nonisolated struct MarkdownBlock: Identifiable, Sendable {
     nonisolated enum Kind: Equatable, Sendable {
         case paragraph
         case metadata(MarkdownFrontMatter.Content)
+        case table(MarkdownTableStructure)
         case heading(level: Int)
         case codeBlock(language: String?)
         case blockQuote
@@ -91,7 +92,15 @@ nonisolated struct MarkdownBlock: Identifiable, Sendable {
         self.anchors = anchors
     }
 
-    var isLeaf: Bool { childIDs.isEmpty && kind.alert == nil }
+    var isTable: Bool {
+        if case .table = kind { return true }
+        return false
+    }
+
+    var isLeaf: Bool {
+        if isTable { return false }
+        return childIDs.isEmpty && kind.alert == nil
+    }
 }
 
 /// Converts Markdown source into presentable blocks.

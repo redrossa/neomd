@@ -1,0 +1,64 @@
+[
+  {
+    "id": "four-alignments",
+    "source": "| A | B | C | D |\n| --- | :--- | :---: | ---: |\n| a | b | c | d |\n",
+    "tables": [{"alignments": ["unspecified", "left", "center", "right"], "headerRows": [0], "rows": [["A", "B", "C", "D"], ["a", "b", "c", "d"]]}]
+  },
+  {
+    "id": "missing-excess-and-empty-cells",
+    "source": "| A | B | C |\n| --- | --- | --- |\n| one |\n| one | two | three | discarded |\n| | | |\n",
+    "tables": [{"alignments": ["unspecified", "unspecified", "unspecified"], "headerRows": [0], "rows": [["A", "B", "C"], ["one", "", ""], ["one", "two", "three"], ["", "", ""]]}],
+    "note": "Excess body cells are discarded by pinned cmark normalization, not by a new app truncation policy."
+  },
+  {
+    "id": "empty-header-only",
+    "source": "| | |\n| --- | --- |\n",
+    "tables": [{"alignments": ["unspecified", "unspecified"], "headerRows": [0], "rows": [["", ""]]}]
+  },
+  {
+    "id": "duplicate-empty-headers",
+    "source": "| Same | Same | |\n| --- | --- | --- |\n| left | middle | right |\n",
+    "tables": [{"alignments": ["unspecified", "unspecified", "unspecified"], "headerRows": [0], "rows": [["Same", "Same", ""], ["left", "middle", "right"]]}]
+  },
+  {
+    "id": "escaped-pipe-and-code-spaces",
+    "source": "| A | B | C |\n| --- | --- | --- |\n| a\\|b | `a\\|b` | `  x  ` |\n",
+    "tables": [{"alignments": ["unspecified", "unspecified", "unspecified"], "headerRows": [0], "rows": [["A", "B", "C"], ["a|b", "a|b", " x "]]}],
+    "codeCells": [[0, 1, 1], [0, 1, 2]]
+  },
+  {
+    "id": "comment-and-anchor-only-cells",
+    "source": "| A | B | C |\n| --- | --- | --- |\n| <!--HIDDEN--> | <a id='cell'></a> | before<!--HIDDEN-->after |\n",
+    "tables": [{"alignments": ["unspecified", "unspecified", "unspecified"], "headerRows": [0], "rows": [["A", "B", "C"], ["", "", "beforeafter"]]}],
+    "anchors": [{"name": "cell", "table": 0, "row": 1, "column": 1}],
+    "absentVisibleText": ["HIDDEN"]
+  },
+  {
+    "id": "no-leading-trailing-pipes-crlf",
+    "source": "A | B\r\n--- | ---:\r\na | b\r\n",
+    "tables": [{"alignments": ["unspecified", "right"], "headerRows": [0], "rows": [["A", "B"], ["a", "b"]]}]
+  },
+  {
+    "id": "bare-cr",
+    "source": "| A |\r| --- |\r| value |\r",
+    "tables": [{"alignments": ["unspecified"], "headerRows": [0], "rows": [["A"], ["value"]]}]
+  },
+  {
+    "id": "unicode-and-literal-task-markers",
+    "source": "| Unicode | Marker |\n| --- | --- |\n| e\u0301 日本語 \ud83d\udc69\ud83c\udffd\u200d\ud83d\udcbb | [x] literal |\n",
+    "tables": [{"alignments": ["unspecified", "unspecified"], "headerRows": [0], "rows": [["Unicode", "Marker"], ["e\u0301 日本語 \ud83d\udc69\ud83c\udffd\u200d\ud83d\udcbb", "[x] literal"]]}],
+    "taskCount": 0
+  },
+  {
+    "id": "mismatched-delimiter-not-table",
+    "source": "| A | B |\n| --- |\n| value |\n",
+    "tables": [],
+    "presentVisibleText": ["A", "B", "value"]
+  },
+  {
+    "id": "fenced-example-not-table",
+    "source": "```markdown\n| A | B |\n| --- | --- |\n| one | two |\n```\n",
+    "tables": [],
+    "codeText": "| A | B |\n| --- | --- |\n| one | two |\n"
+  }
+]
