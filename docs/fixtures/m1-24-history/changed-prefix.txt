@@ -1,0 +1,7 @@
+---
+review: updated
+origin: local fixture
+---
+
+This new preface was inserted before the existing alpha report. The amber checkpoint content is unchanged.
+

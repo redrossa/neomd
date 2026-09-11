@@ -113,6 +113,13 @@ final class MarkdownDocumentController: NSDocumentController {
     override func noteNewRecentDocument(_ document: NSDocument) {}
     func recordCommitted(_ url: URL) { super.noteNewRecentDocumentURL(url) }
 
+    // The existing native Clear Menu command clears the remembered reading positions
+    // too. Open readers keep their current place and no second control is added.
+    override func clearRecentDocuments(_ sender: Any?) {
+        super.clearRecentDocuments(sender)
+        openingCoordinator.clearReadingHistory()
+    }
+
     @objc func openRecent(_ sender: NSMenuItem) {
         guard let url = sender.representedObject as? URL else { return }
         explicitFileIntent()

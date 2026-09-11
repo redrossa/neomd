@@ -1,0 +1,16 @@
+{
+  "format": "M1-24 semantic locator oracle v1; inert data, not persisted app schema",
+  "normalization": "CRLF and CR become LF; other scalars and whitespace retained",
+  "cases": [
+    {"id":"metadata-prefix", "before":["Intro","Before","Target","After","End"], "after":["Metadata: ready","New preface","Intro","Before","Target","After","End"], "targetOrdinal":2, "fraction":0.625, "expectedOrdinal":4, "expectedFraction":0.625},
+    {"id":"duplicate-context", "before":["Start","Before A","Repeat","After A","Before B","Repeat","After B","End"], "after":["Preface","Start","Before A","Repeat","After A","Before B","Repeat","After B","End"], "targetOrdinal":5, "fraction":0.4, "expectedOrdinal":6, "expectedFraction":0.4},
+    {"id":"deleted-target-neighbor-tie", "before":["Intro","Before","Target","After","End"], "after":["Intro","Before","After","End"], "targetOrdinal":2, "fraction":0.625, "expectedOrdinal":1, "expectedFraction":1.0},
+    {"id":"next-neighbor-only", "before":["Old intro","Old before","Target","After","Old end"], "after":["Replacement intro","After","Replacement end"], "targetOrdinal":2, "fraction":0.625, "expectedOrdinal":1, "expectedFraction":0.0},
+    {"id":"complete-rewrite-progress", "before":["A","B","C","D","E"], "after":["V","W","X","Y","Z","Q","R"], "targetOrdinal":2, "fraction":0.25, "expectedOrdinal":3, "expectedFraction":0.25},
+    {"id":"empty-output", "before":["Target"], "after":[], "targetOrdinal":0, "fraction":0.25, "expectedEdge":"top"},
+    {"id":"top-edge", "before":["A"], "after":["Z","A"], "edge":"top", "expectedEdge":"top"},
+    {"id":"bottom-edge", "before":["A"], "after":["A","Z"], "edge":"bottom", "expectedEdge":"bottom"},
+    {"id":"unicode-code", "before":["Intro","    café 日本語 é\n        literal code","End"], "after":["Preface","Intro","    café 日本語 é\n        literal code","End"], "targetOrdinal":1, "fraction":0.75, "expectedOrdinal":2, "expectedFraction":0.75},
+    {"id":"line-ending-normalization", "before":["Intro","first\r\n    second\rthird","End"], "after":["Intro","first\n    second\nthird","End"], "targetOrdinal":1, "fraction":0.5, "expectedOrdinal":1, "expectedFraction":0.5}
+  ]
+}
