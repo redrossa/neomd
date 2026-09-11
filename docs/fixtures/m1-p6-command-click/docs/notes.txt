@@ -1,0 +1,1 @@
+SAFE NON-MARKDOWN SENTINEL. Inert UTF-8 text, not a program. Explicit opening remains delegated to the default application; Command-click must not create a NeoMD reader for this file. No application was launched by triage.

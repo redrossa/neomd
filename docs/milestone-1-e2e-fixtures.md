@@ -1,8 +1,14 @@
 # Milestone 1 cumulative E2E fixture catalog
 
-## M1-P5 / #48 — quiet document focus (accepted source triage)
+## M1-P6 / #50 — Command-click local Markdown into an additional reader
 
-The [approved focus-outline pivot](milestone-1-focus-outline-pivot.md) is next after completed #43. **Only #48 is authorized; #14 is entirely deferred and #15–24 remain paused even after #48.** No reviewer stage. Current gates are a Debug build and explicitly scoped non-interaction unit tests, not UI/E2E or manual scripted app flows. Historical interaction commands below are preserved evidence/recipes, not present authorization.
+The [approved Command-click pivot](milestone-1-command-click-pivot.md) is next after completed #48 / PR #49 at `71cdd6acef777526f16f4020bc54fb273060b9a0`. **Only #50 is authorized; #14 is entirely deferred and #15–24 remain paused even after #50.** This supersedes only #43's Command-N-only additional-reader restriction. Ordinary links still replace the source reader; Command-click gets a distinct additional reader even when its destination is already open. Other readers and their fragments/state must remain untouched.
+
+Triage's [inert fixture packet](fixtures/m1-p6-command-click/README-fixture.md) and [criterion mapping / validation allowlist](m1-p6-command-click-validation.md) cover native text and linked-image destinations, whitespace-only links, relative/encoded/leading-slash/self paths, already-open destinations, per-reader fragments, failed acquisition and unchanged external/non-Markdown/internal routing. All interaction checks are **DEFERRED/UNRUN**, not passed. Triage performed source/docs research only. Worker must supply exact-head Debug build and explicitly scoped non-interaction unit evidence; no reviewer, UI/E2E, scripted interaction, real events, AX press, NSWorkspace launch, picker or key-window host test is authorized. Do not treat model units as native-window proof. Historical evidence/commands below remain preserved; #36/#38 and user-owned combined milestone acceptance are unchanged.
+
+## M1-P5 / #48 — quiet document focus (historical triage and worker evidence)
+
+The [approved focus-outline pivot](milestone-1-focus-outline-pivot.md) is completed as PR #49; [worker evidence](m1-p5-focus-validation.md) records a passing Debug build and 28 scoped non-interaction units. Native/visual outcomes remain deferred/unverified. Historical interaction commands below are preserved evidence/recipes, not present authorization. The following source-triage paragraphs retain the original base and investigation limits.
 
 The triage-owned [fixture packet](fixtures/m1-p5-focus-outlines/README-fixture.md) supplies wrapping link blocks and heading/list/task/quote/alert/footnote cases, short/wide code, linked/unlinked local images and an optional disposable permission-control image. A separate link-free document isolates viewport/native-focus hypotheses from the confirmed custom link-block overlay. No network or external application is required. See [criterion mapping, API containment, allowlist and worker evidence fields](m1-p5-focus-validation.md).
 

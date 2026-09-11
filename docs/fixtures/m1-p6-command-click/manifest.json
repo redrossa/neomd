@@ -1,0 +1,15 @@
+{
+  "story": "M1-P6 / #50",
+  "base": "71cdd6acef777526f16f4020bc54fb273060b9a0",
+  "status": "inert inputs; interactions DEFERRED/UNRUN",
+  "files": [
+    {"path": "docs/source.md", "sha256": "fd7a8aab405521c3595518232e139cb86e411dc8d6f9cc6a9f5cf0631ce34617"},
+    {"path": "docs/Target café.MD", "sha256": "600fb3690ba3bfdf9903248cbd26bd1e676a828102990f36fdacac9d0d483896"},
+    {"path": "root-target.md", "sha256": "a9c6c72a4cda909e4f24daa43cc9d1d53bf31c7610ab5f9a7576eae687503cf0"},
+    {"path": "docs/root-target.md", "sha256": "76ad26622d1cb45fff21512cb960ff19aa3fab1a07a2f0268b0249b473a7571d"},
+    {"path": "docs/private.md", "sha256": "771154eb10fe9ec5710cd6a4f96074e7c4babb959dd9859a3045c5eeeffaf90b"},
+    {"path": "docs/notes.txt", "sha256": "1b4dec672b832e148f190882fa53c3b5899152d124324725c0967071ea059573"},
+    {"path": "docs/empty.md", "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+    {"path": "docs/img/badge.svg", "sha256": "e42c2aa703b8f3c1beacf38b67660138f6a50eee9bd7589f5ea84b01caf62ce1"}
+  ]
+}

@@ -1,6 +1,6 @@
 # M1-P5 — Remove oversized document focus outlines
 
-Status: **APPROVED and published** as [#48 — M1-P5](https://github.com/redrossa/neomd/issues/48). User approved the scope, publication and proceeding in the terminal. The [milestone order](https://github.com/redrossa/neomd/milestone/1) records P5 next, #14 deferred and #15–24 paused. Implementation requires accepted triage; no behavior is yet validated.
+Status: **IMPLEMENTED and closed** as [#48 — M1-P5](https://github.com/redrossa/neomd/issues/48), merged in [PR #49](https://github.com/redrossa/neomd/pull/49) at `71cdd6acef777526f16f4020bc54fb273060b9a0`. [Worker evidence](m1-p5-focus-validation.md) records a passing Debug build and 28 scoped non-interaction units; visual/native behavior remains DEFERRED/UNRUN, not passed. The [milestone order](https://github.com/redrossa/neomd/milestone/1) now authorizes only [M1-P6 / #50](milestone-1-command-click-pivot.md), with #14 deferred and #15–24 paused even after #50. The approved story and source-investigation history below are retained, not authorization to resume other work.
 
 ## Business outcome and order
 
