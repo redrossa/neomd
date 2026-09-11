@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "status": "Inert parser-provenance oracles; UNRUN. Text below is data, not executable HTML or test code.",
+  "cases": [
+    {"id":"inline-adjacency","source":"a<!--HIDDEN-->b café 😀\n","visibleText":"ab café 😀","absent":["HIDDEN"]},
+    {"id":"block-visible-suffix","source":"<!--HIDDEN-->VISIBLE SUFFIX\n","present":["VISIBLE SUFFIX"],"absent":["HIDDEN"]},
+    {"id":"multiline","source":"<!--HIDDEN ONE\nHIDDEN TWO-->\n\nVisible\n","present":["Visible"],"absent":["HIDDEN ONE","HIDDEN TWO"]},
+    {"id":"comment-only","source":"<!--HIDDEN-->\n","visibleLeafCount":0,"absent":["HIDDEN"]},
+    {"id":"inline-special-short","source":"a<!-->b<!--->c\n","visibleText":"abc","oracle":"These complete inline comment forms are explicitly recognized by pinned cmark's inline parser."},
+    {"id":"heading-slug","source":"# Hello<!--HIDDEN--> world\n","visibleText":"Hello world","headingFragment":"hello-world","absent":["HIDDEN"]},
+    {"id":"link-label","source":"[Hello<!--HIDDEN--> world](nearby.md)\n","visibleText":"Hello world","linkDestination":"nearby.md","absent":["HIDDEN"]},
+    {"id":"image-alt","source":"![Hello<!--HIDDEN--> world](absent.png)\n","imageAlt":"Hello world","absent":["HIDDEN"]},
+    {"id":"empty-task-preserved","source":"- [ ] <!--HIDDEN-->\n","task":"incomplete","taskDescription":"","absent":["HIDDEN"],"oracle":"Do not discard the authored read-only task because its description became empty."},
+    {"id":"custom-anchor-before-comment","source":"<a id='kept'></a><!--HIDDEN-->\n","customAnchor":"kept","absent":["HIDDEN"],"oracle":"Keep existing zero-width/EOF destination semantics without visible comment text."},
+    {"id":"anchor-inside-comment","source":"<!--<a id='hidden'></a>-->\n\nVisible\n","absentAnchors":["hidden"],"present":["Visible"]},
+    {"id":"escaped","source":"\\<!--ESCAPED-->\n","visibleText":"<!--ESCAPED-->","oracle":"Decoded literal text has no parser HTML-comment authority."},
+    {"id":"entity","source":"&lt;!--ENTITY--&gt;\n","visibleText":"<!--ENTITY-->"},
+    {"id":"inline-code","source":"`# x [y](nearby.md) <!--CODE-->`\n","visibleText":"# x [y](nearby.md) <!--CODE-->","codeLiteral":true},
+    {"id":"fenced-code","source":"```markdown\n<!--CODE-->\n# x\n```\n","codeText":"<!--CODE-->\n# x\n"},
+    {"id":"indented-code","source":"    <!--CODE-->\n","codeText":"<!--CODE-->\n"},
+    {"id":"attribute-quotes","source":"<span title=\"<!--ATTRIBUTE--> >\" data-x='<!--SECOND-->'>body</span>\n","present":["<!--ATTRIBUTE-->","<!--SECOND-->","body"],"oracle":"Unsupported entire tags remain literal; apparent comment openers inside quoted attributes are data."},
+    {"id":"script-block-rawtext","source":"<script>const x = '<!--RAWTEXT-->'; noExecution();</script>\n","present":["<!--RAWTEXT-->","noExecution();"],"noActions":true},
+    {"id":"script-inline-rawtext","source":"Before <script>const x = '<!--RAWTEXT-->';</script> after<!--HIDDEN-->\n","present":["<!--RAWTEXT-->","after"],"absent":["HIDDEN"],"noActions":true},
+    {"id":"pre-code","source":"<pre><code><!--EXAMPLE--></code></pre>\n","present":["<!--EXAMPLE-->"],"noActions":true},
+    {"id":"unclosed-comment","source":"Before <!--UNCLOSED\n","present":["Before","<!--UNCLOSED"]},
+    {"id":"no-syntax-promotion","source":"&lt;su<!--HIDDEN-->p&gt;text\n","visibleText":"<sup>text","absent":["HIDDEN"],"noSuperscript":true},
+    {"id":"safe-style-preserved","source":"<sup>a<!--HIDDEN-->b</sup> <sub>c</sub> <ins>d</ins>\n","visibleText":"ab c d","styles":[["ab","superscript"],["c","subscript"],["d","underline"]],"absent":["HIDDEN"]},
+    {"id":"escaped-punctuation","source":"\\* \\_ \\# \\[ \\] \\( \\) \\! \\` \\+ \\- \\. \\> \\{ \\} \\\\\n","visibleText":"* _ # [ ] ( ) ! ` + - . > { } \\"}
+  ],
+  "absenceScope": "For true comments, absence covers owned visible strings, projected accessibility labels, heading slugs, custom anchors, link labels and image alternatives, not the original immutable document source. Metadata/fallback data and deliberate code/escape/rawtext controls are intentionally visible.",
+  "deferred": "No native AX traversal, spoken output, image loading, link activation or UI inspection was performed."
+}

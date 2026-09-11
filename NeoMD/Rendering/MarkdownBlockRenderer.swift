@@ -53,6 +53,7 @@ nonisolated struct MarkdownBlock: Identifiable, Sendable {
     /// How a block should be presented.
     nonisolated enum Kind: Equatable, Sendable {
         case paragraph
+        case metadata(MarkdownFrontMatter.Content)
         case heading(level: Int)
         case codeBlock(language: String?)
         case blockQuote
@@ -109,8 +110,10 @@ nonisolated enum MarkdownBlockRenderer {
     static func render(from markdown: String, documentURL: URL? = nil) -> MarkdownRenderDocument {
         guard !markdown.isEmpty else { return .empty }
 
-        let document = CMarkDocument(markdown: markdown)
-        return CMarkBlockAdapter(document: document, documentURL: documentURL).render()
+        let frontMatter = MarkdownFrontMatter.extract(markdown)
+        let document = CMarkDocument(markdown: markdown, parserSource: frontMatter?.parserSource)
+        return CMarkBlockAdapter(document: document, documentURL: documentURL,
+            metadata: frontMatter?.content).render()
     }
 
 

@@ -1,0 +1,3 @@
+# Byte-level parser fixtures: retain authored BOM and physical line endings.
+docs/fixtures/m1-15-content/bom-crlf.md -text
+docs/fixtures/m1-15-content/cr-only.md -text

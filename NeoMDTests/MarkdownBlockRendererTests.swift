@@ -152,7 +152,7 @@ struct MarkdownBlockRendererTests {
             "<sup>x", "x</sup>", "<sup><sub>x</sup></sub>",
             "<sup><sub>x</sub>", "<span>x</span>",
             "<sup><span>x</sup></span>", "<sup/>x</sup>",
-            "<span title='<sub>'>x</span></sub>", "<!-- <sup>x</sup> -->",
+            "<span title='<sub>'>x</span></sub>",
             "<script>alert('x')</script>", "`<sub>x</sub>`", "```\n<sup>x</sup>\n```"
         ] {
             let document = MarkdownBlockRenderer.render(from: source)

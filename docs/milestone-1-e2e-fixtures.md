@@ -1,3 +1,21 @@
+# Current milestone fixture authority — M1-15
+
+Stories #1–13 and priorities #40–43/#48/#50/#52 are completed. The user renewed sequential **#15–24** implementation authorization, explicitly skipping **#14, still entirely deferred/open**. [Canonical milestone order](https://github.com/redrossa/neomd/milestone/1) controls sequencing; #15 is next. No reviewer. Later gates are Debug build and relevant NON-INTERACTION units only; **no UI/E2E/manual scripted interactions or prototypes**. Historical commands and old “only/next/paused” statements below are retained records/future recipes, not current permission or validation. #36 full-reflow failure/defer and #38 cue C5 unchecked/deferred status remain unchanged; neither is fixed or passed by this story. Combined business acceptance stays user-owned.
+
+## M1-15 / #15 — intended content, comments and YAML metadata
+
+[Issue #15](https://github.com/redrossa/neomd/issues/15) · [table clarification](https://github.com/redrossa/neomd/issues/15#issuecomment-5628747670) · [D1 offline libyaml approval](https://github.com/redrossa/neomd/issues/15#issuecomment-5628830891) · [D2 boundary/recovery approval](https://github.com/redrossa/neomd/issues/15#issuecomment-5628889673).
+
+Triage base `f0bd08806013ae8cb4ac994676b30bbe19dc19f5`; Astra/high verified. **ACCEPTED for implementation readiness, not implemented or passed behavior.** [Concrete plan/source evidence](m1-15-content-plan.md), [all seven criteria and non-interaction selector allowlist](m1-15-validation.md), and [inert fixture packet/future human recipe](fixtures/m1-15-content/README-fixture.md) are triage-owned. Worker installs authenticated staging, supplies actual tests/corrections and records exact-head evidence. No app, test, prototype, UI or interaction was run by triage.
+
+The new packet has ordinary/nested YAML tables, aliases/tags/structured keys, malformed literal recovery, BOM/CRLF/CR bytes, true HTML comments and escaped/code/attribute/rawtext controls, and independent JSON boundary/semantic/comment/resource recipes. `metadata.md` adds original-line alerts, heading/custom/footnote anchors, cues/tasks and distinct adjacent local image occurrences after metadata. `nearby.md` is local; `absent.png` is deliberately missing. No network fixture, executable test script or arbitrary HTML execution is needed. This is a metadata-specific native table, not early #19 GFM table implementation. Delimited scalar and empty roots follow the explicit D2 precedence; unclosed input is ordinary Markdown and closed invalid/over-limit input is lossless non-executing literal recovery, not a successful table pass.
+
+All #15 native table appearance/reflow/scale/selection, actual AX/VoiceOver reading order, link/image behavior, no-auto-launch and interacted bytes/mtime observations remain **DEFERRED/UNRUN**, not passed by source inspection or future pure model units. Future recipe requires renewed authorization and user-owned final testing. Preserve existing deferred evidence and do not close the milestone from implementation completion.
+
+Worker evidence slot: **UNRUN at triage**. Record actual PR/source SHA, Debug command/result, exact existing/new unit selectors with nonzero pass/failure/skip counts and fresh external logs/xcresults in `m1-15-validation.md`; append a concise summary here without rewriting history.
+
+The complete original catalog begins below, retained byte-for-byte from the triage base, including its title and historical authority statements.
+
 # Milestone 1 cumulative E2E fixture catalog
 
 ## M1-P7 / #52 — source-relative Command-click window placement
