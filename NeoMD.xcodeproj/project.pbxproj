@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C01500000000000000000001 /* LibYAML in Frameworks */ = {isa = PBXBuildFile; productRef = C01500000000000000000002 /* LibYAML */; };
+		C01500000000000000000004 /* LibYAML in Lifecycle Frameworks */ = {isa = PBXBuildFile; productRef = C01500000000000000000002 /* LibYAML */; };
 		C00900000000000000000001 /* CMarkGFM in Frameworks */ = {isa = PBXBuildFile; productRef = C00900000000000000000002 /* CMarkGFM */; };
 		C00903000000000000000001 /* CMarkGFM in Lifecycle Frameworks */ = {isa = PBXBuildFile; productRef = C00900000000000000000002 /* CMarkGFM */; };
 /* End PBXBuildFile section */
@@ -82,6 +84,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C00900000000000000000001 /* CMarkGFM in Frameworks */,
+				C01500000000000000000001 /* LibYAML in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -102,7 +105,7 @@
 		C00903000000000000000005 /* Lifecycle Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
-			files = (C00903000000000000000001 /* CMarkGFM in Lifecycle Frameworks */);
+			files = (C00903000000000000000001 /* CMarkGFM in Lifecycle Frameworks */, C01500000000000000000004 /* LibYAML in Lifecycle Frameworks */);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -151,6 +154,7 @@
 			name = NeoMD;
 			packageProductDependencies = (
 				C00900000000000000000002 /* CMarkGFM */,
+				C01500000000000000000002 /* LibYAML */,
 			);
 			productName = NeoMD;
 			productReference = B049D214304BF5BB0045E474 /* NeoMD.app */;
@@ -210,7 +214,7 @@
 			dependencies = ();
 			fileSystemSynchronizedGroups = (C00903000000000000000003, C00903000000000000000004);
 			name = RenderLifecycleTests;
-			packageProductDependencies = (C00900000000000000000002 /* CMarkGFM */);
+			packageProductDependencies = (C00900000000000000000002 /* CMarkGFM */, C01500000000000000000002 /* LibYAML */);
 			productName = RenderLifecycleTests;
 			productReference = C00903000000000000000002;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -249,6 +253,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				C00900000000000000000003 /* XCLocalSwiftPackageReference "ThirdParty/cmark-gfm" */,
+				C01500000000000000000003 /* XCLocalSwiftPackageReference "ThirdParty/libyaml" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B049D215304BF5BB0045E474 /* Products */;
@@ -331,6 +336,10 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCLocalSwiftPackageReference section */
+		C01500000000000000000003 /* XCLocalSwiftPackageReference "ThirdParty/libyaml" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "ThirdParty/libyaml";
+		};
 		C00900000000000000000003 /* XCLocalSwiftPackageReference "ThirdParty/cmark-gfm" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = "ThirdParty/cmark-gfm";
@@ -338,6 +347,10 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		C01500000000000000000002 /* LibYAML */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = LibYAML;
+		};
 		C00900000000000000000002 /* CMarkGFM */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = CMarkGFM;

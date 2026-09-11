@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "story": "https://github.com/redrossa/neomd/issues/15",
+  "baseCommit": "f0bd08806013ae8cb4ac994676b30bbe19dc19f5",
+  "status": "Inert integrity inventory; no behavior tests executed",
+  "files": [
+    {"path":"README-fixture.md","bytes":11468,"sha256":"87536dd1df2abc8713b0113856d9524c72f30c49265177f5043683162485f44f"},
+    {"path":"aliases-tags.md","bytes":366,"sha256":"49dd3d01cfabc0e304e140acf238fa81613d97ccb54b5f19e104680890a046e1"},
+    {"path":"bom-crlf.md","bytes":43,"sha256":"7bd5449e1e09bf91eeacb0fe45f45d78f861e2bd72b1f82d1153796ebcada9e1"},
+    {"path":"boundary-cases.json","bytes":3970,"sha256":"724f814f0f33a2ae6ec4888dcae9261a548948d035df9d65b95ce947bc3f605d"},
+    {"path":"comment-cases.json","bytes":4199,"sha256":"ba48af2d5c681345151b45ae41b40f099a79200cf970e78b8dde896000d7d45e"},
+    {"path":"comments.md","bytes":1098,"sha256":"ed81e6d58dbee6832ab0707db8b34a2a386cf81881e40f4d3c9d67b665470b1b"},
+    {"path":"cr-only.md","bytes":33,"sha256":"835e17c09f62fbab7de1270bc2317b14e6053b2e348230552d2ab8f66929fa1c"},
+    {"path":"metadata-cases.json","bytes":4235,"sha256":"ac3f2c9dfd9c9e7908630620e07d7a9fac2a95d010c07f4908d963adf6af9d3e"},
+    {"path":"metadata.md","bytes":1234,"sha256":"8fed7e6a834b61b87af8495c0aafdbc3cbae57d6dca4d22b859daeba58b47e6a"},
+    {"path":"nearby.md","bytes":102,"sha256":"edab43fdabf4e30f0a008e59b54f336e8f4a86932fcc25cc08b0c2a687d1fbe3"},
+    {"path":"recovery.md","bytes":513,"sha256":"d00e4f41425bf328525b4872b7204b9c8bf8c9464e438c8982c4b8528e3c722a"},
+    {"path":"resource-cases.json","bytes":4612,"sha256":"442eb72050e86a1bb46080c119ce9c5d69f615349df6f7e265eb014dec58cb46"}
+  ],
+  "selfHash": "Excluded to avoid recursive hashing",
+  "deliberatelyAbsent": ["absent.png"],
+  "nativeVisualAXInteraction": "DEFERRED/UNRUN"
+}

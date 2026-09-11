@@ -100,6 +100,9 @@ struct MarkdownBlockView: View {
     @ViewBuilder
     private var blockContent: some View {
         switch block.kind {
+        case .metadata(let content):
+            MarkdownMetadataTable(content: content, theme: theme)
+
         case .paragraph:
             inlineContent
                 .font(theme.font())

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "status": "Inert semantic oracles, not executed evidence or required Swift type names",
+  "envelope": "Each payload is wrapped in opening --- LF and closing --- LF, followed by # BODY LF; payload includes its final LF",
+  "treeNotation": "scalar has text/style; mapping pairs and sequence items are ordered arrays; duplicates must not be overwritten. Actual production flat arena is worker-owned.",
+  "cases": [
+    {"id":"ordered-text-spellings","payload":"title: 'Report'\ndate: 2025-01-29 18:15:32 +0530\nversion: 001\nflag: yes\nnumber: 1.20\n","result":"table","orderedPairs":[["title","Report"],["date","2025-01-29 18:15:32 +0530"],["version","001"],["flag","yes"],["number","1.20"]]},
+    {"id":"nested-flow","payload":"a: {b: [one, two]}\n","result":"table","leafContexts":[{"path":["a","b",1],"text":"one"},{"path":["a","b",2],"text":"two"}]},
+    {"id":"multiline","payload":"literal: |-\n  first\n  second\nfolded: >-\n  first\n  second\nquoted: \"line\\nnext\\tend\"\n","result":"table","orderedPairs":[["literal","first\nsecond"],["folded","first second"],["quoted","line\nnext\tend"]]},
+    {"id":"empty-forms","payload":"a: ''\nb:\nc: {}\nd: []\n","result":"table","distinctEmptyKinds":[["a","empty-string"],["b","empty-value"],["c","empty-mapping"],["d","empty-sequence"]]},
+    {"id":"root-empty-mapping","payload":"{}\n","result":"table","root":"empty-mapping"},
+    {"id":"root-empty-sequence","payload":"[]\n","result":"table","root":"empty-sequence"},
+    {"id":"unicode-duplicate-keys","payload":"café: 😀\n'key: punctuation': first\n'key: punctuation': second\n","result":"table","orderedPairs":[["café","😀"],["key: punctuation","first"],["key: punctuation","second"]]},
+    {"id":"structured-key","payload":"? [one, two]\n: value\n","result":"table","keySequence":["one","two"],"value":"value","oracle":"Both key items and value retain their key/value context; no recursive dictionary hashing."},
+    {"id":"acyclic-alias","payload":"a: &x {name: Shared}\nb: *x\nc: *x\n","result":"table","leafContexts":[{"path":["a","name"],"text":"Shared"},{"path":["b","name"],"text":"Shared"},{"path":["c","name"],"text":"Shared"}]},
+    {"id":"anchor-shadowing","payload":"a: &x old\nb: *x\nc: &x new\nd: *x\n","result":"table","orderedPairs":[["a","old"],["b","old"],["c","new"],["d","new"]]},
+    {"id":"inert-tags","payload":"custom: !report text\nstring: !!str 001\nbinary: !!binary SGVsbG8=\n","result":"table","orderedPairs":[["custom","text"],["string","001"],["binary","SGVsbG8="]],"oracle":"Explicit tag names remain inert descriptors, binary stays text; no constructors/conversion/fetch."},
+    {"id":"data-not-markup","payload":"value: '**bold** [link](nearby.md) ![image](absent.png) <!--data--> :smile: `#ff0000`'\n","result":"table","value":"**bold** [link](nearby.md) ![image](absent.png) <!--data--> :smile: `#ff0000`","attributesForbidden":["link","image","anchor","generatedFootnote","colorCue","emojiReplacement","HTMLStyle"]},
+    {"id":"nul-scalar","payload":"value: \"before\\0after\"\n","result":"table","ownedScalar":"before\u0000after","oracle":"Length-based C buffer copying preserves suffix; native handling of control glyph is deferred, not a promise of a visible NUL glyph."},
+    {"id":"undefined-alias","payload":"value: *missing\n","result":"literal-fallback"},
+    {"id":"cyclic-alias","payload":"value: &cycle [*cycle]\n","result":"literal-fallback"},
+    {"id":"malformed-flow","payload":"value: [unterminated\n","result":"literal-fallback"},
+    {"id":"invalid-tag","payload":"value: !<unterminated text\n","result":"literal-fallback"},
+    {"id":"error-after-valid-prefix","payload":"ok: valid\nbad: [unterminated\n","result":"literal-fallback","oracle":"No partial table: preserve the entire candidate and render body separately."}
+  ],
+  "fallbackOracle": "The exact envelope including delimiters/line endings is retained as plain literal data with a quiet separate explanation; no attributes/actions/Markdown reparsing; body unchanged and normally parsed. A fallback is successful C5 recovery, never a valid-C7-table pass.",
+  "limits": "See resource-cases.json for bounded parsing/presentation recipes; no recursively constructed object graphs."
+}

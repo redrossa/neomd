@@ -21,7 +21,7 @@ nonisolated final class CMarkDocument {
         return sourceBytes[sourceLines[number - 1]]
     }
 
-    init(markdown: String) {
+    init(markdown: String, parserSource: String? = nil) {
         let bytes = Array(markdown.utf8)
         sourceBytes = bytes
         var lines: [Range<Int>] = []
@@ -46,7 +46,7 @@ nonisolated final class CMarkDocument {
             cmark_parser_attach_syntax_extension(parser, cmark_find_syntax_extension(name))
         }
         cmark_parser_attach_syntax_extension(parser, CMarkEmojiExtension.syntax)
-        markdown.utf8CString.withUnsafeBufferPointer { bytes in
+        (parserSource ?? markdown).utf8CString.withUnsafeBufferPointer { bytes in
             cmark_parser_feed(parser, bytes.baseAddress, bytes.count - 1)
         }
         root = cmark_parser_finish(parser)
