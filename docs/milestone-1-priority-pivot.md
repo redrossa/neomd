@@ -1,6 +1,6 @@
 # Milestone 1 priority pivot after M1-13
 
-Status: **User-requested goals/order published; M1-P4 formats, replacement intent and sandbox removal explicitly approved.** This staged amendment records the revised live #43 contract, not implemented behavior or acceptance. The concrete [native ownership plan](m1-p4-native-navigation-plan.md), Command-N picker and one-file-at-a-time batch policy are [approved](https://github.com/redrossa/neomd/issues/43#issuecomment-5626782971). This amendment takes precedence over historical starter-window, separate-window and app-managed folder-access policies only as explicitly stated below.
+Status: **Historical approved P1–P4 pivot; #40–43 are completed (#43 / PR #47).** The concrete [native ownership plan](m1-p4-native-navigation-plan.md), Command-N picker and one-file-at-a-time batch policy were [approved](https://github.com/redrossa/neomd/issues/43#issuecomment-5626782971) and implemented; [worker evidence and native validation limits](m1-p4-validation.md) remain authoritative. #48 is also completed as PR #49. The approved [M1-P6 / #50 Command-click pivot](milestone-1-command-click-pivot.md) is now the only next story and supersedes only #43's Command-N-only additional-reader restriction. All historical wording, checklists and evidence below are retained as the earlier contract, not current Command-click policy or new validation claims.
 
 ## Business outcome
 
@@ -15,7 +15,7 @@ After completed #13, implement sequentially:
 3. [#42 — M1-P3: Pointing-hand link cursor](https://github.com/redrossa/neomd/issues/42)
 4. [#43 — M1-P4: Active-window opening without app-managed folder grants](https://github.com/redrossa/neomd/issues/43)
 
-Then resume #14–24 in their original order. The [milestone description](https://github.com/redrossa/neomd/milestone/1) records the full numbered sequence. User explicitly requested creation and the priority pivot; no new milestone was created. Canonical GitHub issue statements/checklists are the implementation contracts.
+The original plan to resume #14–24 is superseded: after completed #48, only #50 is authorized; #14 is entirely deferred and #15–24 remain paused even after #50. The [milestone description](https://github.com/redrossa/neomd/milestone/1) records the full numbered sequence. User explicitly requested creation and the priority pivot; no new milestone was created. Canonical GitHub issue statements/checklists are the implementation contracts.
 
 ## Stories and acceptance scope
 
@@ -55,7 +55,7 @@ Ordered after P2, no permission dependency. Cursor-only; P4 owns routing changes
 
 As a reader opening Markdown files, I want links, File > Open / Command-O and file drops to replace the current window’s document without app-managed folder-permission requests, and only Command-N to explicitly create another window, so that navigation feels direct.
 
-Live #43 acceptance criteria (all remain unverified):
+Historical #43 acceptance criteria (preserved wording; implementation evidence is linked above and native interactions remain deferred/unverified). #50 supersedes the Command-click restriction in C2 only:
 
 - [ ] A normal click on a supported local document link opens the target in the current reading window rather than creating a new window.
 - [ ] File > Open / Command-O and file drops replace the active window’s document. Command-click no longer requests a new window; only Command-N explicitly creates another window. Command-N shows a single-file picker and creates the additional reader only after successful selection/preparation; cancellation leaves existing windows unchanged. A successful open with no windows creates the first reader. Multi-file Finder/Dock/drop requests show one-file-at-a-time feedback without replacing current content or creating extra windows.

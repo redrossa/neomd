@@ -6,7 +6,7 @@ final class DocumentOpeningCoordinator {
     private(set) var windows: [UUID: DocumentWindowController] = [:]
     private var firstReader = DocumentReadSession()
     private var reservations = NativeDocumentReservations()
-    private var reservedSessions: [UUID: DocumentReadSession] = [:]
+    private(set) var reservedSessions: [UUID: DocumentReadSession] = [:]
     private var lifecycle = DocumentWindowLifecycle()
     var isTerminating: Bool { lifecycle.isTerminating }
     var shouldShowNoDocumentWindow: Bool { lifecycle.shouldShowNoDocumentWindow }
@@ -55,9 +55,22 @@ final class DocumentOpeningCoordinator {
         reservedSessions.removeValue(forKey: session.id)
     }
 
+    func finishLinkRequest(_ session: DocumentReadSession, token: Int) {
+        // Closed sessions must be released too, but stale work cannot release newer work.
+        if session.generation == token || !session.isOpen {
+            reservedSessions.removeValue(forKey: session.id)
+        }
+        session.finish(token)
+    }
+
     func open(_ url: URL, fragment: String? = nil, in session: DocumentReadSession,
               token: Int? = nil) async throws -> (ReadOnlyMarkdownNSDocument, Bool) {
         let serial = token ?? session.begin()
+        defer {
+            if session.generation == serial || !session.isOpen {
+                reservedSessions.removeValue(forKey: session.id)
+            }
+        }
         guard !isTerminating, session.accepts(serial), let documentController else { throw CancellationError() }
         if session.prepared?.fileURL.standardizedFileURL == url.standardizedFileURL,
            let document = windows[session.id]?.document as? ReadOnlyMarkdownNSDocument {
@@ -73,7 +86,6 @@ final class DocumentOpeningCoordinator {
             if let candidate = acquired ?? documentController.document(for: key) as? ReadOnlyMarkdownNSDocument {
                 releaseIfUnused(candidate)
             }
-            reservedSessions.removeValue(forKey: session.id)
         }
         try await Task.detached(priority: .userInitiated) {
             guard url.isFileURL, MarkdownFileType.claimsFile(at: url),

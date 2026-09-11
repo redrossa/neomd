@@ -7,7 +7,8 @@ import SwiftUI
 struct MarkdownLinkedImageText: View {
     static func requiresNativeText(_ text: AttributedString) -> Bool {
         text.runs.contains {
-            if $0.markdownImage != nil { return $0.link != nil }
+            if $0.link != nil { return true }
+            if $0.markdownImage != nil { return false }
             return !String(text.characters[$0.range]).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
     }
@@ -35,6 +36,7 @@ struct MarkdownLinkedImageText: View {
 private struct MarkdownLinkedImageNativeText: NSViewRepresentable {
     let input: MarkdownLinkedImageText.Input
     @Environment(\.openURL) private var openURL
+    @Environment(\.documentPointerOpenURL) private var pointerOpenURL
     @Environment(\.documentNavigationBridge) private var bridge
     @Environment(\.documentNavigationGeneration) private var generation
     @Environment(\.documentLeafID) private var leafID
@@ -45,6 +47,7 @@ private struct MarkdownLinkedImageNativeText: NSViewRepresentable {
 
     func updateNSView(_ view: MarkdownLinkedImageTextView, context: Context) {
         view.open = { openURL($0) }
+        view.pointerOpen = pointerOpenURL
         view.bindTraversal(bridge: bridge, id: leafID, generation: generation)
         view.update(input)
     }
@@ -60,6 +63,14 @@ private struct MarkdownLinkedImageNativeText: NSViewRepresentable {
 
 final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
     var open: (URL) -> Void = { _ in }
+    var pointerOpen: ((URL, DocumentLinkActivation) -> Void)?
+    private let pointerScope = DocumentLinkPointerScope()
+
+    override func mouseDown(with event: NSEvent) {
+        let activation = DocumentLinkActivation(pointer: event.type == .leftMouseDown,
+            command: event.modifierFlags.contains(.command), control: event.modifierFlags.contains(.control))
+        pointerScope.tracking(activation) { super.mouseDown(with: event) }
+    }
     private(set) var input: MarkdownLinkedImageText.Input?
     private(set) var replacementCount = 0
     private var imageAccessibility: [MarkdownImageAccessibilityElement] = []
@@ -189,8 +200,11 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
     }
 
     func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
-        if let url = link as? URL { open(url) }
-        else if let string = link as? String, let url = URL(string: string) { open(url) }
+        let url = (link as? URL) ?? (link as? String).flatMap(URL.init(string:))
+        if let url {
+            if let activation = pointerScope.activation, let pointerOpen { pointerOpen(url, activation) }
+            else { open(url) }
+        }
         return true // Always consume; AppKit must never open a URL independently.
     }
 
@@ -228,6 +242,8 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
         bindTraversal(bridge: nil, id: nil, generation: -1)
         delegate = nil
         open = { _ in }
+        pointerOpen = nil
+        pointerScope.clear()
         input = nil
         for child in imageAccessibility { child.owner = nil }
         imageAccessibility = []

@@ -4,7 +4,11 @@ Status: **Approved implementation design.** [Binding coordinator approval](https
 
 Base: `9db15f86682dcd8c0c97290d541186c006d8f5bb`. Canonical issue: https://github.com/redrossa/neomd/issues/43. This document supersedes the unapproved options in the earlier triage, not existing acceptance evidence.
 
-## Settled contract
+## Current policy amendment
+
+#43 is implemented and closed as [PR #47](https://github.com/redrossa/neomd/pull/47); its [worker evidence](m1-p4-validation.md) retains native-validation limits. After completed #48 / PR #49, approved [M1-P6 / #50](milestone-1-command-click-pivot.md) restores Command-click local Markdown links to an additional reader, including a distinct viewer of an already-open target and per-new-reader fragments. Ordinary clicks, Command-N picker, File > Open, drops, path/access/read-only policies remain unchanged. Only #50 is authorized; #14 is deferred and #15–24 remain paused. The original design below is retained as historical context: its URL-only callback/no-modifier recommendation, ordinary Command-click/self-link statements and Command-N-only restriction are superseded by #50, not instructions for the new implementation.
+
+## Settled contract (historical #43 design)
 
 - Embedded/native reading remains Markdown-only (`md`, `markdown`, `mdown`, `mkd`, `mdtext`, case-insensitive). Other safe local targets use default apps; applications/executables are revealed in Finder, never launched by the file dispatcher.
 - Local document links, File > Open / Command-O and file drops replace the destination reader in its **existing NSWindow**. Command-click has ordinary activation semantics. Only Command-N explicitly requests an additional reader window.

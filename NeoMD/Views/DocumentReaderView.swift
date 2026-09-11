@@ -100,6 +100,9 @@ struct DocumentReaderView: View {
         .environment(\.documentNavigationGeneration, documentGeneration)
         .environment(\.openURL, OpenURLAction { url in handleLink(url) })
         .environment(\.documentKeyboardOpenURL, OpenURLAction { url in handleLink(url, keyboardDriven: true) })
+        .environment(\.documentPointerOpenURL, { url, activation in
+            _ = handleLink(url, pointerActivation: activation)
+        })
         .overlay(alignment: .bottom) {
             if let linkNotice {
                 Text(linkNotice)
@@ -275,7 +278,12 @@ struct DocumentReaderView: View {
         }
     }
 
-    private func handleLink(_ url: URL, keyboardDriven: Bool = false) -> OpenURLAction.Result {
+    private func handleLink(_ url: URL, keyboardDriven: Bool = false,
+                            pointerActivation: DocumentLinkActivation? = nil) -> OpenURLAction.Result {
+        guard session.isOpen, session.prepared?.id == prepared.id, !openingCoordinator.isTerminating else {
+            return .handled
+        }
+        let activation = pointerActivation ?? .ordinary
         let destination = DocumentLinkDestination.resolve(
             url: url, anchors: renderedDocument.anchorTargets, documentURL: fileURL)
         switch destination {
@@ -285,19 +293,14 @@ struct DocumentReaderView: View {
                 let fragment = components?.fragment
                 components?.fragment = nil
                 components?.query = nil
-                openLocalTarget(DocumentLocalTarget(fileURL: components?.url ?? url, fragment: fragment))
+                openLocalTarget(DocumentLocalTarget(fileURL: components?.url ?? url, fragment: fragment),
+                                activation: activation)
                 return .handled
             }
-            // A custom environment key does not receive SwiftUI's openURL
-            // system fallback. Dispatch through the inherited action exactly
-            // once; the descendant override above cannot recurse into this.
-            if keyboardDriven {
-                systemOpenURL(url)
-                return .handled
-            }
-            return .systemAction
+            return DocumentLinkActivation.external(url,
+                customAction: keyboardDriven || pointerActivation != nil) { systemOpenURL($0) }
         case .local(let target):
-            openLocalTarget(target)
+            openLocalTarget(target, activation: activation)
         default:
             _ = session.begin()
             followSection(destination, keyboardDriven: keyboardDriven)
@@ -331,28 +334,10 @@ struct DocumentReaderView: View {
         }
     }
 
-    private func openLocalTarget(_ target: DocumentLocalTarget) {
-        let token = session.begin()
-        session.task = Task { @MainActor in
-            defer { session.finish(token) }
-            do {
-                let disposition = try await Task.detached {
-                    try LocalFileDisposition.resolve(target.fileURL)
-                }.value
-                guard session.accepts(token) else { return }
-                switch disposition {
-                case .markdown:
-                    _ = try await openingCoordinator.open(target.fileURL, fragment: target.fragment,
-                                                           in: session, token: token)
-                case .reveal:
-                    NSWorkspace.shared.activateFileViewerSelecting([target.fileURL])
-                case .external:
-                    _ = try await NSWorkspace.shared.open(target.fileURL, configuration: NSWorkspace.OpenConfiguration())
-                }
-            } catch is CancellationError {} catch {
-                if session.accepts(token) { showNotice(DocumentOpeningCoordinator.failureMessage(target.fileURL)) }
-            }
-        }
+    private func openLocalTarget(_ target: DocumentLocalTarget, activation: DocumentLinkActivation) {
+        let request = DocumentLocalLinkRequest(source: session, presentation: prepared.id,
+            target: target, activation: activation, coordinator: openingCoordinator)
+        request.destination.task = Task { @MainActor in await request.run() }
     }
 
     private func navigate(to id: Int?, keyboardDriven: Bool) {

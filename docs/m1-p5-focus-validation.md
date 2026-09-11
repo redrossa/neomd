@@ -2,7 +2,7 @@
 
 Contract: [#48](https://github.com/redrossa/neomd/issues/48), [approved pivot](milestone-1-focus-outline-pivot.md), [milestone order](https://github.com/redrossa/neomd/milestone/1). Accepted source-research base: `8704fb2225fdd9eb373fcc30d4655e6f7eb9f398` (merged #43 / PR #47).
 
-Status: **IMPLEMENTED; DEBUG BUILD AND 28 SCOPED NON-INTERACTION UNITS PASS. VISUAL/NATIVE BEHAVIOR DEFERRED/UNRUN.** Triage authored the source research, fixture packet and final-testing documentation; the worker installed all nine deliverables after verifying every manifest artifact/source/replacement hash and filled this evidence section. Triage performed no build or interaction. No reviewer stage. Only #48 is authorized; #14 is entirely deferred and #15–24 remain paused even after this pivot.
+Status: **IMPLEMENTED; DEBUG BUILD AND 28 SCOPED NON-INTERACTION UNITS PASS. VISUAL/NATIVE BEHAVIOR DEFERRED/UNRUN.** Triage authored the source research, fixture packet and final-testing documentation; the worker installed all nine deliverables after verifying every manifest artifact/source/replacement hash and filled this evidence section. Triage performed no build or interaction. No reviewer stage. #48 is now closed and merged as [PR #49](https://github.com/redrossa/neomd/pull/49) at `71cdd6acef777526f16f4020bc54fb273060b9a0`; only [M1-P6 / #50](milestone-1-command-click-pivot.md) is authorized next. #14 is entirely deferred and #15–24 remain paused even after #50. The evidence and original worker instructions below are historical records, not current authorization or a native-behavior pass.
 
 ## Criterion mapping and limits
 
