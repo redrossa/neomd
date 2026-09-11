@@ -1,5 +1,15 @@
 # Milestone 1 cumulative E2E fixture catalog
 
+## M1-P5 / #48 — quiet document focus (accepted source triage)
+
+The [approved focus-outline pivot](milestone-1-focus-outline-pivot.md) is next after completed #43. **Only #48 is authorized; #14 is entirely deferred and #15–24 remain paused even after #48.** No reviewer stage. Current gates are a Debug build and explicitly scoped non-interaction unit tests, not UI/E2E or manual scripted app flows. Historical interaction commands below are preserved evidence/recipes, not present authorization.
+
+The triage-owned [fixture packet](fixtures/m1-p5-focus-outlines/README-fixture.md) supplies wrapping link blocks and heading/list/task/quote/alert/footnote cases, short/wide code, linked/unlinked local images and an optional disposable permission-control image. A separate link-free document isolates viewport/native-focus hypotheses from the confirmed custom link-block overlay. No network or external application is required. See [criterion mapping, API containment, allowlist and worker evidence fields](m1-p5-focus-validation.md).
+
+At base `8704fb2225fdd9eb373fcc30d4655e6f7eb9f398`, source triage confirms the explicit enclosing link-block rectangle and separately identifies the focusable reader/code scrollers; it does **not** reproduce or diagnose the reported whole-window native effect. Ancestor SwiftUI effect suppression can disable child controls, so child-environment preservation is an implementation gate, not an assumption.
+
+All #48 visual, Tab/traversal/activation, scrolling, window-wide, light/dark, selection/cursor, ordinary control/Retry/drop, VoiceOver and interaction bytes/mtime observations are **DEFERRED/UNRUN**, not passed. Worker must record exact-head build and selected-unit evidence without promoting model/environment checks to native behavior proof. The approved change supersedes the historical enclosing block-focus indicator only; selected-link styling and keyboard/accessibility semantics remain. Prior screenshots showing that outline are historical evidence, not the new desired appearance. Preserve #36/#38 failures and every prior catalog entry. Final combined acceptance remains user-owned; do not close the milestone or auto-resume paused stories.
+
 ## M1-P4 / #43 — same-window native navigation
 
 The triage-owned [M1-P4 fixture catalog](m1-p4-fixture-catalog.md) and [approved native ownership plan](m1-p4-native-navigation-plan.md) define the inert packet and future native oracles. Command-N picker and batch rejection are approved. [Worker evidence](m1-p4-validation.md) records non-interaction unit selectors/builds and exclusions. All #43 physical window/menu/Finder/drop/selection/OS-prompt behavior is **DEFERRED/UNRUN**, not passed. The latest no-reviewer/build-and-units-only instruction supersedes the historical interaction mandate below; preserve previous evidence, failures and #36/#38 deferrals. Final milestone acceptance remains user-owned.

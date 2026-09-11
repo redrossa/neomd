@@ -1,6 +1,6 @@
 # Milestone 1 brainstorm: Open and read Markdown
 
-Status: Historical brainstorm; unresolved proposals remain draft. Published GitHub issues are the implementation contracts. Stories #1–13 are closed. The user-approved [priority pivot](milestone-1-priority-pivot.md) inserts #40–43 before #14–24 and supersedes the historical starter-window/local-link policies only as explicitly recorded there; the revised #43 now approves Markdown-only native reading, active-window replacement and app Debug/Release sandbox removal without app-managed folder grants. Its staged native ownership/Command-N/batch design is not implemented or accepted yet.
+Status: Historical brainstorm; unresolved proposals remain draft. Published GitHub issues are the implementation contracts. Stories #1–13 and priority stories #40–43 are closed; #43 merged as PR #47. The [priority pivot](milestone-1-priority-pivot.md) records the earlier approved policy changes. The user-approved [focus-outline pivot](milestone-1-focus-outline-pivot.md), [#48 — M1-P5](https://github.com/redrossa/neomd/issues/48), is next and is the only authorized story. **#14 is entirely deferred; #15–24 remain paused, including after #48.** Do not resume them without renewed user direction. The [milestone order](https://github.com/redrossa/neomd/milestone/1) is authoritative. #48 supersedes only earlier enclosing link-block focus-indicator requirements, preserving keyboard/accessibility behavior and ordinary controls. Historical implementation/status paragraphs below remain their original planning/evidence records, not authorization to advance or claims of current validation.
 
 ## Product outcome
 
@@ -208,6 +208,8 @@ Approved scope decisions for M1-13 (issue [#13](https://github.com/redrossa/neom
 - Implementation is authorized only through M1-13, then pauses before M1-14; icon/DMG publication is not authorized. This records approved scope, not completed implementation or validation. See [accepted cue plan](m1-13-cues-plan.md) and [cumulative fixture catalog](milestone-1-e2e-fixtures.md).
 
 ### M1-14 — Interpret mentions without a GitHub account · Core
+
+**Current disposition: entirely user-deferred.** The historical proposal below is not authorized for implementation. M1-15 through M1-24 are also paused pending renewed direction.
 
 As a reader of shared notes, I want people and team mentions to remain meaningful so that I can identify who the document refers to.
 

@@ -49,47 +49,50 @@ struct DocumentReaderView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            ScrollView(.vertical) {
-                content(width: DocumentReaderLayout.columnWidth(for: geometry.size.width))
-                    .frame(
-                        width: DocumentReaderLayout.columnWidth(
-                            for: geometry.size.width
-                        ),
-                        alignment: .leading
-                    )
-                    .padding(.vertical, DocumentReaderLayout.verticalMargin)
-                    .coordinateSpace(name: DocumentReaderCoordinateSpace.content)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .background(alignment: .topLeading) {
-                        DocumentNavigationMarker(bridge: navigationBridge, id: nil,
-                                                 generation: documentGeneration)
-                            .frame(width: 0, height: 0)
-                            .allowsHitTesting(false)
-                    }
-            }
-            .accessibilityIdentifier("DocumentReaderScrollView")
-            .focusable(true, interactions: .edit)
-            .focused($keyboardFocus, equals: .reader)
-            .scrollPosition($scrollPosition)
-            .onKeyPress(keys: [.tab]) { press in
-                guard let reverse = DocumentReaderTraversal.direction(press),
-                      keyboardFocus == .reader else { return .ignored }
-                traverse(from: .reader, reverse: reverse)
-                return .handled
-            }
-            .onKeyPress(keys: [.pageUp, .pageDown]) { keyPress in
-                handleVerticalPageKeyPress(keyPress)
-            }
-            .onScrollGeometryChange(for: DocumentReaderScrollMetrics.self) { geometry in
-                DocumentReaderScrollMetrics(geometry)
-            } action: { oldMetrics, newMetrics in
-                handleScrollGeometryChange(from: oldMetrics, to: newMetrics)
-            }
-            .onScrollPhaseChange { _, newPhase in
-                handleScrollPhaseChange(newPhase)
-            }
-            .onPreferenceChange(DocumentBlockFramePreferenceKey.self) { frames in
-                handleBlockFrames(frames, viewportSize: geometry.size)
+            DocumentFocusEffect { inheritedEffectEnabled in
+                ScrollView(.vertical) {
+                    content(width: DocumentReaderLayout.columnWidth(for: geometry.size.width))
+                        .frame(
+                            width: DocumentReaderLayout.columnWidth(
+                                for: geometry.size.width
+                            ),
+                            alignment: .leading
+                        )
+                        .padding(.vertical, DocumentReaderLayout.verticalMargin)
+                        .coordinateSpace(name: DocumentReaderCoordinateSpace.content)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .background(alignment: .topLeading) {
+                            DocumentNavigationMarker(bridge: navigationBridge, id: nil,
+                                                     generation: documentGeneration)
+                                .frame(width: 0, height: 0)
+                                .allowsHitTesting(false)
+                        }
+                        .environment(\.isFocusEffectEnabled, inheritedEffectEnabled)
+                }
+                .accessibilityIdentifier("DocumentReaderScrollView")
+                .focusable(true, interactions: .edit)
+                .focused($keyboardFocus, equals: .reader)
+                .scrollPosition($scrollPosition)
+                .onKeyPress(keys: [.tab]) { press in
+                    guard let reverse = DocumentReaderTraversal.direction(press),
+                          keyboardFocus == .reader else { return .ignored }
+                    traverse(from: .reader, reverse: reverse)
+                    return .handled
+                }
+                .onKeyPress(keys: [.pageUp, .pageDown]) { keyPress in
+                    handleVerticalPageKeyPress(keyPress)
+                }
+                .onScrollGeometryChange(for: DocumentReaderScrollMetrics.self) { geometry in
+                    DocumentReaderScrollMetrics(geometry)
+                } action: { oldMetrics, newMetrics in
+                    handleScrollGeometryChange(from: oldMetrics, to: newMetrics)
+                }
+                .onScrollPhaseChange { _, newPhase in
+                    handleScrollPhaseChange(newPhase)
+                }
+                .onPreferenceChange(DocumentBlockFramePreferenceKey.self) { frames in
+                    handleBlockFrames(frames, viewportSize: geometry.size)
+                }
             }
         }
         .environment(imageStore)
