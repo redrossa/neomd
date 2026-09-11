@@ -64,12 +64,6 @@ struct MarkdownBlockView: View {
             }
             .modifier(MarkdownLinkFocus(enabled: !links.isEmpty && block.isLeaf,
                 id: block.id, keyboardFocus: keyboardFocus, handleKeyPress: handleLinkKeyPress))
-            .overlay {
-                if keyboardFocus.wrappedValue == .links(block.id), !links.isEmpty {
-                    RoundedRectangle(cornerRadius: 3).stroke(Color.accentColor, lineWidth: 2)
-                        .padding(-3).allowsHitTesting(false).accessibilityHidden(true)
-                }
-            }
             .modifier(MarkdownLinkAccessibility(
                 id: block.id,
                 value: links.isEmpty ? nil : "Link \(selectedLink % links.count + 1) of \(links.count): \(links[selectedLink % links.count].label)"
@@ -172,9 +166,12 @@ private struct MarkdownLinkFocus: ViewModifier {
 
     @ViewBuilder func body(content: Content) -> some View {
         if enabled {
-            content.focusable(true, interactions: .edit)
-                .focused(keyboardFocus, equals: .links(id))
-                .onKeyPress(keys: [.tab, .leftArrow, .rightArrow, .return, .space, .escape], action: handleKeyPress)
+            DocumentFocusEffect { inheritedEffectEnabled in
+                content.environment(\.isFocusEffectEnabled, inheritedEffectEnabled)
+                    .focusable(true, interactions: .edit)
+                    .focused(keyboardFocus, equals: .links(id))
+                    .onKeyPress(keys: [.tab, .leftArrow, .rightArrow, .return, .space, .escape], action: handleKeyPress)
+            }
         } else { content }
     }
 }
@@ -207,50 +204,53 @@ private struct MarkdownCodeBlockView: View {
     @Environment(\.documentNavigationGeneration) private var documentGeneration
 
     var body: some View {
-        ScrollView(.horizontal) {
-            Text(theme.presentationText(for: block.text))
-                .font(.system(size: NSFont.preferredFont(forTextStyle: .callout).pointSize * theme.scale, design: .monospaced))
-                .fixedSize(horizontal: true, vertical: true)
-                .padding(12)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .foregroundStyle(Color.primary)
-        .background(ReaderTheme.codeBackground, in: .rect(cornerRadius: 6))
-        .accessibilityIdentifier("MarkdownCodeBlock-\(block.id)")
-        .scrollPosition($scrollPosition)
-        .onScrollGeometryChange(for: CodeBlockScrollMetrics.self) { geometry in
-            CodeBlockScrollMetrics(geometry)
-        } action: { oldMetrics, newMetrics in
-            if oldMetrics.canScrollHorizontally,
-               !newMetrics.canScrollHorizontally,
-               keyboardFocus.wrappedValue == .codeBlock(block.id) {
-                keyboardFocus.wrappedValue = .reader
+        DocumentFocusEffect { inheritedEffectEnabled in
+            ScrollView(.horizontal) {
+                Text(theme.presentationText(for: block.text))
+                    .font(.system(size: NSFont.preferredFont(forTextStyle: .callout).pointSize * theme.scale, design: .monospaced))
+                    .fixedSize(horizontal: true, vertical: true)
+                    .padding(12)
+                    .environment(\.isFocusEffectEnabled, inheritedEffectEnabled)
             }
-            scrollMetrics = newMetrics
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .foregroundStyle(Color.primary)
+            .background(ReaderTheme.codeBackground, in: .rect(cornerRadius: 6))
+            .accessibilityIdentifier("MarkdownCodeBlock-\(block.id)")
+            .scrollPosition($scrollPosition)
+            .onScrollGeometryChange(for: CodeBlockScrollMetrics.self) { geometry in
+                CodeBlockScrollMetrics(geometry)
+            } action: { oldMetrics, newMetrics in
+                if oldMetrics.canScrollHorizontally,
+                   !newMetrics.canScrollHorizontally,
+                   keyboardFocus.wrappedValue == .codeBlock(block.id) {
+                    keyboardFocus.wrappedValue = .reader
+                }
+                scrollMetrics = newMetrics
 
-        }
-        .background {
-            if let navigationBridge {
-                DocumentNavigationMarker(bridge: navigationBridge, id: block.id,
-                    generation: documentGeneration, codeOverflow: scrollMetrics.canScrollHorizontally)
-                    .frame(width: 0, height: 0).allowsHitTesting(false)
             }
-        }
-        .focusable(scrollMetrics.canScrollHorizontally, interactions: .edit)
-        .focused(keyboardFocus, equals: .codeBlock(block.id))
-        .onKeyPress(
-            keys: [
-                .tab,
-                .leftArrow,
-                .rightArrow,
-                .home,
-                .end,
-                .pageUp,
-                .pageDown,
-                .escape
-            ]
-        ) { keyPress in
-            handleKeyPress(keyPress)
+            .background {
+                if let navigationBridge {
+                    DocumentNavigationMarker(bridge: navigationBridge, id: block.id,
+                        generation: documentGeneration, codeOverflow: scrollMetrics.canScrollHorizontally)
+                        .frame(width: 0, height: 0).allowsHitTesting(false)
+                }
+            }
+            .focusable(scrollMetrics.canScrollHorizontally, interactions: .edit)
+            .focused(keyboardFocus, equals: .codeBlock(block.id))
+            .onKeyPress(
+                keys: [
+                    .tab,
+                    .leftArrow,
+                    .rightArrow,
+                    .home,
+                    .end,
+                    .pageUp,
+                    .pageDown,
+                    .escape
+                ]
+            ) { keyPress in
+                handleKeyPress(keyPress)
+            }
         }
     }
 
