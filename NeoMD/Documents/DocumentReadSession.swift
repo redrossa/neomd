@@ -29,7 +29,11 @@ nonisolated struct PreparedReadingDocument: Sendable {
 /// A position restoration handed across a successful presentation replacement.
 /// The view consumes it once, for the matching presentation only.
 nonisolated struct ReadingPositionRequest: Equatable, Sendable {
-    enum Reason: Equatable, Sendable { case refresh }
+    enum Reason: Equatable, Sendable {
+        case refresh
+        /// A remembered position restored on a successful new or replacement reopen.
+        case reopenHistory
+    }
 
     let presentation: UUID
     let serial: Int
@@ -66,6 +70,9 @@ nonisolated struct RefreshTicket: Equatable, Sendable {
     @ObservationIgnored var isUserBusy = false
     @ObservationIgnored private var capture: (presentation: UUID, locator: DocumentContentLocator)?
     @ObservationIgnored private var restorationSerial = 0
+    /// Set by the opening coordinator so an accepted capture also reaches the private
+    /// reading history. Capture itself stays a small value copy in the reader.
+    @ObservationIgnored var positionObserver: ((DocumentContentLocator, URL) -> Void)?
 
     struct SectionRequest: Equatable {
         let presentation: UUID
@@ -117,8 +124,20 @@ nonisolated struct RefreshTicket: Equatable, Sendable {
 
     /// Copies the reader's current position for the installed presentation only.
     func recordReadingPosition(_ locator: DocumentContentLocator, presentation: UUID) {
-        guard isOpen, prepared?.id == presentation else { return }
+        guard isOpen, let prepared, prepared.id == presentation else { return }
         capture = (presentation, locator)
+        positionObserver?(locator, prepared.fileURL)
+    }
+
+    /// Hands a remembered position to the presentation that was just installed. The
+    /// view consumes it once; an explicit section request still outranks it.
+    func requestReadingPosition(_ anchor: DocumentReadingAnchor, presentation: UUID,
+                                reason: ReadingPositionRequest.Reason) {
+        guard isOpen, prepared?.id == presentation, section == nil else { return }
+        restorationSerial += 1
+        readingPosition = ReadingPositionRequest(presentation: presentation,
+                                                 serial: restorationSerial,
+                                                 anchor: anchor, reason: reason)
     }
 
     func capturedPosition(for presentation: UUID) -> DocumentContentLocator? {

@@ -8,6 +8,9 @@ final class DocumentOpeningCoordinator {
     private var reservations = NativeDocumentReservations()
     private(set) var reservedSessions: [UUID: DocumentReadSession] = [:]
     private var lifecycle = DocumentWindowLifecycle()
+    /// Created on first use so an ordinary launch, and a hosted unit run, never touch
+    /// the user's stored history before a document is actually opened.
+    private lazy var history = ReadingHistoryService.production()
     var isTerminating: Bool { lifecycle.isTerminating }
     var shouldShowNoDocumentWindow: Bool { lifecycle.shouldShowNoDocumentWindow }
     @discardableResult func documentWindowDidAppear(id: UUID) -> DocumentWindowLifecycle.Directive {
@@ -37,6 +40,10 @@ final class DocumentOpeningCoordinator {
     }
 
     func close(_ controller: DocumentWindowController) {
+        // Capture before the session is invalidated, keeping its original serial.
+        history.flush(session: controller.session.id)
+        history.forget(session: controller.session.id)
+        controller.session.positionObserver = nil
         controller.session.close()
         windows.removeValue(forKey: controller.session.id)
         documentWindowDidDisappear(id: controller.session.id)
@@ -48,6 +55,7 @@ final class DocumentOpeningCoordinator {
 
     func applicationWillTerminate() {
         _ = lifecycle.applicationWillTerminate()
+        history.flushAll()
         for window in windows.values {
             (window.document as? ReadOnlyMarkdownNSDocument)?
                 .stopObservingExternalChanges(for: window.session.id)
@@ -111,6 +119,10 @@ final class DocumentOpeningCoordinator {
         acquired = document
         guard !isTerminating, session.accepts(serial) else { throw CancellationError() }
         let text = document.text
+        // Only a real new or replacement presentation may restore a remembered place.
+        // An explicit fragment, including an empty or missing one, always wins.
+        let remembered = fragment == nil ? await history.restoration(for: url) : nil
+        guard !isTerminating, session.accepts(serial) else { throw CancellationError() }
         let input = try await session.stage(token: serial) {
             await Task.detached(priority: .userInitiated) {
                 PreparedReadingDocument(text: text, fileURL: url,
@@ -123,8 +135,16 @@ final class DocumentOpeningCoordinator {
                                                                          placement: placement)
         let previous = controller.document as? ReadOnlyMarkdownNSDocument
         document.addWindowController(controller)
+        // This presentation is about to be replaced: keep its last read place first.
+        history.flush(session: session.id)
+        history.forget(session: session.id)
         session.binding = document.bindingID
         _ = session.commit(input, fragment: fragment, token: serial)
+        if let remembered {
+            session.requestReadingPosition(remembered.resolve(in: input.index),
+                                           presentation: input.id, reason: .reopenHistory)
+        }
+        observeReadingPosition(in: session)
         windows[session.id] = controller
         documentWindowDidAppear(id: session.id)
         controller.install(input)
@@ -166,6 +186,14 @@ final class DocumentOpeningCoordinator {
             alert.messageText = "Couldn’t Open Document"
             alert.informativeText = message
             alert.runModal()
+        }
+    }
+
+    /// Routes this viewer's accepted captures into the private history.
+    private func observeReadingPosition(in session: DocumentReadSession) {
+        let viewer = session.id
+        session.positionObserver = { [weak self] locator, url in
+            self?.history.observe(locator, url: url, session: viewer)
         }
     }
 
@@ -213,6 +241,17 @@ final class DocumentOpeningCoordinator {
             controller.install(input)
             document.refresh.acknowledge(viewer, revision: payload.revision)
         }
+    }
+
+    /// Forgets every remembered position alongside the native recent-document list.
+    /// Open readers stay exactly where they are.
+    func clearReadingHistory() {
+        history.clear()
+    }
+
+    /// Lets a successful quit await the bounded writes already scheduled.
+    func drainReadingHistory() async {
+        await history.drain()
     }
 
     private func releaseIfUnused(_ document: ReadOnlyMarkdownNSDocument) {

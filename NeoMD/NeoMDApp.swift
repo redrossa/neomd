@@ -119,7 +119,13 @@ final class NeoMDApplicationDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         openingCoordinator.applicationWillTerminate()
-        return .terminateNow
+        // A successful quit awaits the bounded reading-history writes already
+        // scheduled, instead of dropping the last place read on the way out.
+        Task { @MainActor in
+            await openingCoordinator.drainReadingHistory()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

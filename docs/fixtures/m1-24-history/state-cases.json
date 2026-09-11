@@ -1,0 +1,17 @@
+{
+  "format": "M1-24 declarative model scenarios; inert data, not executable tests",
+  "cases": [
+    {"id":"independent-basename", "given":["alpha/Report.MD captured amber at serial 1","beta/Report.MD captured cobalt at serial 2"], "expect":["two distinct URL keys","recreate store from owned storage and retrieve each independently"]},
+    {"id":"last-capture-not-close-order", "given":["reader A captures alpha early at serial 10","reader B captures alpha later at serial 11","B closes, then A closes"], "expect":["alpha retains serial 11","flush does not allocate a new capture serial"]},
+    {"id":"stale-write", "given":["save revision 10 suspended","revision 11 accepted","revision 10 completes"], "expect":["disk and memory never regress from 11 to 10"]},
+    {"id":"clear-epoch", "given":["capture exists in epoch 3","clear produces epoch 4","old capture/apply/save completes in epoch 3","idle reader closes"], "expect":["private store remains empty","pending old restoration rejected","current reader position unaffected","new genuine post-clear reading may record again"]},
+    {"id":"fragment-precedence", "given":["history points into code","successful reopen includes fragment checkpoint"], "expect":["explicit fragment is the only initial navigation intent","history never runs afterward"]},
+    {"id":"empty-fragment", "given":["history points to bottom","successful reopen has non-nil empty fragment"], "expect":["explicit top wins"]},
+    {"id":"missing-fragment", "given":["history exists","successful reopen explicitly requests missing section"], "expect":["existing missing-destination feedback","no silent history fallback"]},
+    {"id":"failed-open", "given":["readable alpha is installed","owned requested file is absent","open preparation throws"], "expect":["alpha presentation and last capture retained","no destination history record","failure includes requested path and recovery explanation"]},
+    {"id":"reopen-fresh-input", "given":["native identity has cached text A","owned file bytes now contain B","new or replacement reader prepares same URL"], "expect":["prepare fresh B not cached A","do not mutate already-open sibling presentation as an effect of history"]},
+    {"id":"refresh-busy", "given":["history application is active for presentation P","refresh result Q arrives","user scrolling cancels history apply"], "expect":["Q is retained while busy","canceled apply never scrolls afterward","busy completion permits re-ticketed current refresh","refresh remap alone is not a newer history preference"]},
+    {"id":"bounded-store", "given":["101 distinct valid URL captures","100 entry limit"], "expect":["oldest accepted capture evicted deterministically","encoded size also at most 1 MiB","source directories untouched"]},
+    {"id":"storage-unavailable", "given":["injected write failure or corrupt/unsupported envelope"], "expect":["readable Markdown still commits","no crash or source write","history failure is not reported as successful durable persistence"]}
+  ]
+}
