@@ -523,7 +523,9 @@ struct DocumentReaderView: View {
         if matches.isEmpty, !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             AccessibilityNotification.Announcement("Not found").post()
         }
-        revealCurrentFindMatch(cancelRestoration: !preservesInitialPosition)
+        if !preservesInitialPosition || anchor == nil {
+            revealCurrentFindMatch(cancelRestoration: !preservesInitialPosition)
+        }
     }
 
     private func stepFind(reverse: Bool, beepIfEmpty: Bool = false) {

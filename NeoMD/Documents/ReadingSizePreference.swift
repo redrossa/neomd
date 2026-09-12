@@ -38,6 +38,11 @@ nonisolated enum ReadingSize: Double, CaseIterable, Sendable {
         size = ReadingSize.decode(defaults?.object(forKey: Self.key))
     }
 
+    func canApply(_ command: ReadingSize.Command, committed: Bool, displayed: ReadingSize?) -> Bool {
+        let current = displayed ?? size
+        return committed && current.applying(command) != current
+    }
+
     func apply(_ command: ReadingSize.Command) {
         commandSerial += 1
         let next = size.applying(command)

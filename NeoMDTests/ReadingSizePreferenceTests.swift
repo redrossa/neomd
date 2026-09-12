@@ -28,6 +28,18 @@ import Testing
         #expect(Set(defaults.persistentDomain(forName: name)?.keys.map { $0 } ?? []) == ["unrelated", ReadingSizePreference.key])
     }
 
+    @Test func validationNeedsACommittedReaderAndRespectsDisplayedBounds() {
+        let preference = ReadingSizePreference()
+        for size in ReadingSize.allCases {
+            for command: ReadingSize.Command in [.increase, .decrease, .reset] {
+                #expect(!preference.canApply(command, committed: false, displayed: size))
+                #expect(preference.canApply(command, committed: true, displayed: size) == (size.applying(command) != size))
+            }
+        }
+        #expect(preference.canApply(.reset, committed: true, displayed: .largest))
+        #expect(!preference.canApply(.reset, committed: true, displayed: nil))
+    }
+
     @Test func corruptStoredChoiceDefaultsWithoutWritingOnConstruction() throws {
         let name = "NeoMD.ReadingSizeTests.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: name))

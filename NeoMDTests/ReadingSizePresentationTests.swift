@@ -57,7 +57,8 @@ import Testing
             }
             state.replaceProjection(projection)
             #expect(state.selection == selection && state.copiedText == copied)
-            let token = try #require(state.register(selection.anchor.key, scope: state.scope))
+            let registered = state.register(selection.anchor.key, scope: state.scope)
+            let token = try #require(registered)
             #expect(state.slice(for: token) != nil)
             state.unregister(token)
             #expect(index.matches(for: "lantern") == matches)
