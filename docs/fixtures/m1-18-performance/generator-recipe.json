@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "kind": "declarative recipe; worker writes the test helper, triage did not execute a generator",
+  "encoding": "UTF-8 without BOM, LF only",
+  "byteUnits": "decimal MB",
+  "targets": [1000000, 10000000],
+  "corpora": {
+    "report": {
+      "prefix": "---\ntitle: Performance packet\n---\n\n# START-PERFORMANCE\n\n",
+      "templateFile": "report-section.md",
+      "replaceEvery": "NNNNNN",
+      "replacement": "zero-based section ordinal, exactly six ASCII decimal digits",
+      "tailPrefix": "\n\n",
+      "tailFill": "x",
+      "suffix": "\n\n# END-PERFORMANCE\n",
+      "algorithm": "For target T, let P and S be prefix/suffix UTF-8 byte counts, U be template byte count (all replacements preserve its size). Let B=T-P-S-2, N=B integer-divided by U, R=B modulo U. Emit prefix, N numbered copies of template, two LF bytes, R copies of ASCII x, suffix. Never truncate a template or a UTF-8 sequence. Assert 0<=N<1000000 and exact emitted byte count T. R is less than one template, not a giant leaf. The first numbered section is 000000. No image fetch is part of this primary benchmark."
+    },
+    "unbroken": {
+      "prefix": "# START-PERFORMANCE\n\n",
+      "fill": "x",
+      "suffix": "\n\n# END-PERFORMANCE\n",
+      "algorithm": "Emit prefix, exactly T-prefixBytes-suffixBytes copies of ASCII x as one paragraph, suffix. No inserted line break or whitespace inside that paragraph. Assert exact byte count T."
+    },
+    "code": {
+      "prefix": "# START-PERFORMANCE\n\n```swift\n",
+      "line": "    let reportValue = 42\n",
+      "suffix": "\n```\n\n# END-PERFORMANCE\n",
+      "algorithm": "Let B=T-prefixBytes-suffixBytes. Emit prefix, B integer-divided by lineBytes full copies of line, B modulo lineBytes spaces, suffix. Assert exact byte count T. Parser code literal is the emitted body including the first LF of suffix. Both generated bodies exceed the existing 262144-scalar highlighting budget and must stay fully literal, without token attributes. Do not run or compile fixture code."
+    }
+  },
+  "supplementalCases": [
+    "offline-control.md and reachable-footnotes.md are committed small semantic controls",
+    "For code scalar boundaries, use the existing highlighter constant and generate payloads at limit-1, limit, limit+1 in the worker's new pure tests; do not change the constant",
+    "No-reference variant: append unused/disconnected footnote definitions to a small report copy; their bodies stay absent",
+    "Missing remote assets are represented by inert https://assets.invalid/not-present.png markup and an injected pending/failing loader; no actual network call or server is needed"
+  ],
+  "outputPolicy": "Generate in memory for pure units. Future user-owned native validation may write copies to an external temporary fixture directory with the local asset alongside them. Never commit generated megabyte files. Record generated SHA-256 and exact bytes from the worker's helper; no generated-output hashes were measured by triage."
+}
