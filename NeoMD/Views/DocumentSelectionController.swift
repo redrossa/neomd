@@ -16,6 +16,8 @@ import SwiftUI
     var acquire: ((Key) -> Void)?
     private(set) var dragging = false
     private var dragGranularity: NSSelectionGranularity = .selectByCharacter
+    private var pointer: DocumentSelectionPointerState?
+    private var detached = false
 
     init(reader: UUID, projection: DocumentTextProjection, document: MarkdownRenderDocument? = nil, write: @escaping (String) -> Void = { text in
         NSPasteboard.general.clearContents()
@@ -38,6 +40,7 @@ import SwiftUI
         guard let mount = mounts[key], mount.view === view else { return }
         state.unregister(mount.token)
         mounts.removeValue(forKey: key)
+        invalidateSelectionActivity()
     }
 
     func update(_ view: MarkdownLinkedImageTextView, key: Key, projection: MarkdownCellDisplayProjection,
@@ -48,9 +51,12 @@ import SwiftUI
         let fragment = DocumentTextProjection.Fragment(key: key, text: projection.content.string,
             attachments: projection.segments.filter { $0.kind == .attachment }.map(\.display),
             identity: old.identity, separator: old.separator, sourceSegments: projection.segments)
-        _ = state.replace(fragment, registration: mount.token) { offset in
+        let remap: (Int) -> Int = { offset in
             guard let previous else { return min(offset, projection.content.length) }
             return projection.remap(NSRange(location: offset, length: 0), from: previous).location
+        }
+        if state.replace(fragment, registration: mount.token, remap: remap) {
+            pointer?.remap(key: key, offset: remap)
         }
         sync()
     }
@@ -87,42 +93,115 @@ import SwiftUI
     }
 
     func finish() {
-        guard dragging else { return }
+        guard let operation = state.operation else { return }
+        finish(operation)
+    }
+
+    private func finish(_ operation: DocumentSelectionState.Operation) {
+        guard state.finishOperation(operation) else { return }
+        pointer = nil
         dragging = false
-        if let operation = state.operation { state.finishOperation(operation) }
         interaction?(false)
     }
 
+    func track(event: NSEvent, view: MarkdownLinkedImageTextView, key: Key, window: NSWindow,
+               range: NSRange, granularity: NSSelectionGranularity, link: URL?,
+               activation: DocumentLinkActivation, open: @escaping (URL, DocumentLinkActivation) -> Void) {
+        guard !detached, registration(for: view) != nil else { return }
+        finish()
+        window.makeFirstResponder(view)
+        begin(key: key, range: range, extending: event.modifierFlags.contains(.shift), granularity: granularity)
+        guard let operation = state.operation, let initial = state.selection else { return }
+        pointer = .init(operation: operation, origin: event.locationInWindow, initial: initial,
+                        extending: event.modifierFlags.contains(.shift), activation: activation, link: link)
+        defer { finish(operation) }
+        while state.operation == operation,
+              pointer?.isCurrent(operation: state.operation, ownerCurrent: !detached,
+                windowCurrent: window.isKeyWindow && window.isVisible && bridge?.owner?.window === window) == true {
+            let next = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp],
+                until: Date(timeIntervalSinceNow: 0.04), inMode: .eventTracking, dequeue: true)
+            guard state.operation == operation, !detached, window.isKeyWindow, window.isVisible,
+                  bridge?.owner?.window === window else { break }
+            let point = next?.locationInWindow ?? window.mouseLocationOutsideOfEventStream
+            if pointer?.sample(point, operation: operation) == true { drag(at: point, window: window) }
+            if next?.type == .leftMouseUp {
+                let destination = pointer?.finish(operation: operation, cancelled: false)
+                let intent = pointer?.activation ?? activation
+                finish(operation) // A link may replace this presentation synchronously.
+                if let destination { open(destination, intent) }
+                return
+            }
+        }
+    }
+
+    func registration(for view: MarkdownLinkedImageTextView) -> DocumentSelectionState.Registration? {
+        guard !detached, let key = view.selectionKey, view.selectionOwner === self,
+              let mount = mounts[key], mount.view === view, state.accepts(mount.token),
+              view.string == state.projection.fragment(for: key)?.text else { return nil }
+        return mount.token
+    }
+
+    func sharesActivity(view: MarkdownLinkedImageTextView, window: NSWindow) -> Bool {
+        let responder = window.firstResponder as? MarkdownLinkedImageTextView
+        return DocumentSelectionActivity.shared(leaf: registration(for: view),
+            responder: responder.flatMap { registration(for: $0) },
+            leafCurrent: true, responderCurrent: true,
+            sameWindow: view.window === window && responder?.window === window, keyWindow: window.isKeyWindow)
+    }
+
+    func invalidateSelectionActivity() {
+        for mount in mounts.values { mount.view?.needsDisplay = true }
+    }
+
+    private func clippedRect(_ view: MarkdownLinkedImageTextView, window: NSWindow) -> NSRect? {
+        guard view.window === window, !view.isHiddenOrHasHiddenAncestor,
+              registration(for: view) != nil, let viewport = bridge?.owner?.contentView,
+              viewport.window === window, view.isDescendant(of: viewport),
+              DocumentSelectionTargeting.valid(view.bounds),
+              DocumentSelectionTargeting.valid(view.visibleRect) else { return nil }
+        var clips = [viewport.convert(viewport.bounds, to: nil)]
+        var ancestor = view.superview
+        while let current = ancestor {
+            if current is NSClipView || current.clipsToBounds {
+                clips.append(current.convert(current.bounds, to: nil))
+            }
+            ancestor = current.superview
+        }
+        return DocumentSelectionTargeting.clipped(bounds: view.convert(view.bounds, to: nil),
+            visible: view.convert(view.visibleRect, to: nil), clips: clips)
+    }
+
     func drag(at point: NSPoint, window: NSWindow) {
-        guard let anchor = state.selection?.anchor else { return }
+        guard state.selection?.anchor != nil, point.x.isFinite, point.y.isFinite else { return }
         if let scroll = bridge?.owner, scroll.window === window {
             let local = scroll.contentView.convert(point, from: nil)
             var bounds = scroll.contentView.bounds
-            if local.y < bounds.minY { bounds.origin.y -= 24 }
-            if local.y > bounds.maxY { bounds.origin.y += 24 }
+            bounds.origin.y += DocumentSelectionTargeting.scrollDelta(point: local, viewport: bounds, horizontal: false)
             scroll.contentView.scroll(to: scroll.contentView.constrainBoundsRect(bounds).origin)
             scroll.reflectScrolledClipView(scroll.contentView)
         }
-        let candidates = mounts.compactMap { key, mount -> (Key, MarkdownLinkedImageTextView, CGFloat)? in
-            guard let view = mount.view, view.window === window, !view.visibleRect.isEmpty else { return nil }
-            let rect = view.convert(view.visibleRect, to: nil)
-            let dx = max(rect.minX - point.x, 0, point.x - rect.maxX)
-            let dy = max(rect.minY - point.y, 0, point.y - rect.maxY)
-            return (key, view, dx * dx + dy * dy)
+        let hit = window.contentView.flatMap { content in
+            content.hitTest(content.superview?.convert(point, from: nil) ?? point)
         }
-        guard let nearest = candidates.min(by: { $0.2 < $1.2 }) else { return }
-        let offset = nearest.1.characterIndexForInsertion(at: nearest.1.convert(point, from: nil))
-        let proposed = nearest.1.selectionRange(forProposedRange: NSRange(location: offset, length: 0), granularity: dragGranularity)
-        let fragments = state.projection.fragments
-        let anchorIndex = fragments.firstIndex { $0.key == anchor.key } ?? 0
-        let targetIndex = fragments.firstIndex { $0.key == nearest.0 } ?? 0
-        let backwards = targetIndex < anchorIndex || (targetIndex == anchorIndex && offset < anchor.offset)
-        select(.init(anchor: anchor, extent: .init(key: nearest.0, offset: backwards ? proposed.location : NSMaxRange(proposed))))
-        if let scroll = nearest.1.enclosingScrollView, scroll !== bridge?.owner {
+        let candidates = state.projection.fragments.enumerated().compactMap { order, fragment -> DocumentSelectionTargeting.Candidate? in
+            guard let view = mounts[fragment.key]?.view, let rect = clippedRect(view, window: window) else { return nil }
+            return .init(key: fragment.key, order: order, rect: rect, actualHit: hit === view)
+        }
+        guard let nearest = DocumentSelectionTargeting.resolve(point, candidates: candidates),
+              let view = mounts[nearest.key]?.view else { return }
+        let clamped = DocumentSelectionTargeting.clamp(point, to: nearest.rect)
+        let offset = view.characterIndexForInsertion(at: view.convert(clamped, from: nil))
+        let proposed = view.selectionRange(forProposedRange: NSRange(location: offset, length: 0), granularity: dragGranularity)
+        if let pointer, pointer.operation == state.operation {
+            select(pointer.selection(key: nearest.key, range: proposed, projection: state.projection))
+        } else {
+            localSelection(proposed, key: nearest.key, extending: true)
+        }
+        if let scroll = view.enclosingScrollView, scroll !== bridge?.owner,
+           bridge?.ownsSelectionScroller(scroll) == true {
             let local = scroll.contentView.convert(point, from: nil)
             var bounds = scroll.contentView.bounds
-            if local.x < bounds.minX { bounds.origin.x -= 20 }
-            if local.x > bounds.maxX { bounds.origin.x += 20 }
+            bounds.origin.x += DocumentSelectionTargeting.scrollDelta(point: local, viewport: bounds, horizontal: true)
             scroll.contentView.scroll(to: scroll.contentView.constrainBoundsRect(bounds).origin)
             scroll.reflectScrolledClipView(scroll.contentView)
         }
@@ -208,14 +287,17 @@ import SwiftUI
             if fragment.text == text && fragment.sourceSegments == segments { continue }
             let next = DocumentTextProjection.Fragment(key: key, text: text,
                 attachments: segments.filter { $0.kind == .attachment }.map(\.display), identity: fragment.identity, separator: fragment.separator, sourceSegments: segments)
-            state.replaceDisplay(next, scope: state.scope) { offset in
+            let remap: (Int) -> Int = { offset in
                 previous.map { projection.remap(NSRange(location: offset, length: 0), from: $0).location } ?? min(offset, text.utf16.count)
             }
+            state.replaceDisplay(next, scope: state.scope, remap: remap)
+            pointer?.remap(key: key, offset: remap)
         }
         sync()
     }
 
     func detach() {
+        detached = true
         finish()
         changed = nil; interaction = nil; acquire = nil
         mounts.removeAll()

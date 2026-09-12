@@ -92,6 +92,12 @@ final class DocumentNavigationBridge {
         return false
     }
 
+    /// Selection may scroll only the same explicitly registered local overflow surfaces.
+    func ownsSelectionScroller(_ scroll: NSScrollView) -> Bool {
+        guard scroll !== owner, let documentView = scroll.documentView else { return false }
+        return isOwned(documentView)
+    }
+
     /// Makes a target visible in every scroller that clips it, so a focused table
     /// cell is revealed along its own local horizontal extent as well as the
     /// reader's vertical row.

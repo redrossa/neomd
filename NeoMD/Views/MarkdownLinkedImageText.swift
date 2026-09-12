@@ -80,8 +80,8 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
     var pointerOpen: ((URL, DocumentLinkActivation) -> Void)?
     private let pointerScope = DocumentLinkPointerScope()
 
-    private weak var selectionOwner: DocumentSelectionController?
-    private var selectionKey: DocumentTextProjection.Key?
+    private(set) weak var selectionOwner: DocumentSelectionController?
+    private(set) var selectionKey: DocumentTextProjection.Key?
     var sourceOffset = 0
 
     func bindSelection(_ owner: DocumentSelectionController?, key: DocumentTextProjection.Key?) {
@@ -105,7 +105,8 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
         let activation = DocumentLinkActivation(pointer: event.type == .leftMouseDown,
             command: event.modifierFlags.contains(.command), control: event.modifierFlags.contains(.control))
         guard let owner = selectionOwner, let key = selectionKey, let window,
-              !event.modifierFlags.contains(.control) else {
+              DocumentSelectionPointerState.handles(primary: event.type == .leftMouseDown,
+                  control: event.modifierFlags.contains(.control)) else {
             pointerScope.tracking(activation) { super.mouseDown(with: event) }
             return
         }
@@ -113,25 +114,11 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
         let granularity: NSSelectionGranularity = event.clickCount >= 3 ? .selectByParagraph : event.clickCount == 2 ? .selectByWord : .selectByCharacter
         let range = selectionRange(forProposedRange: NSRange(location: index, length: 0), granularity: granularity)
         let link = index < (textStorage?.length ?? 0) ? textStorage?.attribute(.link, at: index, effectiveRange: nil) as? URL : nil
-        window.makeFirstResponder(self)
-        owner.begin(key: key, range: range, extending: event.modifierFlags.contains(.shift), granularity: granularity)
-        defer { owner.finish() }
-        var moved = false
-        while self.window === window, window.isKeyWindow {
-            guard let next = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp],
-                until: Date(timeIntervalSinceNow: 0.04), inMode: .eventTracking, dequeue: true) else {
-                if moved { owner.drag(at: window.mouseLocationOutsideOfEventStream, window: window) }
-                continue
-            }
-            if next.type == .leftMouseUp {
-                if !moved, let link, !event.modifierFlags.contains(.shift) {
-                    if let pointerOpen { pointerOpen(link, activation) } else { open(link) }
-                }
-                break
-            }
-            moved = moved || hypot(next.locationInWindow.x - event.locationInWindow.x,
-                                    next.locationInWindow.y - event.locationInWindow.y) > 3
-            if moved { owner.drag(at: next.locationInWindow, window: window) }
+        let capturedPointerOpen = pointerOpen
+        let capturedOpen = open
+        owner.track(event: event, view: self, key: key, window: window, range: range,
+                    granularity: granularity, link: link, activation: activation) { url, intent in
+            if let capturedPointerOpen { capturedPointerOpen(url, intent) } else { capturedOpen(url) }
         }
     }
     private(set) var input: MarkdownLinkedImageText.Input?
@@ -228,13 +215,14 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
 
     override init(frame frameRect: NSRect, textContainer container: NSTextContainer? = nil) {
         let storage = NSTextStorage()
-        let layout = NSLayoutManager()
+        let layout = DocumentSelectionLayoutManager()
         let nativeContainer = container ?? NSTextContainer(size: CGSize(width: 1, height: CGFloat.greatestFiniteMagnitude))
         if container == nil {
             storage.addLayoutManager(layout)
             layout.addTextContainer(nativeContainer)
         }
         super.init(frame: frameRect, textContainer: nativeContainer)
+        layout.leaf = self
         minSize = .zero
         maxSize = CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         isEditable = false
@@ -260,6 +248,18 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
     }
 
     required init?(coder: NSCoder) { nil }
+
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        if accepted { selectionOwner?.invalidateSelectionActivity() }
+        return accepted
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let accepted = super.resignFirstResponder()
+        if accepted { selectionOwner?.invalidateSelectionActivity() }
+        return accepted
+    }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -390,6 +390,18 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
         imageAccessibility = []
         // Release attachment resources even if AppKit retains the native view.
         textStorage?.setAttributedString(NSAttributedString(string: ""))
+    }
+}
+
+/// Share only the responder predicate, not storage, find attributes or actual focus.
+final class DocumentSelectionLayoutManager: NSLayoutManager {
+    weak var leaf: MarkdownLinkedImageTextView?
+
+    override func layoutManagerOwnsFirstResponder(in window: NSWindow) -> Bool {
+        guard let leaf, let owner = leaf.selectionOwner else {
+            return super.layoutManagerOwnsFirstResponder(in: window)
+        }
+        return owner.sharesActivity(view: leaf, window: window)
     }
 }
 
