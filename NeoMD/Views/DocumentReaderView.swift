@@ -15,6 +15,10 @@ struct DocumentReaderView: View {
     let session: DocumentReadSession
     let openingCoordinator: DocumentOpeningCoordinator
     let minimumSize: CGSize
+    private let readingSize: ReadingSizePreference
+    @State private var sizeReflow: ReadingSizeReflow
+    private var appliedSize: ReadingSize { sizeReflow.applied }
+    @State private var sizeRestoration = false
     private var fileURL: URL? { prepared.fileURL }
     @Environment(\.openURL) private var systemOpenURL
     @Environment(\.colorScheme) private var colorScheme
@@ -67,6 +71,16 @@ struct DocumentReaderView: View {
         self.session = session
         self.openingCoordinator = openingCoordinator
         self.minimumSize = minimumSize
+        let preference = openingCoordinator.readingSize
+        readingSize = preference
+        var initialSize = preference.size
+        #if DEBUG
+        if let value = ProcessInfo.processInfo.environment["NEOMD_TEST_READING_SCALE"],
+           let number = Double(value), let size = ReadingSize(rawValue: number) {
+            initialSize = size
+        }
+        #endif
+        _sizeReflow = State(initialValue: ReadingSizeReflow(preference: preference, initial: initialSize))
         _selection = State(initialValue: DocumentSelectionController(reader: session.id,
             projection: .rendered(prepared.rendered, presentation: prepared.id), document: prepared.rendered))
     }
@@ -77,6 +91,9 @@ struct DocumentReaderView: View {
                 ScrollView(.vertical) {
                     content(width: DocumentReaderLayout.columnWidth(for: geometry.size.width))
                         .onChange(of: geometry.size.width, initial: true) {
+                            selection.updateLabels(renderedDocument, width: DocumentReaderLayout.columnWidth(for: geometry.size.width), scale: theme.scale)
+                        }
+                        .onChange(of: appliedSize) {
                             selection.updateLabels(renderedDocument, width: DocumentReaderLayout.columnWidth(for: geometry.size.width), scale: theme.scale)
                         }
                         .frame(
@@ -172,7 +189,10 @@ struct DocumentReaderView: View {
             if let notice = session.notice { showNotice(notice); session.notice = nil }
         }
         .onChange(of: session.readingPosition) { consumeReadingPosition() }
+        .onChange(of: readingSize.commandSerial) { reconcileReadingSize(); syncReadingActivity() }
+        .onChange(of: appliedSize) { session.displayedReadingSize = appliedSize }
         .onAppear {
+            session.displayedReadingSize = appliedSize
             session.selectionOwner = selection
             selection.bridge = navigationBridge
             selection.changed = { session.recordSelection($0, presentation: prepared.id) }
@@ -191,6 +211,7 @@ struct DocumentReaderView: View {
                 navigationGeneration += 1
                 navigationBridge.cancel()
                 let generation = navigationGeneration
+                resizeRestoration.invalidate()
                 beginInteraction()
                 traversalTask = Task { @MainActor in
                     defer { endInteraction() }
@@ -208,6 +229,7 @@ struct DocumentReaderView: View {
             bindTraversal()
             consumeFindCommand()
             consumeSectionRequest()
+            reconcileReadingSize()
             consumeReadingPosition()
         }
         .onDisappear {
@@ -276,14 +298,27 @@ struct DocumentReaderView: View {
     /// Adaptive system styles already follow the Mac's light and dark appearance, so
     /// the theme only carries what a semantic style cannot express, and it applies the
     /// same way to every reader on every Mac.
-    private var theme: ReaderTheme {
-        #if DEBUG
-        if let value = ProcessInfo.processInfo.environment["NEOMD_TEST_READING_SCALE"],
-           let scale = Double(value), [1, 1.5, 2].contains(scale) {
-            return ReaderTheme(scale: scale)
+    private var theme: ReaderTheme { ReaderTheme(scale: appliedSize.rawValue) }
+
+    private var hasReadingActivity: Bool {
+        isScrolling || interactiveWork > 0 || selection.dragging
+    }
+
+    /// Capture before publishing scale: the pending locator owns geometry until
+    /// the existing bounded restoration settles. Repeated commands keep its anchor.
+    private func reconcileReadingSize() {
+        let eligible = session.isOpen && session.prepared?.id == prepared.id
+            && !hasReadingActivity && session.section == nil
+        var next = sizeReflow
+        next.reconcile(readingSize, eligible: eligible) {
+            let anchor = resizeRestoration.pendingAnchor ?? session.readingPosition?.anchor
+                ?? session.capturedPosition(for: prepared.id)?.resolve(in: prepared.index)
+                ?? readingAnchor.flatMap { DocumentContentLocator.capture(anchor: $0, in: prepared.index)?.resolve(in: prepared.index) }
+                ?? .top
+            session.requestReadingPosition(anchor, presentation: prepared.id, reason: .readingSize)
+            consumeReadingPosition()
         }
-        #endif
-        return ReaderTheme()
+        sizeReflow = next
     }
 
     private func handleVerticalPageKeyPress(
@@ -357,10 +392,12 @@ struct DocumentReaderView: View {
 
         scrollMetrics = newMetrics
 
-        if viewportChanged, currentFindHighlight != nil {
+        if ReadingSizeReflow.shouldRevealExistingFind(viewportChanged: viewportChanged,
+            hasHighlight: currentFindHighlight != nil,
+            sizeOwnsRestoration: sizeRestoration && resizeRestoration.isPending) {
             // The find bar changes the viewport too. Reacquire after that layout
             // instead of cancelling the initial reveal and restoring the old spot.
-            revealCurrentFindMatch()
+            revealCurrentFindMatch(cancelRestoration: false)
         } else if viewportChanged, let generation = resizeRestoration.schedule() {
             syncReadingActivity()
             Task { @MainActor in
@@ -376,6 +413,7 @@ struct DocumentReaderView: View {
     private func handleScrollPhaseChange(_ phase: ScrollPhase) {
         isScrolling = phase != .idle
         if phase == .interacting {
+            session.cancelReadingPosition()
             traversalTask?.cancel()
             traversalStartID = nil
             navigationGeneration += 1
@@ -384,6 +422,7 @@ struct DocumentReaderView: View {
         } else if phase == .idle, !resizeRestoration.isPending {
             updateReadingAnchor()
         }
+        if phase == .idle { reconcileReadingSize(); consumeReadingPosition() }
         syncReadingActivity()
     }
 
@@ -454,6 +493,9 @@ struct DocumentReaderView: View {
         findCursor = nil
         // An inactive find task must not cancel ordinary opening/navigation.
         guard session.isFindPresented else { return }
+        let preservesInitialPosition = initialFindSearch
+        beginInteraction(cancelRestoration: !preservesInitialPosition)
+        defer { endInteraction() }
         traversalTask?.cancel()
         navigationGeneration += 1
         navigationBridge.cancel()
@@ -481,7 +523,7 @@ struct DocumentReaderView: View {
         if matches.isEmpty, !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             AccessibilityNotification.Announcement("Not found").post()
         }
-        revealCurrentFindMatch()
+        revealCurrentFindMatch(cancelRestoration: !preservesInitialPosition)
     }
 
     private func stepFind(reverse: Bool, beepIfEmpty: Bool = false) {
@@ -506,7 +548,7 @@ struct DocumentReaderView: View {
         keyboardFocus = .reader
     }
 
-    private func revealCurrentFindMatch() {
+    private func revealCurrentFindMatch(cancelRestoration: Bool = true) {
         guard !selection.dragging, let highlight = currentFindHighlight else { return }
         traversalTask?.cancel()
         navigationGeneration += 1
@@ -514,7 +556,7 @@ struct DocumentReaderView: View {
         resizeRestoration.invalidate()
         let generation = navigationGeneration
         let request = navigationBridge.request
-        beginInteraction()
+        beginInteraction(cancelRestoration: cancelRestoration)
         traversalTask = Task { @MainActor in
             defer { endInteraction() }
             // Allow the bar inset and new highlight to enter layout first.
@@ -550,16 +592,21 @@ struct DocumentReaderView: View {
     /// interrupt: scrolling, navigating, traversing or restoring a position.
     private func syncReadingActivity() {
         guard session.prepared?.id == prepared.id else { return }
-        session.isUserBusy = isScrolling || interactiveWork > 0 || resizeRestoration.isPending || selection.dragging
+        if !resizeRestoration.isPending { sizeRestoration = false }
+        session.isUserBusy = hasReadingActivity || resizeRestoration.isPending
+            || session.readingPosition != nil || sizeReflow.isQueued(readingSize)
     }
 
-    private func beginInteraction() {
+    private func beginInteraction(cancelRestoration: Bool = true) {
+        if cancelRestoration { session.cancelReadingPosition() }
         interactiveWork += 1
         syncReadingActivity()
     }
 
     private func endInteraction() {
         interactiveWork = max(0, interactiveWork - 1)
+        reconcileReadingSize()
+        consumeReadingPosition()
         syncReadingActivity()
     }
 
@@ -569,14 +616,16 @@ struct DocumentReaderView: View {
     /// request or a navigation the user already started outranks it, and the pending
     /// anchor stops initial top geometry from overwriting the restored position.
     private func consumeReadingPosition() {
-        guard let request = session.takeReadingPosition(for: prepared.id) else { return }
-        guard interactiveWork == 0, session.section == nil else { return }
+        guard session.prepared?.id == prepared.id,
+              let request = session.takeReadingPosition(for: prepared.id, isActive: hasReadingActivity) else { return }
         resizeRestoration.invalidate()
+        sizeRestoration = request.reason == .readingSize
         resizeRestoration.beginIfNeeded(at: request.anchor)
         readingAnchor = request.anchor
         syncReadingActivity()
         guard let generation = resizeRestoration.schedule() else { return }
         Task { @MainActor in
+            try? await Task.sleep(for: Self.resizeRestorationDelay)
             await restoreReadingPosition(for: generation)
             syncReadingActivity()
         }

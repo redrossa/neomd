@@ -73,12 +73,25 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate, NSUs
         if readerOwnsSelectionCommands { session.selectionOwner?.selectAll() }
     }
 
+    @objc func increaseReadingSize(_ sender: Any?) { changeReadingSize(.increase) }
+    @objc func decreaseReadingSize(_ sender: Any?) { changeReadingSize(.decrease) }
+    @objc func resetReadingSize(_ sender: Any?) { changeReadingSize(.reset) }
+
+    private func changeReadingSize(_ command: ReadingSize.Command) {
+        guard session.isOpen, session.prepared != nil else { return }
+        coordinator.readingSize.apply(command)
+    }
+
     @objc func showFindBar(_ sender: Any?) { session.requestFind(.show) }
     @objc func findNext(_ sender: Any?) { session.requestFind(.next) }
     @objc func findPrevious(_ sender: Any?) { session.requestFind(.previous) }
 
     func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
         switch item.action {
+        case #selector(increaseReadingSize(_:)):
+            return session.isOpen && session.prepared != nil && (session.displayedReadingSize ?? coordinator.readingSize.size) != .largest
+        case #selector(decreaseReadingSize(_:)), #selector(resetReadingSize(_:)):
+            return session.isOpen && session.prepared != nil && (session.displayedReadingSize ?? coordinator.readingSize.size) != .actual
         case #selector(copy(_:)):
             return readerOwnsSelectionCommands && session.selectionOwner?.state.copiedText.isEmpty == false
         case #selector(selectAll(_:)):

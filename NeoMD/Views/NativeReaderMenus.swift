@@ -50,6 +50,12 @@ final class NativeReaderMenus: NSObject, NSMenuDelegate {
         add("Find Next", #selector(DocumentWindowController.findNext(_:)), key: "g", to: find)
         add("Find Previous", #selector(DocumentWindowController.findPrevious(_:)), key: "g",
             modifiers: [.command, .shift], to: find)
+        let view = menu("View")
+        add("Increase Reading Size", #selector(DocumentWindowController.increaseReadingSize(_:)), key: "+", to: view)
+        add("Increase Reading Size", #selector(DocumentWindowController.increaseReadingSize(_:)), key: "=", to: view)
+        view.items.last?.isAlternate = true
+        add("Decrease Reading Size", #selector(DocumentWindowController.decreaseReadingSize(_:)), key: "-", to: view)
+        add("Actual Reading Size", #selector(DocumentWindowController.resetReadingSize(_:)), key: "0", to: view)
         let window = menu("Window")
         add("Minimize", #selector(NSWindow.performMiniaturize(_:)), key: "m", to: window)
         add("Zoom", #selector(NSWindow.performZoom(_:)), to: window)
