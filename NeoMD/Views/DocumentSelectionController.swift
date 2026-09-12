@@ -38,7 +38,6 @@ import SwiftUI
         guard let mount = mounts[key], mount.view === view else { return }
         state.unregister(mount.token)
         mounts.removeValue(forKey: key)
-        if dragging { finish() }
     }
 
     func update(_ view: MarkdownLinkedImageTextView, key: Key, projection: MarkdownCellDisplayProjection,
@@ -79,13 +78,18 @@ import SwiftUI
 
     func begin(key: Key, range: NSRange, extending: Bool, granularity: NSSelectionGranularity = .selectByCharacter) {
         dragGranularity = granularity
-        if !dragging { dragging = true; interaction?(true) }
+        if !dragging {
+            state.beginOperation()
+            dragging = true
+            interaction?(true)
+        }
         localSelection(range, key: key, extending: extending)
     }
 
     func finish() {
         guard dragging else { return }
         dragging = false
+        if let operation = state.operation { state.finishOperation(operation) }
         interaction?(false)
     }
 
@@ -114,7 +118,7 @@ import SwiftUI
         let targetIndex = fragments.firstIndex { $0.key == nearest.0 } ?? 0
         let backwards = targetIndex < anchorIndex || (targetIndex == anchorIndex && offset < anchor.offset)
         select(.init(anchor: anchor, extent: .init(key: nearest.0, offset: backwards ? proposed.location : NSMaxRange(proposed))))
-        if let scroll = nearest.1.enclosingScrollView {
+        if let scroll = nearest.1.enclosingScrollView, scroll !== bridge?.owner {
             let local = scroll.contentView.convert(point, from: nil)
             var bounds = scroll.contentView.bounds
             if local.x < bounds.minX { bounds.origin.x -= 20 }
@@ -124,6 +128,18 @@ import SwiftUI
         }
     }
 
+    func extendDocument(forward: Bool) {
+        guard let entire = state.projection.entireSelection else { return }
+        select(.init(anchor: state.selection?.anchor ?? entire.anchor,
+                     extent: forward ? entire.extent : entire.anchor))
+        if let key = state.selection?.extent.key { acquire?(key) }
+    }
+
+    func extendNative(_ range: NSRange, key: Key, forward: Bool) {
+        let anchor = state.selection?.anchor ?? .init(key: key, offset: forward ? range.location : NSMaxRange(range))
+        select(.init(anchor: anchor, extent: .init(key: key, offset: forward ? NSMaxRange(range) : range.location)))
+    }
+
     func extendBeyond(key: Key, forward: Bool) {
         let fragments = state.projection.fragments
         guard let index = fragments.firstIndex(where: { $0.key == key }) else { return }
@@ -131,7 +147,7 @@ import SwiftUI
         guard fragments.indices.contains(next) else { return }
         let target = fragments[next]
         let anchor = state.selection?.anchor ?? .init(key: key, offset: forward ? fragments[index].text.utf16.count : 0)
-        select(.init(anchor: anchor, extent: .init(key: target.key, offset: forward ? min(1, target.text.utf16.count) : target.text.utf16.count)))
+        select(.init(anchor: anchor, extent: .init(key: target.key, offset: forward ? 0 : target.text.utf16.count)))
         if let view = mounts[target.key]?.view {
             view.window?.makeFirstResponder(view)
             view.scrollRangeToVisible(NSRange(location: forward ? 0 : target.text.utf16.count, length: 0))

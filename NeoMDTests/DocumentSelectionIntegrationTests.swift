@@ -66,6 +66,35 @@ import Testing
         #expect(session.takeFindCommand()?.kind == .next)
     }
 
+    @Test func focusedLinkAttributesAndUnavailableImageProjectionRemainIndependent() throws {
+        var link = AttributedString("Link")
+        link.link = URL(string: "https://example.com")
+        link.underlineStyle = .thick
+        let content = MarkdownLinkedImageContent.project(.init(text: link, states: [:], dark: false, width: 300, headingLevel: nil))
+        #expect(content.content.string == "Link")
+        #expect(content.content.attribute(.underlineStyle, at: 0, effectiveRange: nil) as? Int == NSUnderlineStyle.thick.rawValue)
+        let document = MarkdownBlockRenderer.render(from: "![alt](javascript:blocked)")
+        let leaf = try #require(document.leaves.first)
+        let nativeValue = MarkdownLinkedImageContent.project(.init(text: leaf.text, states: [:], dark: false, width: 300, headingLevel: nil))
+        let logical = DocumentTextProjection.rendered(document, presentation: UUID())
+        #expect(nativeValue.content.string == logical.fragments.first?.text)
+        #expect(nativeValue.content.string == "alt (Image unavailable)")
+    }
+
+    @Test func keyboardExtentValuesRetainAnchorAcrossFragmentsAndReverse() throws {
+        let projection = DocumentTextProjection.rendered(MarkdownBlockRenderer.render(from: "Alpha\n\nBeta\n\nGamma"), presentation: UUID())
+        let owner = DocumentSelectionController(reader: UUID(), projection: projection, write: { _ in })
+        let keys = projection.fragments.map(\.key)
+        owner.select(.init(anchor: .init(key: keys[0], offset: 2), extent: .init(key: keys[1], offset: 2)))
+        owner.extendNative(NSRange(location: 1, length: 1), key: keys[1], forward: false)
+        #expect(owner.state.copiedText == "pha\n\nB")
+        owner.extendNative(NSRange(location: 0, length: 2), key: keys[0], forward: false)
+        #expect(owner.state.copiedText == "Al")
+        owner.extendDocument(forward: true)
+        #expect(owner.state.copiedText == "pha\n\nBeta\n\nGamma")
+        #expect(owner.state.registrations.isEmpty)
+    }
+
     @Test func imageStateUpdatesOffscreenProjectionWithoutNativeHosts() throws {
         let rendered = MarkdownBlockRenderer.render(from: "before ![alt](missing.png) after", documentURL: URL(fileURLWithPath: "/tmp/doc.md"))
         let projection = DocumentTextProjection.rendered(rendered, presentation: UUID())

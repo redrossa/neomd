@@ -82,8 +82,6 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
 
     private weak var selectionOwner: DocumentSelectionController?
     private var selectionKey: DocumentTextProjection.Key?
-    private var applyingSelection = false
-    private var handlingKeyboard = false
     var sourceOffset = 0
 
     func bindSelection(_ owner: DocumentSelectionController?, key: DocumentTextProjection.Key?) {
@@ -94,9 +92,7 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
     }
 
     func applyDocumentSelection(_ range: NSRange?) {
-        applyingSelection = true
         setSelectedRange(range ?? NSRange(location: 0, length: 0))
-        applyingSelection = false
     }
 
     override func copy(_ sender: Any?) {
@@ -105,14 +101,6 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
     override func selectAll(_ sender: Any?) {
         if let selectionOwner { selectionOwner.selectAll() } else { super.selectAll(sender) }
     }
-    override func setSelectedRange(_ range: NSRange, affinity: NSSelectionAffinity, stillSelecting flag: Bool) {
-        super.setSelectedRange(range, affinity: affinity, stillSelecting: flag)
-        if handlingKeyboard, !applyingSelection, selectionOwner?.dragging != true, let selectionKey {
-            selectionOwner?.localSelection(range, key: selectionKey,
-                extending: NSApp.currentEvent?.modifierFlags.contains(.shift) == true)
-        }
-    }
-
     override func mouseDown(with event: NSEvent) {
         let activation = DocumentLinkActivation(pointer: event.type == .leftMouseDown,
             command: event.modifierFlags.contains(.command), control: event.modifierFlags.contains(.control))
@@ -213,14 +201,29 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
         if let reverse = Self.traversalDirection(event), let id = traversalID,
            traversalBridge?.traverseText(self, id: id, generation: traversalGeneration,
                                          reverse: reverse) == true { return }
-        let before = selectedRange()
-        handlingKeyboard = true
-        defer { handlingKeyboard = false }
-        super.keyDown(with: event)
-        if event.modifierFlags.contains(.shift), selectedRange() == before, let key = selectionKey,
-           [123, 124, 125, 126].contains(event.keyCode) {
-            selectionOwner?.extendBeyond(key: key, forward: event.keyCode == 124 || event.keyCode == 125)
+        guard let owner = selectionOwner, let key = selectionKey,
+              [123, 124, 125, 126].contains(event.keyCode) else {
+            super.keyDown(with: event)
+            return
         }
+        let forward = event.keyCode == 124 || event.keyCode == 125
+        let extending = event.modifierFlags.contains(.shift)
+        if extending, event.modifierFlags.contains(.command), [125, 126].contains(event.keyCode) {
+            owner.extendDocument(forward: forward)
+            return
+        }
+        // Native geometry decides the next caret/word/line; the document owner,
+        // not this leaf's temporary local anchor, retains the selection anchor.
+        if extending, let extent = owner.state.selection?.extent, extent.key == key {
+            applyDocumentSelection(NSRange(location: min(extent.offset, string.utf16.count), length: 0))
+        }
+        let before = selectedRange()
+        super.keyDown(with: event)
+        let after = selectedRange()
+        if extending {
+            if after == before { owner.extendBeyond(key: key, forward: forward) }
+            else { owner.extendNative(after, key: key, forward: forward) }
+        } else { owner.localSelection(after, key: key, extending: false) }
     }
 
     override init(frame frameRect: NSRect, textContainer container: NSTextContainer? = nil) {
@@ -261,14 +264,11 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if input?.code == true { traversalBridge?.registerCodeScroller(for: self, generation: traversalGeneration) }
-        if window == nil { selectionOwner?.finish() }
     }
 
     func update(_ next: MarkdownLinkedImageText.Input) {
         guard input != next else { return }
         let selection = selectedRanges
-        applyingSelection = true
-        defer { applyingSelection = false }
         input = next
         let projection = MarkdownLinkedImageContent.project(next)
         let previous = displayProjection
@@ -500,7 +500,8 @@ enum MarkdownLinkedImageContent {
                 result.append(content)
             } else {
                 let status: String
-                if state == nil || state == .loading { status = "Image loading" }
+                if image.url(preferringDark: input.dark) == nil { status = "Image unavailable" }
+                else if state == nil || state == .loading { status = "Image loading" }
                 else { status = "Image unavailable" }
                 var fallback = attributes
                 fallback[.foregroundColor] = NSColor.secondaryLabelColor

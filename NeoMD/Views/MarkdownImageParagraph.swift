@@ -21,30 +21,12 @@ struct MarkdownImageParagraph: View {
         segments.compactMap { $0.0?.url(preferringDark: colorScheme == .dark) }
     }
 
-    private var imageOnly: Bool {
-        segments.allSatisfy { $0.0 != nil || String($0.1.characters).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-    }
-
-    private var label: String {
-        let alt = String(text.characters).replacingOccurrences(of: MarkdownPictureParser.emptyAltCarrier, with: "")
-        return alt.isEmpty ? "Image" : alt
-    }
-
-    private var status: String {
-        if urls.isEmpty { return "Image unavailable" }
-        if urls.contains(where: { store.states[$0] == nil || store.states[$0] == .loading }) { return "Image loading" }
-        if urls.contains(where: { if case .unavailable = store.states[$0] { return true }; return false }) { return "Image unavailable" }
-        return "Image displayed"
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            if true {
-                MarkdownLinkedImageText(input: .init(text: text,
-                    states: store.states.filter { urls.contains($0.key) }, dark: colorScheme == .dark,
-                    width: availableWidth, headingLevel: headingLevel, quoted: quoted, scale: scale,
-                    tableCell: tableCell))
-            }
+            MarkdownLinkedImageText(input: .init(text: text,
+                states: store.states.filter { urls.contains($0.key) }, dark: colorScheme == .dark,
+                width: availableWidth, headingLevel: headingLevel, quoted: quoted, scale: scale,
+                tableCell: tableCell))
             if urls.contains(where: { store.states[$0] == .unavailable(.inaccessible) }) {
                 Text("Check file permissions in Finder and NeoMD’s access in System Settings > Privacy & Security.")
                     .font(.callout).foregroundStyle(.secondary)
@@ -72,20 +54,4 @@ struct MarkdownImageParagraph: View {
         .task(id: urls) { for url in urls { store.load(url) } }
     }
 
-    private var composedText: Text {
-        segments.reduce(Text("")) { result, segment in
-            guard let image = segment.0 else { return Text("\(result)\(Text(segment.1))") }
-            let alt = String(segment.1.characters).replacingOccurrences(of: MarkdownPictureParser.emptyAltCarrier, with: "")
-            let attachment: Text
-            if let url = image.url(preferringDark: colorScheme == .dark),
-               case .loaded(let original, let natural) = store.states[url],
-               let fitted = original.copy() as? NSImage {
-                fitted.size = MarkdownImageLayout.displaySize(natural: natural, availableWidth: availableWidth)
-                attachment = Text(Image(nsImage: fitted)).accessibilityLabel(Text(alt.isEmpty ? "Image" : alt))
-            } else {
-                attachment = Text("\(Image(systemName: "photo")) \(alt)").foregroundColor(.secondary)
-            }
-            return Text("\(result)\(attachment)")
-        }
-    }
 }
