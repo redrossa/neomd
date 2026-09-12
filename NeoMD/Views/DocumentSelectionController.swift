@@ -15,6 +15,7 @@ import SwiftUI
     var interaction: ((Bool) -> Void)?
     var acquire: ((Key) -> Void)?
     private(set) var dragging = false
+    private var dragGranularity: NSSelectionGranularity = .selectByCharacter
 
     init(reader: UUID, projection: DocumentTextProjection, document: MarkdownRenderDocument? = nil, write: @escaping (String) -> Void = { text in
         NSPasteboard.general.clearContents()
@@ -76,7 +77,8 @@ import SwiftUI
                      extent: .init(key: key, offset: extent)))
     }
 
-    func begin(key: Key, range: NSRange, extending: Bool) {
+    func begin(key: Key, range: NSRange, extending: Bool, granularity: NSSelectionGranularity = .selectByCharacter) {
+        dragGranularity = granularity
         if !dragging { dragging = true; interaction?(true) }
         localSelection(range, key: key, extending: extending)
     }
@@ -106,7 +108,12 @@ import SwiftUI
         }
         guard let nearest = candidates.min(by: { $0.2 < $1.2 }) else { return }
         let offset = nearest.1.characterIndexForInsertion(at: nearest.1.convert(point, from: nil))
-        select(.init(anchor: anchor, extent: .init(key: nearest.0, offset: offset)))
+        let proposed = nearest.1.selectionRange(forProposedRange: NSRange(location: offset, length: 0), granularity: dragGranularity)
+        let fragments = state.projection.fragments
+        let anchorIndex = fragments.firstIndex { $0.key == anchor.key } ?? 0
+        let targetIndex = fragments.firstIndex { $0.key == nearest.0 } ?? 0
+        let backwards = targetIndex < anchorIndex || (targetIndex == anchorIndex && offset < anchor.offset)
+        select(.init(anchor: anchor, extent: .init(key: nearest.0, offset: backwards ? proposed.location : NSMaxRange(proposed))))
         if let scroll = nearest.1.enclosingScrollView {
             let local = scroll.contentView.convert(point, from: nil)
             var bounds = scroll.contentView.bounds
