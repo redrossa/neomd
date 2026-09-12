@@ -31,6 +31,7 @@ nonisolated struct PreparedReadingDocument: Sendable {
 nonisolated struct ReadingPositionRequest: Equatable, Sendable {
     enum Reason: Equatable, Sendable {
         case refresh
+        case readingSize
         /// A remembered position restored on a successful new or replacement reopen.
         case reopenHistory
     }
@@ -69,6 +70,7 @@ nonisolated struct DocumentFindCommand: Equatable, Sendable {
     var findQuery = ""
     @ObservationIgnored private var findSerial = 0
     @ObservationIgnored var selectionOwner: DocumentSelectionController?
+    @ObservationIgnored var displayedReadingSize: ReadingSize?
     @ObservationIgnored private var selectionCapture: (UUID, DocumentTextProjection.RefreshDescriptor?)?
     @ObservationIgnored private var selectionTransfer: DocumentSelectionTransfer?
 
@@ -219,8 +221,11 @@ nonisolated struct DocumentFindCommand: Equatable, Sendable {
         return true
     }
 
-    func takeReadingPosition(for presentation: UUID) -> ReadingPositionRequest? {
-        guard readingPosition?.presentation == presentation else { return nil }
+    func cancelReadingPosition() { readingPosition = nil }
+
+    func takeReadingPosition(for presentation: UUID, isActive: Bool = false) -> ReadingPositionRequest? {
+        guard isOpen, !isActive, section == nil,
+              readingPosition?.presentation == presentation else { return nil }
         defer { readingPosition = nil }
         return readingPosition
     }

@@ -13,6 +13,7 @@ final class DocumentOpeningCoordinator {
     /// Created on first use so an ordinary launch, and a hosted unit run, never touch
     /// the user's stored history before a document is actually opened.
     private lazy var history = ReadingHistoryService.production()
+    lazy var readingSize = ReadingSizePreference(defaults: .standard)
     var isTerminating: Bool { lifecycle.isTerminating }
     var shouldShowNoDocumentWindow: Bool { lifecycle.shouldShowNoDocumentWindow }
     @discardableResult func documentWindowDidAppear(id: UUID) -> DocumentWindowLifecycle.Directive {

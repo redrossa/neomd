@@ -73,12 +73,32 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate, NSUs
         if readerOwnsSelectionCommands { session.selectionOwner?.selectAll() }
     }
 
+    @objc func increaseReadingSize(_ sender: Any?) { changeReadingSize(.increase) }
+    @objc func decreaseReadingSize(_ sender: Any?) { changeReadingSize(.decrease) }
+    @objc func resetReadingSize(_ sender: Any?) { changeReadingSize(.reset) }
+
+    private func changeReadingSize(_ command: ReadingSize.Command) {
+        guard session.isOpen, session.prepared != nil else { return }
+        coordinator.readingSize.apply(command)
+    }
+
+    private func canChangeReadingSize(_ command: ReadingSize.Command) -> Bool {
+        coordinator.readingSize.canApply(command, committed: session.isOpen && session.prepared != nil,
+                                        displayed: session.displayedReadingSize)
+    }
+
     @objc func showFindBar(_ sender: Any?) { session.requestFind(.show) }
     @objc func findNext(_ sender: Any?) { session.requestFind(.next) }
     @objc func findPrevious(_ sender: Any?) { session.requestFind(.previous) }
 
     func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
         switch item.action {
+        case #selector(increaseReadingSize(_:)):
+            return canChangeReadingSize(.increase)
+        case #selector(decreaseReadingSize(_:)):
+            return canChangeReadingSize(.decrease)
+        case #selector(resetReadingSize(_:)):
+            return canChangeReadingSize(.reset)
         case #selector(copy(_:)):
             return readerOwnsSelectionCommands && session.selectionOwner?.state.copiedText.isEmpty == false
         case #selector(selectAll(_:)):
