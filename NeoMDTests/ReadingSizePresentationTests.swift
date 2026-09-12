@@ -16,7 +16,8 @@ import Testing
                     width: 760, headingLevel: level, scale: size.rawValue))
                 #expect(content.string == String(source.characters))
                 let font = try #require(content.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)
-                #expect(font.pointSize == NSFont.preferredFont(forTextStyle: style).pointSize * size.rawValue)
+                let expectedSize: CGFloat = NSFont.preferredFont(forTextStyle: style).pointSize * CGFloat(size.rawValue)
+                #expect(font.pointSize == expectedSize)
                 for (token, offset) in [("2", -3.0), ("3", 5.0)] {
                     let index = (content.string as NSString).range(of: token).location
                     #expect((content.attribute(.baselineOffset, at: index, effectiveRange: nil) as? NSNumber)?.doubleValue == offset * size.rawValue)
@@ -29,7 +30,8 @@ import Testing
                 width: 760, headingLevel: nil, scale: size.rawValue, code: true))
             #expect(native.string == code)
             let font = try #require(native.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)
-            #expect(font.pointSize == NSFont.preferredFont(forTextStyle: .callout).pointSize * size.rawValue)
+            let expectedCodeSize: CGFloat = NSFont.preferredFont(forTextStyle: .callout).pointSize * CGFloat(size.rawValue)
+            #expect(font.pointSize == expectedCodeSize)
         }
     }
 
@@ -86,7 +88,7 @@ import Testing
     @Test func listQuoteAndTableGeometryStayFiniteWithinUnscaledColumn() {
         let document = MarkdownBlockRenderer.render(from: "> - [x] Task\n>   - Nested\n\n| H | V |\n| --- | --- |\n| A | B |")
         for size in ReadingSize.allCases {
-            let scale = size.rawValue
+            let scale = CGFloat(size.rawValue)
             let table = MarkdownTableLayout(viewportWidth: 320, preferredContentWidths: [4000, 4000], scale: scale)
             #expect(table.viewportWidth == 320 && table.overflows)
             #expect(table.padding == MarkdownTableLayout.cellPadding * scale)
