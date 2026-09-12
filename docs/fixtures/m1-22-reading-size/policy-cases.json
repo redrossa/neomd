@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "kind": "inert expectations, not executable tests",
+  "supportedScales": [1, 1.5, 2],
+  "defaultScale": 1,
+  "transitions": [
+    {"from": 1, "command": "increase", "to": 1.5},
+    {"from": 1.5, "command": "increase", "to": 2},
+    {"from": 2, "command": "increase", "to": 2},
+    {"from": 2, "command": "decrease", "to": 1.5},
+    {"from": 1.5, "command": "decrease", "to": 1},
+    {"from": 1, "command": "decrease", "to": 1},
+    {"from": 1, "command": "reset", "to": 1},
+    {"from": 1.5, "command": "reset", "to": 1},
+    {"from": 2, "command": "reset", "to": 1}
+  ],
+  "storedValues": [
+    {"kind": "missing", "resolvedScale": 1},
+    {"kind": "number", "value": 1, "resolvedScale": 1},
+    {"kind": "number", "value": 1.5, "resolvedScale": 1.5},
+    {"kind": "number", "value": 2, "resolvedScale": 2},
+    {"kind": "number", "value": 0, "resolvedScale": 1},
+    {"kind": "number", "value": -1, "resolvedScale": 1},
+    {"kind": "number", "value": 1.25, "resolvedScale": 1},
+    {"kind": "number", "value": 3, "resolvedScale": 1},
+    {"kind": "string", "value": "large", "resolvedScale": 1},
+    {"kind": "boolean", "value": true, "resolvedScale": 1},
+    {"kind": "nonfinite", "symbol": "NaN", "resolvedScale": 1},
+    {"kind": "nonfinite", "symbol": "+Infinity", "resolvedScale": 1}
+  ],
+  "roundTripFractions": [0, 0.25, 0.65, 1],
+  "fixtureTargets": [
+    "MIDDLE CHECKPOINT AMBER:",
+    "NESTED CHECKPOINT CHARLIE:",
+    "TABLE CHECKPOINT JADE:"
+  ],
+  "presentationInvariants": [
+    "Prepared presentation UUID, original text and index remain unchanged by scale commands",
+    "Top and bottom anchors remain edges; valid content anchors retain target and fraction",
+    "One shared desired scale; independent per-reader locators",
+    "Same-scale endpoint commands do not queue redundant reflow",
+    "Repeated changes retain original pending anchor and supersede old restoration generations",
+    "Busy reader coalesces latest desired scale, then captures settled position before applying",
+    "Explicit section, newer scroll or navigation outranks stale automatic restoration",
+    "Closed and replaced presentations reject old restoration work",
+    "Busy restoration requests are retained before take and retried once at idle unless newer intent invalidates them",
+    "Scale-only conversion keeps logical selection endpoints and re-derives native slices without a new selection owner",
+    "Depth-label membership updates on width and applied scale; a removed selection endpoint clears selection",
+    "Selection dragging or acquisition and active find reveal defer size; idle selection and an open find bar do not",
+    "Find query, current match and source ranges survive scale; an old highlight cannot override size-owned locator restoration",
+    "A new explicit find reveal may cancel stale size restoration without undoing applied scale",
+    "App preference reload is independent of documents, history records and clear-history"
+  ]
+}

@@ -34,6 +34,16 @@ The packet supplies mixed/metadata/list/task/code/image/literal content, empty a
 
 Worker evidence: **UNRUN at triage**. Later gates are Debug build and inspected relevant non-interaction units only, with exact-head commands/logs/nonzero counts/failures/skips recorded in `m1-16-validation.md`. No reviewer, UI/E2E/manual scripted interaction or event/window/host substitutes; no clipboard-mutating tests. All pointer/keyboard/clipboard/native-menu/visual/AX/VoiceOver behavior remains **DEFERRED/UNRUN**, not passed by extraction/semantic/refresh models. Preserve #14/#36/#38 deferrals and every historical record. Final combined native testing and milestone business acceptance remain user-owned.
 
+## M1-22 / #22 — adjust reading size
+
+[Issue #22](https://github.com/redrossa/neomd/issues/22) · [approved reading-size policy](https://github.com/redrossa/neomd/issues/22#issuecomment-5642959310) · [validation and non-interaction allowlist](m1-22-validation.md) · [inert fixture packet](fixtures/m1-22-reading-size/README-fixture.md).
+
+Triage **ACCEPTED implementation readiness** refreshed at canonical main `cc9c3ddc7653dc35e8e8b03e16c9dc78cf2ceab2`, runtime `openai-codex/gpt-6-astra/high`. #19 is merged/implementation accepted; #23/#24 provide the existing content locator/restoration and separate history. Approved app-wide persistence supersedes the earlier #22 decision hold: use a UserDefaults preference, never source files or per-document history entries. Retain existing 1×/1.5×/2× scale support as the bounded engineering default; add native menu/shortcuts and ordered per-reader capture/reflow/restore without window controls or rehosting. #21/#17/#18/#16 are now merged and their relevant seams inspected; prior shared-seam contention wait is satisfied. Keep logical selection endpoints with native ranges re-derived after scale/label updates (clear only a removed endpoint); retain find query/current match and repaint highlight without old-match reveal overriding the size locator. Preserve recovery/performance changes. Coordinator still owns implementation leases and subsequent exact-base reconciliation.
+
+The packet covers all six headings, prose/code/list/table hierarchy, metadata/cues, distinct nested/table/middle anchors, local code/table overflow, a second document and inert transition/preference/position vectors. Triage ran no app builds/tests/prototypes/interactions. Later worker gates are Debug build plus inspected relevant non-interaction units; exact head, actual commands/counts/failures/skips and artifact corrections belong in `m1-22-validation.md`. Worker evidence is **UNRUN at triage**.
+
+All native menu/key/scroll/visual/selection/AX/real-relaunch/source-interaction checks remain **DEFERRED/UNRUN**, not passed by models. User expressly deferred #22 size-change reflow failures overlapping #38 to final milestone validation, not a pre-merge gate; retain failed evidence and unchecked criteria. #36 equivalence remains unproven; no unrelated defect or permitted-gate failure is waived. Preserve #14 deferred/open, every historical entry and user-owned final business acceptance.
+
 ## M1-19 / #19 — compare information in tables
 
 [Issue #19](https://github.com/redrossa/neomd/issues/19) · [complete criteria/validation map](m1-19-validation.md) · [inert table packet](fixtures/m1-19-tables/README-fixture.md).
