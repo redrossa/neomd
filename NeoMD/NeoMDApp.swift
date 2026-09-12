@@ -98,8 +98,8 @@ final class NeoMDApplicationDelegate: NSObject, NSApplicationDelegate {
         let url: URL
         do { url = try MarkdownDropRouting.singleFile(from: filenames.map { URL(fileURLWithPath: $0) }) }
         catch {
-            openingCoordinator.report(error.localizedDescription, in: destination)
             openingCoordinator.cancelReservation(destination, token: token)
+            openingCoordinator.report(error.localizedDescription, in: destination)
             sender.reply(toOpenOrPrint: .failure)
             return
         }
@@ -110,7 +110,7 @@ final class NeoMDApplicationDelegate: NSObject, NSApplicationDelegate {
                 sender.reply(toOpenOrPrint: .success)
             } catch {
                 if !(error is CancellationError), destination.accepts(token) {
-                    openingCoordinator.report(DocumentOpeningCoordinator.failureMessage(url), in: destination)
+                    openingCoordinator.report(error, at: url, in: destination, token: token)
                 }
                 sender.reply(toOpenOrPrint: error is CancellationError ? .cancel : .failure)
             }

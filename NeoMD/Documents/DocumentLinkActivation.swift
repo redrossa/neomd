@@ -49,6 +49,7 @@ struct DocumentLocalLinkRequest {
     let target: DocumentLocalTarget
     let destination: DocumentReadSession
     let token: Int
+    let sourceToken: Int
     let coordinator: DocumentOpeningCoordinator
     let placement: DocumentWindowPlacement?
 
@@ -63,6 +64,7 @@ struct DocumentLocalLinkRequest {
             ? (capturePlacement?(source.id) ?? coordinator.capturePlacement(for: source.id)) : nil
         destination = activation == .additionalReader ? coordinator.destination(newWindow: true) : source
         token = destination.begin()
+        sourceToken = source.generation
     }
 
     func run(
@@ -91,8 +93,9 @@ struct DocumentLocalLinkRequest {
             }
         } catch is CancellationError {} catch {
             // Never look up the active reader or show a modal for an uncommitted destination.
-            if isCurrent, source.isOpen, source.prepared?.id == presentation {
-                source.notice = DocumentOpeningCoordinator.failureMessage(target.fileURL)
+            if isCurrent {
+                coordinator.report(error, at: target.fileURL, in: source,
+                                   token: sourceToken, presentation: presentation)
             }
         }
     }

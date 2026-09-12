@@ -1,0 +1,1 @@
+This directory is named like a Markdown file. Opening folder-named.md must fail as a folder, not read this file.

@@ -62,7 +62,7 @@ final class MarkdownDocumentController: NSDocumentController {
                 defer { destination.finish(token) }
                 do { _ = try await self.openingCoordinator.open(url, in: destination, token: token) }
                 catch is CancellationError {} catch {
-                    if destination.accepts(token) { self.openingCoordinator.report(DocumentOpeningCoordinator.failureMessage(url), in: destination) }
+                    self.openingCoordinator.report(error, at: url, in: destination, token: token)
                 }
             }
         }
@@ -93,7 +93,10 @@ final class MarkdownDocumentController: NSDocumentController {
             do {
                 let (document, alreadyOpen) = try await openingCoordinator.open(url, in: destination, token: token)
                 completionHandler(document, alreadyOpen, nil)
-            } catch { completionHandler(nil, false, error) }
+            } catch {
+                // The native caller owns presentation; never also report here.
+                completionHandler(nil, false, DocumentOpenFailure.completionError(error, at: url))
+            }
         }
     }
 
