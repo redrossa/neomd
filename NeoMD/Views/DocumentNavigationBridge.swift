@@ -13,6 +13,15 @@ final class DocumentNavigationBridge {
     private(set) var generation = 0
     private(set) var request = 0
     private var textLeaves: [Int: Entry] = [:]
+    private var textParts: [DocumentTextProjection.Key: Entry] = [:]
+    private var codeScrollers: [ObjectIdentifier: Entry] = [:]
+
+    func registerCodeScroller(for view: NSView, generation: Int) {
+        guard generation == self.generation, let scroll = view.enclosingScrollView,
+              scroll !== owner, scroll.enclosingScrollView === owner,
+              view.window === owner?.window else { return }
+        codeScrollers[ObjectIdentifier(scroll)] = Entry(view: scroll, generation: generation)
+    }
     private var codeViews: [Int: Entry] = [:]
     private var overflowValues: [Int: Bool] = [:]
     private var tableViews: [Int: Entry] = [:]
@@ -75,7 +84,9 @@ final class DocumentNavigationBridge {
         for _ in 0..<4 {
             guard let current = scroll else { return false }
             if current === owner { return true }
-            guard current is MarkdownTableScrollView else { return false }
+            let code = codeScrollers[ObjectIdentifier(current)]
+            guard current is MarkdownTableScrollView ||
+                    (code?.view === current && code?.generation == generation && current.enclosingScrollView === owner) else { return false }
             scroll = current.enclosingScrollView
         }
         return false
@@ -140,12 +151,15 @@ final class DocumentNavigationBridge {
         if let intentMonitor { NSEvent.removeMonitor(intentMonitor) }
     }
 
-    func registerText(_ view: NSView, id: Int, generation: Int) {
+    func registerText(_ view: NSView, id: Int, generation: Int, part: Int = 0) {
         guard generation == self.generation else { return }
-        textLeaves[id] = Entry(view: view, generation: generation)
+        let entry = Entry(view: view, generation: generation)
+        textParts[.init(leafID: id, part: part)] = entry
+        if part == 0 { textLeaves[id] = entry }
     }
 
     func unregisterText(_ view: NSView, id: Int) {
+        textParts = textParts.filter { $0.value.view !== view }
         if textLeaves[id]?.view === view {
             textLeaves.removeValue(forKey: id)
             // Lazy materialization may detach the origin or unrelated leaves.
@@ -161,21 +175,33 @@ final class DocumentNavigationBridge {
     }
 
     func traverseText(_ view: NSView, id: Int, generation: Int, reverse: Bool) -> Bool {
-        guard generation == self.generation, textLeaf(id) === view,
+        guard generation == self.generation, isOwned(view),
+              textParts.contains(where: { $0.key.leafID == id && $0.value.view === view }),
               view.window?.firstResponder === view, let traverse else { return false }
+        let parts = textParts.filter { $0.key.leafID == id && $0.value.generation == generation }
+            .sorted { $0.key.part < $1.key.part }
+        if let index = parts.firstIndex(where: { $0.value.view === view }) {
+            let next = index + (reverse ? -1 : 1)
+            if parts.indices.contains(next), focusText(id, part: parts[next].key.part) { return true }
+        }
         traverse(.text(id), reverse)
         return true
     }
 
     func revealText(_ id: Int, utf16Range: NSRange) -> Bool {
-        guard let view = textLeaf(id) as? MarkdownLinkedImageTextView,
-              let rect = view.findRect(forSourceRange: utf16Range) else { return false }
-        reveal(view, rect: rect, includingOwner: true)
-        return true
+        for (key, entry) in textParts where key.leafID == id && entry.generation == generation {
+            guard let view = entry.view as? MarkdownLinkedImageTextView, isOwned(view),
+                  utf16Range.location >= view.sourceOffset,
+                  let rect = view.findRect(forSourceRange: NSRange(location: utf16Range.location - view.sourceOffset, length: utf16Range.length)) else { continue }
+            reveal(view, rect: rect, includingOwner: true)
+            return true
+        }
+        return false
     }
 
-    func focusText(_ id: Int) -> Bool {
-        guard let view = textLeaf(id), let window = view.window else { return false }
+    func focusText(_ id: Int, part: Int = 0) -> Bool {
+        guard let entry = textParts[.init(leafID: id, part: part)], entry.generation == generation,
+              let view = entry.view, isOwned(view), let window = view.window else { return false }
         reveal(view, includingOwner: true)
         return window.makeFirstResponder(view) && window.firstResponder === view
     }
@@ -196,6 +222,8 @@ final class DocumentNavigationBridge {
         cancel()
         destinations.removeAll()
         textLeaves.removeAll()
+        textParts.removeAll()
+        codeScrollers.removeAll()
         codeViews.removeAll()
         overflowValues.removeAll()
         tableViews.removeAll()

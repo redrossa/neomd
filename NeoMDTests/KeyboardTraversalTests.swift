@@ -31,8 +31,8 @@ import Testing
 
     @Test func semanticCandidatesKeepSeparateTextAndActionStops() {
         let document = MarkdownBlockRenderer.render(from: "Plain\n\n[One](#end) and [Two](#end)\n\n```\nwide code\n```\n\n# End")
-        #expect(DocumentReaderTraversal.candidates(in: document) == [.text(0), .text(1), .links(1), .codeBlock(2), .text(3)])
-        #expect(Array(DocumentReaderTraversal.candidates(in: document).reversed()) == [.text(3), .codeBlock(2), .links(1), .text(1), .text(0)])
+        #expect(DocumentReaderTraversal.candidates(in: document) == [.text(0), .text(1), .links(1), .text(2), .codeBlock(2), .text(3)])
+        #expect(Array(DocumentReaderTraversal.candidates(in: document).reversed()) == [.text(3), .codeBlock(2), .text(2), .links(1), .text(1), .text(0)])
     }
 
     @Test func exactNativeChordAndClipboardFreeSelection() throws {

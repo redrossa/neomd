@@ -59,12 +59,30 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate, NSUs
 
     func windowWillClose(_ notification: Notification) { coordinator.close(self) }
 
+    private var readerOwnsSelectionCommands: Bool {
+        guard session.isOpen, session.selectionOwner != nil,
+              let responder = window?.firstResponder else { return false }
+        if let text = responder as? NSTextView { return text is MarkdownLinkedImageTextView && !text.isFieldEditor }
+        return !(responder is NSControl)
+    }
+
+    @objc func copy(_ sender: Any?) {
+        if readerOwnsSelectionCommands { session.selectionOwner?.copy() }
+    }
+    override func selectAll(_ sender: Any?) {
+        if readerOwnsSelectionCommands { session.selectionOwner?.selectAll() }
+    }
+
     @objc func showFindBar(_ sender: Any?) { session.requestFind(.show) }
     @objc func findNext(_ sender: Any?) { session.requestFind(.next) }
     @objc func findPrevious(_ sender: Any?) { session.requestFind(.previous) }
 
     func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
         switch item.action {
+        case #selector(copy(_:)):
+            return readerOwnsSelectionCommands && session.selectionOwner?.state.copiedText.isEmpty == false
+        case #selector(selectAll(_:)):
+            return readerOwnsSelectionCommands
         case #selector(showFindBar(_:)), #selector(findNext(_:)), #selector(findPrevious(_:)):
             return session.isOpen && session.prepared != nil
         default: return true

@@ -31,6 +31,7 @@ struct MarkdownTableView: View {
     @Environment(\.documentNavigationBridge) private var navigationBridge
     @Environment(\.documentNavigationGeneration) private var documentGeneration
     @Environment(\.documentFindHighlight) private var findHighlight
+    @Environment(\.documentSelection) private var selection
 
     var body: some View {
         DocumentFocusEffect { inheritedEffectEnabled in
@@ -75,7 +76,7 @@ struct MarkdownTableView: View {
                 openURL: openURL, keyboardOpenURL: keyboardOpenURL, pointerOpenURL: pointerOpenURL,
                 findHighlight: findHighlight.flatMap {
                     document.tableCell(for: $0.leafID)?.tableID == tableID ? $0 : nil
-                }),
+                }, selection: selection),
             keyboardFocus: keyboardFocus, pageReader: pageReader)
     }
 

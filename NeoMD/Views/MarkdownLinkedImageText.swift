@@ -22,6 +22,7 @@ struct MarkdownLinkedImageText: View {
         var quoted = false
         var scale: CGFloat = 1
         var tableCell: MarkdownTableCellPresentation? = nil
+        var code = false
     }
 
     let input: Input
@@ -42,6 +43,9 @@ private struct MarkdownLinkedImageNativeText: NSViewRepresentable {
     @Environment(\.documentNavigationGeneration) private var generation
     @Environment(\.documentLeafID) private var leafID
     @Environment(\.documentFindHighlight) private var findHighlight
+    @Environment(\.documentSelection) private var selection
+    @Environment(\.documentTextPart) private var part
+    @Environment(\.documentTextSourceOffset) private var sourceOffset
 
     func makeNSView(context: Context) -> MarkdownLinkedImageTextView {
         MarkdownLinkedImageTextView(frame: .zero)
@@ -50,13 +54,20 @@ private struct MarkdownLinkedImageNativeText: NSViewRepresentable {
     func updateNSView(_ view: MarkdownLinkedImageTextView, context: Context) {
         view.open = { openURL($0) }
         view.pointerOpen = pointerOpenURL
-        view.bindTraversal(bridge: bridge, id: leafID, generation: generation)
+        view.bindTraversal(bridge: bridge, id: leafID, generation: generation, part: part)
+        if input.code { bridge?.registerCodeScroller(for: view, generation: generation) }
+        view.bindSelection(selection, key: leafID.map { .init(leafID: $0, part: part) })
+        view.sourceOffset = sourceOffset
         view.update(input)
-        view.applyFindHighlight(range: findHighlight?.leafID == leafID ? findHighlight?.range : nil)
+        let range = findHighlight?.leafID == leafID ? findHighlight?.range : nil
+        view.applyFindHighlight(range: range.flatMap { range in
+            guard range.location >= sourceOffset, NSMaxRange(range) <= sourceOffset + String(input.text.characters).utf16.count else { return nil }
+            return NSRange(location: range.location - sourceOffset, length: range.length)
+        })
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView view: MarkdownLinkedImageTextView, context: Context) -> CGSize? {
-        view.measure(width: proposal.width ?? input.width)
+        view.measure(width: input.code ? input.width : proposal.width ?? input.width)
     }
 
     static func dismantleNSView(_ view: MarkdownLinkedImageTextView, coordinator: ()) {
@@ -69,10 +80,59 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
     var pointerOpen: ((URL, DocumentLinkActivation) -> Void)?
     private let pointerScope = DocumentLinkPointerScope()
 
+    private weak var selectionOwner: DocumentSelectionController?
+    private var selectionKey: DocumentTextProjection.Key?
+    var sourceOffset = 0
+
+    func bindSelection(_ owner: DocumentSelectionController?, key: DocumentTextProjection.Key?) {
+        guard selectionOwner !== owner || selectionKey != key else { return }
+        if let selectionKey { selectionOwner?.unbind(self, key: selectionKey) }
+        selectionOwner = owner; selectionKey = key
+        if let key { owner?.bind(self, key: key) }
+    }
+
+    func applyDocumentSelection(_ range: NSRange?) {
+        setSelectedRange(range ?? NSRange(location: 0, length: 0))
+    }
+
+    override func copy(_ sender: Any?) {
+        if let selectionOwner { selectionOwner.copy() } else { super.copy(sender) }
+    }
+    override func selectAll(_ sender: Any?) {
+        if let selectionOwner { selectionOwner.selectAll() } else { super.selectAll(sender) }
+    }
     override func mouseDown(with event: NSEvent) {
         let activation = DocumentLinkActivation(pointer: event.type == .leftMouseDown,
             command: event.modifierFlags.contains(.command), control: event.modifierFlags.contains(.control))
-        pointerScope.tracking(activation) { super.mouseDown(with: event) }
+        guard let owner = selectionOwner, let key = selectionKey, let window,
+              !event.modifierFlags.contains(.control) else {
+            pointerScope.tracking(activation) { super.mouseDown(with: event) }
+            return
+        }
+        let index = characterIndexForInsertion(at: convert(event.locationInWindow, from: nil))
+        let granularity: NSSelectionGranularity = event.clickCount >= 3 ? .selectByParagraph : event.clickCount == 2 ? .selectByWord : .selectByCharacter
+        let range = selectionRange(forProposedRange: NSRange(location: index, length: 0), granularity: granularity)
+        let link = index < (textStorage?.length ?? 0) ? textStorage?.attribute(.link, at: index, effectiveRange: nil) as? URL : nil
+        window.makeFirstResponder(self)
+        owner.begin(key: key, range: range, extending: event.modifierFlags.contains(.shift), granularity: granularity)
+        defer { owner.finish() }
+        var moved = false
+        while self.window === window, window.isKeyWindow {
+            guard let next = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp],
+                until: Date(timeIntervalSinceNow: 0.04), inMode: .eventTracking, dequeue: true) else {
+                if moved { owner.drag(at: window.mouseLocationOutsideOfEventStream, window: window) }
+                continue
+            }
+            if next.type == .leftMouseUp {
+                if !moved, let link, !event.modifierFlags.contains(.shift) {
+                    if let pointerOpen { pointerOpen(link, activation) } else { open(link) }
+                }
+                break
+            }
+            moved = moved || hypot(next.locationInWindow.x - event.locationInWindow.x,
+                                    next.locationInWindow.y - event.locationInWindow.y) > 3
+            if moved { owner.drag(at: next.locationInWindow, window: window) }
+        }
     }
     private(set) var input: MarkdownLinkedImageText.Input?
     private(set) var replacementCount = 0
@@ -105,18 +165,28 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
         return layout.boundingRect(forGlyphRange: glyphs, in: container)
             .offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y)
     }
+    weak var semanticParent: DocumentListAccessibility.Element?
+    override func accessibilityParent() -> Any? { semanticParent ?? super.accessibilityParent() }
+    override func accessibilityRole() -> NSAccessibility.Role? {
+        input?.headingLevel == nil ? super.accessibilityRole() : NSAccessibility.Role(rawValue: "AXHeading")
+    }
+    override func accessibilityValueDescription() -> String? {
+        input?.headingLevel.map { "Heading level \($0)" } ?? super.accessibilityValueDescription()
+    }
     private var imageAccessibility: [MarkdownImageAccessibilityElement] = []
     private weak var traversalBridge: DocumentNavigationBridge?
     private var traversalID: Int?
     private var traversalGeneration = -1
+    private var traversalPart = 0
 
-    func bindTraversal(bridge: DocumentNavigationBridge?, id: Int?, generation: Int) {
-        guard traversalBridge !== bridge || traversalID != id || traversalGeneration != generation else { return }
+    func bindTraversal(bridge: DocumentNavigationBridge?, id: Int?, generation: Int, part: Int = 0) {
+        guard traversalBridge !== bridge || traversalID != id || traversalGeneration != generation || traversalPart != part else { return }
         if let traversalID { traversalBridge?.unregisterText(self, id: traversalID) }
         traversalBridge = bridge
         traversalID = id
         traversalGeneration = generation
-        if let id { bridge?.registerText(self, id: id, generation: generation) }
+        traversalPart = part
+        if let id { bridge?.registerText(self, id: id, generation: generation, part: part) }
     }
 
     static func traversalDirection(_ event: NSEvent) -> Bool? {
@@ -131,7 +201,29 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
         if let reverse = Self.traversalDirection(event), let id = traversalID,
            traversalBridge?.traverseText(self, id: id, generation: traversalGeneration,
                                          reverse: reverse) == true { return }
+        guard let owner = selectionOwner, let key = selectionKey,
+              [123, 124, 125, 126].contains(event.keyCode) else {
+            super.keyDown(with: event)
+            return
+        }
+        let forward = event.keyCode == 124 || event.keyCode == 125
+        let extending = event.modifierFlags.contains(.shift)
+        if extending, event.modifierFlags.contains(.command), [125, 126].contains(event.keyCode) {
+            owner.extendDocument(forward: forward)
+            return
+        }
+        // Native geometry decides the next caret/word/line; the document owner,
+        // not this leaf's temporary local anchor, retains the selection anchor.
+        if extending, let extent = owner.state.selection?.extent, extent.key == key {
+            applyDocumentSelection(NSRange(location: min(extent.offset, string.utf16.count), length: 0))
+        }
+        let before = selectedRange()
         super.keyDown(with: event)
+        let after = selectedRange()
+        if extending {
+            if after == before { owner.extendBeyond(key: key, forward: forward) }
+            else { owner.extendNative(after, key: key, forward: forward) }
+        } else { owner.localSelection(after, key: key, extending: false) }
     }
 
     override init(frame frameRect: NSRect, textContainer container: NSTextContainer? = nil) {
@@ -162,13 +254,17 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
         textContainer?.heightTracksTextView = false
         isHorizontallyResizable = false
         isVerticallyResizable = false
-        linkTextAttributes = [.foregroundColor: NSColor.linkColor, .underlineStyle: NSUnderlineStyle.single.rawValue,
-                              .cursor: NSCursor.pointingHand]
+        linkTextAttributes = [.foregroundColor: NSColor.linkColor, .cursor: NSCursor.pointingHand]
         delegate = self
         unregisterDraggedTypes()
     }
 
     required init?(coder: NSCoder) { nil }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if input?.code == true { traversalBridge?.registerCodeScroller(for: self, generation: traversalGeneration) }
+    }
 
     func update(_ next: MarkdownLinkedImageText.Input) {
         guard input != next else { return }
@@ -187,6 +283,7 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
         } else {
             selectedRanges = selection.filter { NSMaxRange($0.rangeValue) <= length }
         }
+        if let key = selectionKey { selectionOwner?.update(self, key: key, projection: projection, previous: previous) }
     }
 
     /// Bounds of presentation-only swatches; indexes remain original native text indexes.
@@ -280,6 +377,7 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
     }
 
     func detach() {
+        bindSelection(nil, key: nil)
         applyFindHighlight(range: nil)
         bindTraversal(bridge: nil, id: nil, generation: -1)
         delegate = nil
@@ -402,12 +500,17 @@ enum MarkdownLinkedImageContent {
                 result.append(content)
             } else {
                 let status: String
-                if state == nil || state == .loading { status = "Image loading" }
+                if image.url(preferringDark: input.dark) == nil { status = "Image unavailable" }
+                else if state == nil || state == .loading { status = "Image loading" }
                 else { status = "Image unavailable" }
                 var fallback = attributes
                 fallback[.foregroundColor] = NSColor.secondaryLabelColor
+                fallback[NSAttributedString.Key("NeoMD.ImageAlternative")] = "\(label), \(status)"
                 result.append(NSAttributedString(string: "\(label) (\(status))", attributes: fallback))
             }
+        }
+        if input.code, result.length > 0 {
+            result.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: NSFont.preferredFont(forTextStyle: .callout).pointSize * input.scale, weight: .regular), range: NSRange(location: 0, length: result.length))
         }
         if let cell = input.tableCell, result.length > 0 {
             let full = NSRange(location: 0, length: result.length)
@@ -472,7 +575,10 @@ enum MarkdownLinkedImageContent {
         let secondary = headingLevel == 6 || (headingLevel == nil && quoted)
         attributes[.foregroundColor] = text.foregroundColor.map(NSColor.init) ?? (secondary ? NSColor.secondaryLabelColor : NSColor.labelColor)
         if let background = text.backgroundColor { attributes[.backgroundColor] = NSColor(background) }
-        if let link = text.link { attributes[.link] = link; attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue }
+        if let link = text.link {
+            attributes[.link] = link
+            if attributes[.underlineStyle] == nil { attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue }
+        }
         return attributes
     }
 }

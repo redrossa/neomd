@@ -17,7 +17,9 @@ struct DocumentReaderView: View {
     let minimumSize: CGSize
     private var fileURL: URL? { prepared.fileURL }
     @Environment(\.openURL) private var systemOpenURL
+    @Environment(\.colorScheme) private var colorScheme
     @State private var imageStore = MarkdownImageStore()
+    @State private var selection: DocumentSelectionController
     private var renderedDocument: MarkdownRenderDocument { prepared.rendered }
     @State private var linkNotice: String?
     @State private var noticeGeneration = 0
@@ -65,6 +67,8 @@ struct DocumentReaderView: View {
         self.session = session
         self.openingCoordinator = openingCoordinator
         self.minimumSize = minimumSize
+        _selection = State(initialValue: DocumentSelectionController(reader: session.id,
+            projection: .rendered(prepared.rendered, presentation: prepared.id), document: prepared.rendered))
     }
 
     var body: some View {
@@ -72,6 +76,9 @@ struct DocumentReaderView: View {
             DocumentFocusEffect { inheritedEffectEnabled in
                 ScrollView(.vertical) {
                     content(width: DocumentReaderLayout.columnWidth(for: geometry.size.width))
+                        .onChange(of: geometry.size.width, initial: true) {
+                            selection.updateLabels(renderedDocument, width: DocumentReaderLayout.columnWidth(for: geometry.size.width), scale: theme.scale)
+                        }
                         .frame(
                             width: DocumentReaderLayout.columnWidth(
                                 for: geometry.size.width
@@ -123,10 +130,13 @@ struct DocumentReaderView: View {
             }
         }
         .environment(\.documentFindHighlight, currentFindHighlight)
+        .environment(\.documentSelection, selection)
         .task(id: FindSearchRequest(presented: session.isFindPresented, query: session.findQuery)) {
             await runFind()
         }
         .onChange(of: session.findCommand) { consumeFindCommand() }
+        .onChange(of: imageStore.states) { selection.updateImages(renderedDocument, states: imageStore.states, dark: colorScheme == .dark) }
+        .onChange(of: colorScheme) { selection.updateImages(renderedDocument, states: imageStore.states, dark: colorScheme == .dark) }
         .environment(imageStore)
         .environment(\.documentNavigationBridge, navigationBridge)
         .environment(\.documentNavigationGeneration, documentGeneration)
@@ -163,6 +173,38 @@ struct DocumentReaderView: View {
         }
         .onChange(of: session.readingPosition) { consumeReadingPosition() }
         .onAppear {
+            session.selectionOwner = selection
+            selection.bridge = navigationBridge
+            selection.changed = { session.recordSelection($0, presentation: prepared.id) }
+            selection.interaction = { active in
+                guard session.prepared?.id == prepared.id else { return }
+                if active {
+                    traversalTask?.cancel()
+                    navigationGeneration += 1
+                    navigationBridge.cancel()
+                    resizeRestoration.invalidate()
+                    beginInteraction()
+                } else { endInteraction() }
+            }
+            selection.acquire = { key in
+                traversalTask?.cancel()
+                navigationGeneration += 1
+                navigationBridge.cancel()
+                let generation = navigationGeneration
+                beginInteraction()
+                traversalTask = Task { @MainActor in
+                    defer { endInteraction() }
+                    for _ in 0..<12 {
+                        guard !Task.isCancelled, generation == navigationGeneration,
+                              session.prepared?.id == prepared.id else { return }
+                        if navigationBridge.focusText(key.leafID, part: key.part) { return }
+                        scrollPosition.scrollTo(id: renderedDocument.lazyRootIDs[key.leafID], anchor: .center)
+                        try? await Task.sleep(for: .milliseconds(40))
+                    }
+                }
+            }
+            selection.updateImages(renderedDocument, states: imageStore.states, dark: colorScheme == .dark)
+            selection.restore(session.takeSelection(for: prepared.id))
             bindTraversal()
             consumeFindCommand()
             consumeSectionRequest()
@@ -171,7 +213,9 @@ struct DocumentReaderView: View {
         .onDisappear {
             // This presentation no longer owns the viewport; never leave a stale busy
             // flag behind that would block every later refresh of this viewer.
-            session.isUserBusy = false
+            selection.detach()
+            if session.selectionOwner === selection { session.selectionOwner = nil }
+            if session.prepared?.id == prepared.id { session.isUserBusy = false }
             traversalTask?.cancel()
             navigationBridge.detachTraversal()
             imageStore.reset()
@@ -463,7 +507,7 @@ struct DocumentReaderView: View {
     }
 
     private func revealCurrentFindMatch() {
-        guard let highlight = currentFindHighlight else { return }
+        guard !selection.dragging, let highlight = currentFindHighlight else { return }
         traversalTask?.cancel()
         navigationGeneration += 1
         navigationBridge.cancel()
@@ -505,7 +549,8 @@ struct DocumentReaderView: View {
     /// Reports whether this viewer is doing work a background revision must not
     /// interrupt: scrolling, navigating, traversing or restoring a position.
     private func syncReadingActivity() {
-        session.isUserBusy = isScrolling || interactiveWork > 0 || resizeRestoration.isPending
+        guard session.prepared?.id == prepared.id else { return }
+        session.isUserBusy = isScrolling || interactiveWork > 0 || resizeRestoration.isPending || selection.dragging
     }
 
     private func beginInteraction() {
@@ -912,8 +957,8 @@ enum DocumentReaderTraversal {
             if let parent = block.parentID, document[parent].isTable, tables.insert(parent).inserted {
                 targets.append(.tableOverflow(parent))
             }
-            if case .codeBlock = block.kind { return targets + [.codeBlock(id)] }
-            if MarkdownLinkedImageText.requiresNativeText(block.text) { targets.append(.text(id)) }
+            if case .codeBlock = block.kind { return targets + [.text(id), .codeBlock(id)] }
+            if block.kind != .anchor && block.kind != .thematicBreak { targets.append(.text(id)) }
             if block.text.runs.contains(where: { $0.link != nil }) { targets.append(.links(id)) }
             return targets
         }

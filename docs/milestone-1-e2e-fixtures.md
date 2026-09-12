@@ -24,6 +24,16 @@ Fixture packet: `find-corpus.md` (17 default `lantern` matches across metadata, 
 
 Worker evidence: **UNRUN at triage**; record actual exact head, commands, nonzero tests/failures/skips and artifact corrections in `m1-21-validation.md`. All native/visual/AX/keyboard/focus/scroll/refresh-while-open interaction evidence remains **DEFERRED/UNRUN**, not passed by index/model tests. Preserve #14/#36/#38 deferrals and every historical catalog entry; final native and business acceptance remains user-owned.
 
+## M1-16 / #16 — continuous selection and accessibility
+
+[Issue #16](https://github.com/redrossa/neomd/issues/16) · [Architecture APPROVED](https://github.com/redrossa/neomd/issues/16#issuecomment-5642959049) · [complete validation map and exact allowlist](m1-16-validation.md) · [inert fixture packet](fixtures/m1-16-selection/README-fixture.md).
+
+Triage **ACCEPTED implementation readiness** at `7217b46ac4d69b532dc67b944f2a45407e6f0570` (includes #21 find, PR #59), verified `openai-codex/gpt-6-astra`, high. Approval resolves the earlier architecture hold retained in historical entries. Bounded scope: one per-reader continuous-selection owner across native prose/code/metadata and visible textual fragments, pointer/Shift selection, native Copy/Select All, logical offscreen ranges, exact code whitespace and table row-major TAB/LF joining; preserve lazy roots, local overflow and #48 quiet focus. Refresh replacement re-derives selection into new presentation identities without persisting render IDs/history state. Correct existing list/item/task association and heading/fallback-image semantics without replacing #19 table AX.
+
+The packet supplies mixed/metadata/list/task/code/image/literal content, empty and wide table cells with independent range-string oracles, static before/after refresh inputs and an inert lazy-document recipe. No network or executable fixture script is required. #21 find is merged; this packet is refreshed against its actual native/menu/session/window seams. Keep match highlighting separate from user selection through native temporary attributes, hosted cell environments, metadata source/part mapping and presentation replacement; preserve find-field command precedence and arbitrate reveal/acquisition without racing selection gestures. The prior contention wait is satisfied, not a new semantic dependency.
+
+Worker evidence: **UNRUN at triage**. Later gates are Debug build and inspected relevant non-interaction units only, with exact-head commands/logs/nonzero counts/failures/skips recorded in `m1-16-validation.md`. No reviewer, UI/E2E/manual scripted interaction or event/window/host substitutes; no clipboard-mutating tests. All pointer/keyboard/clipboard/native-menu/visual/AX/VoiceOver behavior remains **DEFERRED/UNRUN**, not passed by extraction/semantic/refresh models. Preserve #14/#36/#38 deferrals and every historical record. Final combined native testing and milestone business acceptance remain user-owned.
+
 ## M1-19 / #19 — compare information in tables
 
 [Issue #19](https://github.com/redrossa/neomd/issues/19) · [complete criteria/validation map](m1-19-validation.md) · [inert table packet](fixtures/m1-19-tables/README-fixture.md).
