@@ -2,6 +2,16 @@
 
 #15 is completed via PR #54; its native/visual/AX criteria remain unverified. The adopted [dependency plan](milestone-1-dependency-plan.md) governs parallel #16–24 triage/implementation, documented holds and narrow catalog integration leases. #14 remains deferred/open. No reviewer or UI/E2E/manual scripted interactions, prototypes or event/host substitutes. Later gates are Debug build and inspected relevant non-interaction units only. Triage stages unique per-story entries with hashes; do not replace this catalog from stale snapshots. Preserve all entries and #36/#38 failures/deferrals. Combined business acceptance remains user-owned. Historical authority statements below are superseded for scheduling, not rewritten as passing evidence.
 
+## M1-21 / #21 — find text in the document
+
+[Issue #21](https://github.com/redrossa/neomd/issues/21) · [complete criteria/validation map](m1-21-validation.md) · [inert find packet](fixtures/m1-21-find/README-fixture.md).
+
+Triage **ACCEPTED implementation readiness**, exact base `c672c090b6c47a7c8247781af9cb4c3ec6b5dd54` (merged #19/#23/#24), verified anthropic/claude-fable-5-1/high (coordinator-approved fallback). No document-wide find exists; per-leaf `NSTextView` finders and raw source search are rejected. New scope is a pure `DocumentFindIndex` over the render arena (leaves incl. code blocks, table cells and metadata; image runs and metadata separators excluded; hidden comments and markup are already absent from `block.text`), a session-held find request/query, Edit > Find menu items with the standard ⌘F/⌘G/⇧⌘G equivalents routed to `DocumentWindowController`, a temporary top find bar, current-match highlighting through presentation-only attributes (SwiftUI background, native layout-manager temporary attributes mapped by `MarkdownCellDisplayProjection`, cell environment for hosted cells) and reveal through the existing lazy materialization/bridge loop (`revealText` extension; `isOwned`/`Marker.Kind` untouched). Defaults: case/diacritic-insensitive, wrap-around, current match only, bar and query survive a #23 refresh with matches re-derived. No `NSTextFinder`, `.searchable`, toolbar, ⌘E/Replace, new focus-target case or #16 dependency.
+
+Fixture packet: `find-corpus.md` (17 default `lantern` matches across metadata, heading, prose, code, cells, quote, list, footnote; comment/URL/alt/markup decoys), `find-cases.json` (29 cases + cursor table), `long-lazy.md` (three `BEACON` sentinels across lazy leaves). No app/test/prototype/interactions were run by triage. Later worker gates are Debug build plus the inspected exact non-interaction allowlist in `m1-21-validation.md`; whole `NeoMDTests` and window/event substitutes are not allowed.
+
+Worker evidence: **UNRUN at triage**; record actual exact head, commands, nonzero tests/failures/skips and artifact corrections in `m1-21-validation.md`. All native/visual/AX/keyboard/focus/scroll/refresh-while-open interaction evidence remains **DEFERRED/UNRUN**, not passed by index/model tests. Preserve #14/#36/#38 deferrals and every historical catalog entry; final native and business acceptance remains user-owned.
+
 ## M1-19 / #19 — compare information in tables
 
 [Issue #19](https://github.com/redrossa/neomd/issues/19) · [complete criteria/validation map](m1-19-validation.md) · [inert table packet](fixtures/m1-19-tables/README-fixture.md).

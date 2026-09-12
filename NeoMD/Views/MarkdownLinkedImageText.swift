@@ -41,6 +41,7 @@ private struct MarkdownLinkedImageNativeText: NSViewRepresentable {
     @Environment(\.documentNavigationBridge) private var bridge
     @Environment(\.documentNavigationGeneration) private var generation
     @Environment(\.documentLeafID) private var leafID
+    @Environment(\.documentFindHighlight) private var findHighlight
 
     func makeNSView(context: Context) -> MarkdownLinkedImageTextView {
         MarkdownLinkedImageTextView(frame: .zero)
@@ -51,6 +52,7 @@ private struct MarkdownLinkedImageNativeText: NSViewRepresentable {
         view.pointerOpen = pointerOpenURL
         view.bindTraversal(bridge: bridge, id: leafID, generation: generation)
         view.update(input)
+        view.applyFindHighlight(range: findHighlight?.leafID == leafID ? findHighlight?.range : nil)
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView view: MarkdownLinkedImageTextView, context: Context) -> CGSize? {
@@ -75,6 +77,34 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
     private(set) var input: MarkdownLinkedImageText.Input?
     private(set) var replacementCount = 0
     private var displayProjection: MarkdownCellDisplayProjection?
+    private var findDisplayRange: NSRange?
+
+    func applyFindHighlight(range: NSRange?) {
+        guard let layout = layoutManager else { return }
+        if let previous = findDisplayRange, NSMaxRange(previous) <= (textStorage?.length ?? 0) {
+            layout.removeTemporaryAttribute(.backgroundColor, forCharacterRange: previous)
+        }
+        findDisplayRange = nil
+        guard let range, let projection = displayProjection,
+              range.location >= 0, NSMaxRange(range) <= projection.source.utf16.count else { return }
+        let display = projection.displayRange(for: range)
+        guard display.length > 0 else { return }
+        layout.addTemporaryAttribute(.backgroundColor, value: NSColor.findHighlightColor,
+                                     forCharacterRange: display)
+        findDisplayRange = display
+    }
+
+    func findRect(forSourceRange range: NSRange) -> NSRect? {
+        guard let projection = displayProjection, let layout = layoutManager,
+              let container = textContainer, range.location >= 0,
+              NSMaxRange(range) <= projection.source.utf16.count else { return nil }
+        let display = projection.displayRange(for: range)
+        guard display.length > 0 else { return nil }
+        layout.ensureLayout(for: container)
+        let glyphs = layout.glyphRange(forCharacterRange: display, actualCharacterRange: nil)
+        return layout.boundingRect(forGlyphRange: glyphs, in: container)
+            .offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y)
+    }
     private var imageAccessibility: [MarkdownImageAccessibilityElement] = []
     private weak var traversalBridge: DocumentNavigationBridge?
     private var traversalID: Int?
@@ -146,8 +176,9 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
         input = next
         let projection = MarkdownLinkedImageContent.project(next)
         let previous = displayProjection
+        applyFindHighlight(range: nil)
         textStorage?.setAttributedString(projection.content)
-        displayProjection = next.tableCell == nil ? nil : projection
+        displayProjection = projection
         replacementCount += 1
         rebuildAccessibility()
         let length = textStorage?.length ?? 0
@@ -249,6 +280,7 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
     }
 
     func detach() {
+        applyFindHighlight(range: nil)
         bindTraversal(bridge: nil, id: nil, generation: -1)
         delegate = nil
         open = { _ in }

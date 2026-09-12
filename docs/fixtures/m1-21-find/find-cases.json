@@ -1,0 +1,79 @@
+{
+  "fixture": "find-corpus.md",
+  "rules": {
+    "unit": "Each leaf in MarkdownRenderDocument.leafIDs order (table cells are leaves; the table node, containers and generated chrome such as list markers, alert labels, footnote ordinals and quote captions are not units).",
+    "text": "String(block.text.characters) of the rendered leaf; matches are UTF-16 ranges in that string.",
+    "exclusions": "Discard any match that intersects an AttributedString run whose markdownImage attribute is non-nil (image alt text, the U+FFFC empty-alt carrier). For a .metadata leaf, discard any match that crosses a row boundary (the \\n between rows) or the ': ' separator between a formatted row's key and value.",
+    "options": "default = caseInsensitive + diacriticInsensitive, literal substring, non-overlapping forward scan; 'caseSensitive' cases use diacriticInsensitive only; 'exact' cases use no options.",
+    "note": "Expectations are independently authored from the pinned cmark-gfm/#15 behaviour, not captured test output. If the worker's actual index disagrees, report the discrepancy with evidence instead of editing the numbers silently."
+  },
+  "cases": [
+    {
+      "id": "lantern-insensitive-total",
+      "query": "lantern",
+      "options": "default",
+      "expectedCount": 17,
+      "breakdown": {
+        "metadata leaf (title value + tags value)": 2,
+        "h1 'Lantern guide'": 1,
+        "paragraph 1 (plain + bold + inline code)": 3,
+        "paragraph 'Inline hidden: beforeafter lantern struck.'": 1,
+        "link paragraph (link label only, URL excluded)": 1,
+        "code block (three literal occurrences incl. comment text)": 3,
+        "table body cells ('Lantern', 'lantern in cell code')": 2,
+        "quoted paragraph": 1,
+        "list item + nested task item": 2,
+        "footnote definition paragraph": 1,
+        "image-only paragraph (alt excluded)": 0,
+        "html_block comment (leaf absent)": 0
+      }
+    },
+    { "id": "lantern-lowercase-sensitive", "query": "lantern", "options": "caseSensitive", "expectedCount": 13 },
+    { "id": "lantern-capitalised-sensitive", "query": "Lantern", "options": "caseSensitive", "expectedCount": 4 },
+    { "id": "hidden-block-comment", "query": "hidden lantern comment", "options": "default", "expectedCount": 0 },
+    { "id": "hidden-inline-comment", "query": "inside an inline comment", "options": "default", "expectedCount": 0 },
+    { "id": "inline-comment-removed-joins-text", "query": "beforeafter", "options": "default", "expectedCount": 1 },
+    { "id": "emphasis-markup-absent", "query": "**", "options": "exact", "expectedCount": 0 },
+    { "id": "strike-markup-absent", "query": "~~", "options": "exact", "expectedCount": 0 },
+    { "id": "fence-markup-absent", "query": "```", "options": "exact", "expectedCount": 0 },
+    { "id": "heading-markup-absent", "query": "# Lantern", "options": "default", "expectedCount": 0 },
+    { "id": "link-url-not-text", "query": "example.com", "options": "default", "expectedCount": 0 },
+    { "id": "image-source-not-text", "query": "lantern.png", "options": "default", "expectedCount": 0 },
+    { "id": "image-alt-excluded", "query": "alt text", "options": "default", "expectedCount": 0 },
+    { "id": "table-pipe-markup-absent", "query": "| Lantern", "options": "default", "expectedCount": 0 },
+    { "id": "table-cell-code", "query": "in cell code", "options": "default", "expectedCount": 1 },
+    { "id": "code-block-literal", "query": "let lantern = \"lantern\"", "options": "exact", "expectedCount": 1 },
+    { "id": "softbreak-renders-as-space", "query": "soft break", "options": "default", "expectedCount": 1 },
+    { "id": "softbreak-source-newline-absent", "query": "soft\nbreak", "options": "default", "expectedCount": 0 },
+    { "id": "diacritic-insensitive-default", "query": "cafe", "options": "default", "expectedCount": 2 },
+    { "id": "diacritic-exact", "query": "café", "options": "exact", "expectedCount": 1 },
+    { "id": "metadata-key", "query": "tags", "options": "default", "expectedCount": 1 },
+    { "id": "metadata-row-separator-not-text", "query": "tags: lantern", "options": "default", "expectedCount": 0 },
+    { "id": "metadata-cross-row-absent", "query": "Lantern\ntags", "options": "default", "expectedCount": 0 },
+    { "id": "footnote-return-glyph-is-rendered", "query": "↩", "options": "exact", "expectedCount": 1 },
+    { "id": "unique-sentinel", "query": "ZEBRACORN", "options": "default", "expectedCount": 1 },
+    { "id": "empty-query", "query": "", "options": "default", "expectedCount": 0 },
+    { "id": "whitespace-only-query", "query": "   ", "options": "default", "expectedCount": 0 },
+    { "id": "no-results", "query": "quokka", "options": "default", "expectedCount": 0 },
+    { "id": "non-overlapping-scan", "query": "aa", "options": "default", "expectedCount": 2, "note": "'aaaa' yields two non-overlapping matches, not three." }
+  ],
+  "navigation": {
+    "query": "lantern",
+    "options": "default",
+    "description": "Cursor arithmetic over the 17 default matches, zero-based, document order.",
+    "steps": [
+      { "from": null, "direction": "next", "wrap": true, "expected": 0 },
+      { "from": 0, "direction": "next", "wrap": true, "expected": 1 },
+      { "from": 16, "direction": "next", "wrap": true, "expected": 0, "wrapped": true },
+      { "from": 0, "direction": "previous", "wrap": true, "expected": 16, "wrapped": true },
+      { "from": null, "direction": "previous", "wrap": true, "expected": 16 },
+      { "from": 16, "direction": "next", "wrap": false, "expected": null },
+      { "from": 3, "direction": "previous", "wrap": false, "expected": 2 }
+    ],
+    "orderInvariants": [
+      "match 0 and 1 lie in the metadata leaf (leafID 0); match 2 lies in the H1",
+      "the two table-cell matches are contiguous and appear after the code block matches and before the quoted paragraph match",
+      "the final match (index 16) lies in the footnote definition paragraph"
+    ]
+  }
+}

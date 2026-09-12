@@ -41,6 +41,19 @@ struct DocumentReaderView: View {
     /// revision waits for a safe boundary instead of replacing the host mid-gesture.
     @State private var isScrolling = false
     @State private var interactiveWork = 0
+    @State private var findIndex: DocumentFindIndex?
+    @State private var findMatches: [DocumentFindMatch] = []
+    @State private var findCursor: Int?
+    @State private var findSerial = 0
+    @State private var initialFindSearch = true
+    @FocusState private var findFieldFocused: Bool
+
+    private var currentFindHighlight: DocumentFindHighlight? {
+        guard session.isFindPresented, let cursor = findCursor,
+              findMatches.indices.contains(cursor) else { return nil }
+        let match = findMatches[cursor]
+        return DocumentFindHighlight(leafID: match.leafID, range: match.range, serial: findSerial)
+    }
 
     init(
         prepared: PreparedReadingDocument,
@@ -102,6 +115,18 @@ struct DocumentReaderView: View {
                 }
             }
         }
+        .safeAreaInset(edge: .top) {
+            if session.isFindPresented {
+                DocumentFindBar(query: Binding(get: { session.findQuery }, set: { session.findQuery = $0 }),
+                                count: findMatches.count, cursor: findCursor, focused: $findFieldFocused,
+                                step: { stepFind(reverse: $0) }, dismiss: dismissFind)
+            }
+        }
+        .environment(\.documentFindHighlight, currentFindHighlight)
+        .task(id: FindSearchRequest(presented: session.isFindPresented, query: session.findQuery)) {
+            await runFind()
+        }
+        .onChange(of: session.findCommand) { consumeFindCommand() }
         .environment(imageStore)
         .environment(\.documentNavigationBridge, navigationBridge)
         .environment(\.documentNavigationGeneration, documentGeneration)
@@ -139,6 +164,7 @@ struct DocumentReaderView: View {
         .onChange(of: session.readingPosition) { consumeReadingPosition() }
         .onAppear {
             bindTraversal()
+            consumeFindCommand()
             consumeSectionRequest()
             consumeReadingPosition()
         }
@@ -287,7 +313,11 @@ struct DocumentReaderView: View {
 
         scrollMetrics = newMetrics
 
-        if viewportChanged, let generation = resizeRestoration.schedule() {
+        if viewportChanged, currentFindHighlight != nil {
+            // The find bar changes the viewport too. Reacquire after that layout
+            // instead of cancelling the initial reveal and restoring the old spot.
+            revealCurrentFindMatch()
+        } else if viewportChanged, let generation = resizeRestoration.schedule() {
             syncReadingActivity()
             Task { @MainActor in
                 try? await Task.sleep(for: Self.resizeRestorationDelay)
@@ -356,6 +386,118 @@ struct DocumentReaderView: View {
         guard let request = session.takeSection(for: prepared.id) else { return }
         followSection(.resolve(fragment: request.fragment, anchors: renderedDocument.anchorTargets),
                       keyboardDriven: false)
+    }
+
+    // MARK: Find
+
+    private struct FindSearchRequest: Equatable {
+        let presented: Bool
+        let query: String
+    }
+
+    private func consumeFindCommand() {
+        guard let command = session.takeFindCommand() else { return }
+        if command.kind == .show || !session.isFindPresented {
+            session.isFindPresented = true
+            findFieldFocused = true
+        } else {
+            stepFind(reverse: command.kind == .previous, beepIfEmpty: true)
+        }
+    }
+
+    private func runFind() async {
+        findMatches = []
+        findCursor = nil
+        // An inactive find task must not cancel ordinary opening/navigation.
+        guard session.isFindPresented else { return }
+        traversalTask?.cancel()
+        navigationGeneration += 1
+        navigationBridge.cancel()
+        let query = session.findQuery
+        let document = renderedDocument
+        let existing = findIndex
+        let anchor = session.readingPosition?.anchor ?? readingAnchor
+        let search = Task.detached {
+            let index = existing ?? DocumentFindIndex(document)
+            return (index, index.matches(for: query))
+        }
+        let (index, matches) = await withTaskCancellationHandler {
+            await search.value
+        } onCancel: {
+            search.cancel()
+        }
+        guard !Task.isCancelled, session.isFindPresented, session.findQuery == query else { return }
+        findIndex = index
+        findMatches = matches
+        var leaf: Int?
+        if initialFindSearch, case .block(let id, _) = anchor { leaf = id }
+        initialFindSearch = false
+        findCursor = DocumentFindIndex.initialIndex(in: matches, atOrAfterLeaf: leaf)
+        findSerial += 1
+        if matches.isEmpty, !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            AccessibilityNotification.Announcement("Not found").post()
+        }
+        revealCurrentFindMatch()
+    }
+
+    private func stepFind(reverse: Bool, beepIfEmpty: Bool = false) {
+        guard let step = DocumentFindIndex.step(from: findCursor, count: findMatches.count,
+                                                reverse: reverse) else {
+            if beepIfEmpty { NSSound.beep() }
+            return
+        }
+        findCursor = step.index
+        findSerial += 1
+        revealCurrentFindMatch()
+    }
+
+    private func dismissFind() {
+        session.isFindPresented = false
+        findMatches = []
+        findCursor = nil
+        findFieldFocused = false
+        traversalTask?.cancel()
+        navigationGeneration += 1
+        navigationBridge.cancel()
+        keyboardFocus = .reader
+    }
+
+    private func revealCurrentFindMatch() {
+        guard let highlight = currentFindHighlight else { return }
+        traversalTask?.cancel()
+        navigationGeneration += 1
+        navigationBridge.cancel()
+        resizeRestoration.invalidate()
+        let generation = navigationGeneration
+        let request = navigationBridge.request
+        beginInteraction()
+        traversalTask = Task { @MainActor in
+            defer { endInteraction() }
+            // Allow the bar inset and new highlight to enter layout first.
+            await Task.yield()
+            var stablePasses = 0
+            for _ in 0..<12 {
+                guard !Task.isCancelled, generation == navigationGeneration,
+                      request == navigationBridge.request else { return }
+                if let frame = blockFrames[highlight.leafID] {
+                    if navigationBridge.revealText(highlight.leafID, utf16Range: highlight.range) {
+                        stablePasses += 1
+                    } else {
+                        let offset = frame.height > scrollMetrics.viewportSize.height ? frame.minY
+                            : frame.midY - scrollMetrics.viewportSize.height / 2
+                        scrollPosition.scrollTo(y: scrollMetrics.clampedVerticalOffset(offset))
+                        stablePasses += 1
+                    }
+                    if stablePasses >= 3 { break }
+                } else {
+                    stablePasses = 0
+                    scrollPosition.scrollTo(id: lazyRoot(for: highlight.leafID), anchor: .center)
+                }
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            guard !Task.isCancelled, generation == navigationGeneration else { return }
+            updateReadingAnchor()
+        }
     }
 
     // MARK: External refresh
