@@ -5,9 +5,7 @@ nonisolated enum LocalFileDisposition: Equatable {
     case markdown, external, reveal
 
     static func resolve(_ url: URL) throws -> Self {
-        guard case .readable(let directory) = LocalFileAccessProbe.state(of: url) else {
-            throw MarkdownDocument.Failure.notAReadableFile
-        }
+        let directory = try DocumentOpenFailure.requireAccessible(url)
         let resolved = url.standardizedFileURL.resolvingSymlinksInPath()
         let values = try resolved.resourceValues(forKeys: [.isApplicationKey, .isExecutableKey])
         guard let application = values.isApplication, let executable = values.isExecutable else {

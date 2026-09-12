@@ -3,6 +3,8 @@ import AppKit
 /// Captures destinations before panels/awaits and stages before native ownership changes.
 final class DocumentOpeningCoordinator {
     weak var documentController: MarkdownDocumentController?
+    /// Tests record native presentation intent without constructing a window/alert.
+    var errorPresenter: ((String, UUID, Bool) -> Void)?
     private(set) var windows: [UUID: DocumentWindowController] = [:]
     private var firstReader = DocumentReadSession()
     private var reservations = NativeDocumentReservations()
@@ -83,6 +85,16 @@ final class DocumentOpeningCoordinator {
     func open(_ url: URL, fragment: String? = nil, in session: DocumentReadSession,
               token: Int? = nil, placement: DocumentWindowPlacement? = nil) async throws -> (ReadOnlyMarkdownNSDocument, Bool) {
         let serial = token ?? session.begin()
+        do {
+            return try await performOpen(url, fragment: fragment, in: session, token: serial, placement: placement)
+        } catch {
+            guard !isTerminating, session.accepts(serial), !Task.isCancelled else { throw CancellationError() }
+            throw DocumentOpenFailure.completionError(error, at: url)
+        }
+    }
+
+    private func performOpen(_ url: URL, fragment: String?, in session: DocumentReadSession,
+                             token serial: Int, placement: DocumentWindowPlacement?) async throws -> (ReadOnlyMarkdownNSDocument, Bool) {
         defer {
             if session.generation == serial || !session.isOpen {
                 reservedSessions.removeValue(forKey: session.id)
@@ -105,14 +117,7 @@ final class DocumentOpeningCoordinator {
             }
         }
         try await Task.detached(priority: .userInitiated) {
-            guard url.isFileURL, MarkdownFileType.claimsFile(at: url),
-                  LocalFileAccessProbe.state(of: url) == .readable(isDirectory: false) else {
-                throw MarkdownDocument.Failure.notAReadableFile
-            }
-            let values = try key.resourceValues(forKeys: [.isApplicationKey, .isExecutableKey])
-            guard values.isApplication == false, values.isExecutable == false else {
-                throw MarkdownDocument.Failure.notAReadableFile
-            }
+            try DocumentOpenFailure.validateMarkdown(url)
         }.value
         guard !isTerminating, session.accepts(serial) else { throw CancellationError() }
         let (document, alreadyOpen) = try await documentController.acquireWithoutDisplaying(key)
@@ -165,28 +170,55 @@ final class DocumentOpeningCoordinator {
         let url: URL
         do { url = try MarkdownDropRouting.singleFile(from: urls) }
         catch {
-            report(error.localizedDescription, in: session)
             cancelReservation(session, token: token)
+            report(error.localizedDescription, in: session)
             return
         }
         session.task = Task {
             defer { session.finish(token) }
             do { _ = try await open(url, in: session, token: token) }
             catch is CancellationError {} catch {
-                if session.accepts(token) { report(Self.failureMessage(url), in: session) }
+                report(error, at: url, in: session, token: token)
             }
         }
     }
 
+    func report(_ error: Error, at url: URL, in session: DocumentReadSession, token: Int,
+                presentation: UUID? = nil) {
+        guard session.accepts(token), !Task.isCancelled,
+              presentation == nil || session.prepared?.id == presentation,
+              let failure = DocumentOpenFailure.normalized(error, at: url) else { return }
+        report(failure.message, in: session)
+    }
+
     func report(_ message: String, in session: DocumentReadSession) {
-        guard !isTerminating, session.isOpen else { return }
-        if session.prepared != nil { session.notice = message }
-        else {
+        let token = session.generation
+        let presentation = session.prepared?.id
+        guard canReport(in: session, token: token, presentation: presentation) else { return }
+        if let errorPresenter {
+            errorPresenter(message, session.id, presentation != nil)
+            return
+        }
+        // Wait for an existing picker/sheet without redirecting to the key window.
+        // Recheck captured authority after every suspension before showing anything.
+        Task { @MainActor [weak self, weak session] in
+            guard let self, let session else { return }
+            while self.windows[session.id]?.window?.attachedSheet != nil {
+                guard self.canReport(in: session, token: token, presentation: presentation) else { return }
+                do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
+            }
+            guard self.canReport(in: session, token: token, presentation: presentation) else { return }
             let alert = NSAlert()
             alert.messageText = "Couldn’t Open Document"
             alert.informativeText = message
-            alert.runModal()
+            if let window = self.windows[session.id]?.window {
+                alert.beginSheetModal(for: window, completionHandler: nil)
+            } else { alert.runModal() }
         }
+    }
+
+    func canReport(in session: DocumentReadSession, token: Int, presentation: UUID?) -> Bool {
+        !isTerminating && session.accepts(token) && session.prepared?.id == presentation
     }
 
     /// Routes this viewer's accepted captures into the private history.
@@ -258,9 +290,5 @@ final class DocumentOpeningCoordinator {
         guard let url = document.fileURL,
               reservations.canClose(url, viewerCount: document.windowControllers.count) else { return }
         document.close()
-    }
-
-    static func failureMessage(_ url: URL) -> String {
-        "Couldn’t read ‘\(url.path)’. Check that the file hasn’t moved and its volume is connected. Check file permissions in Finder and NeoMD’s access in System Settings > Privacy & Security, then try opening it again."
     }
 }

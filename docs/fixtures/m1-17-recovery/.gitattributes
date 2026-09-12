@@ -1,0 +1,7 @@
+# Byte-level recovery fixtures: retain authored BOM, invalid bytes and physical line endings.
+bom-only.md -text
+whitespace-only.md -text
+utf8-emoji-endings.md -text
+invalid-utf8.md -text
+truncated-utf8.md -text
+binary-junk.md binary

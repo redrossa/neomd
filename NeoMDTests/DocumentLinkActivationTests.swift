@@ -184,6 +184,8 @@ import Testing
     @Test func failuresReleaseReservationsAndOnlyNotifyLiveSource() async {
         for phase in 0..<4 {
             let coordinator = DocumentOpeningCoordinator()
+            var reports: [(String, UUID, Bool)] = []
+            coordinator.errorPresenter = { reports.append(($0, $1, $2)) }
             let a = source()
             let c = source()
             let original = a.prepared!.id
@@ -204,10 +206,13 @@ import Testing
             #expect(commits == 0 && coordinator.windows.isEmpty && coordinator.reservedSessions.isEmpty)
             #expect(c.notice == "source-notice")
             if phase < 2 {
-                #expect(a.notice?.contains("Check file permissions") == true)
+                #expect(reports.count == 1 && reports.first?.1 == a.id && reports.first?.2 == true)
+                #expect(reports.first?.0.contains(a.prepared!.fileURL.path) == true)
+                #expect(a.notice == "source-notice")
                 #expect(a.prepared?.id == original && a.section == section && a.generation == generation)
-            } else if phase == 2 { #expect(a.notice == "source-notice") }
-            else { #expect(a.notice == nil) }
+            } else if phase == 2 {
+                #expect(a.notice == "source-notice" && reports.isEmpty)
+            } else { #expect(a.notice == nil && reports.isEmpty) }
         }
     }
 
