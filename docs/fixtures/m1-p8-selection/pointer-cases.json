@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "status": "Authored value oracles; native interactions DEFERRED/UNRUN",
+  "geometry": [
+    {
+      "id": "inflated-origin-visibleRect-must-not-win-neighbour",
+      "point": [40, 65],
+      "candidates": [
+        {"key": [0, 0], "order": 0, "bounds": [0, 0, 100, 20], "visibleRect": [0, 0, 100, 100], "clip": [0, 0, 200, 200]},
+        {"key": [1, 0], "order": 1, "bounds": [0, 50, 100, 20], "visibleRect": [0, 0, 100, 100], "clip": [0, 0, 200, 200]}
+      ],
+      "expectedKey": [1, 0],
+      "oldDistancesSquared": [0, 0]
+    },
+    {
+      "id": "same-row-metadata-right-part",
+      "point": [180, 15],
+      "candidates": [
+        {"key": [0, 0], "order": 0, "bounds": [0, 0, 100, 30], "visibleRect": [0, 0, 300, 30], "clip": [0, 0, 300, 100]},
+        {"key": [0, 1], "order": 1, "bounds": [120, 0, 180, 30], "visibleRect": [0, 0, 300, 30], "clip": [0, 0, 300, 100]}
+      ],
+      "expectedKey": [0, 1]
+    },
+    {
+      "id": "fully-clipped-table-cell-is-ineligible",
+      "point": [90, 20],
+      "candidates": [
+        {"key": [8, 0], "order": 0, "bounds": [0, 0, 100, 30], "visibleRect": [0, 0, 300, 30], "clip": [0, 0, 100, 100]},
+        {"key": [9, 0], "order": 1, "bounds": [120, 0, 100, 30], "visibleRect": [0, 0, 300, 30], "clip": [0, 0, 100, 100]}
+      ],
+      "expectedKey": [8, 0]
+    },
+    {
+      "id": "gap-tie-independent-of-input-order",
+      "point": [50, 35],
+      "candidates": [
+        {"key": [1, 0], "order": 1, "bounds": [0, 50, 100, 20], "visibleRect": [0, 50, 100, 20], "clip": [0, 0, 200, 200]},
+        {"key": [0, 0], "order": 0, "bounds": [0, 0, 100, 20], "visibleRect": [0, 0, 100, 20], "clip": [0, 0, 200, 200]}
+      ],
+      "expectedKey": [0, 0],
+      "permutationsMustAgree": true
+    }
+  ],
+  "selection": [
+    {"id": "forward-drag", "fragments": ["Alpha bravo", "Delta echo"], "anchor": [0, 6], "extent": [1, 5], "expected": "bravo\n\nDelta"},
+    {"id": "reverse-drag", "fragments": ["Alpha bravo", "Delta echo"], "anchor": [1, 5], "extent": [0, 6], "expected": "bravo\n\nDelta"},
+    {"id": "shift-backward-fixed-anchor", "fragments": ["Alpha bravo", "Delta echo"], "anchor": [1, 5], "extent": [0, 0], "expected": "Alpha bravo\n\nDelta"}
+  ],
+  "gestureRequirements": [
+    {"id": "below-threshold-link-up", "down": [0, 0], "samples": [[2, 0]], "up": [2, 0], "expectedLinkDispatches": 1},
+    {"id": "threshold-sticky-after-return", "down": [0, 0], "samples": [[4, 0], [0, 0]], "up": [0, 0], "expectedLinkDispatches": 0},
+    {"id": "shift-click-link", "shift": true, "expectedLinkDispatches": 0, "preserveAnchor": true},
+    {"id": "command-click-link", "commandAtDown": true, "commandAtUp": false, "expectedActivation": "additionalReader", "expectedLinkDispatches": 1},
+    {"id": "cancel-before-up", "expectedLinkDispatches": 0, "expectedBalancedFinishCount": 1},
+    {"id": "origin-unmount", "ownerCurrent": true, "windowCurrent": true, "expectedGestureContinues": true},
+    {"id": "stale-operation-finish", "expectedSuccessorStillActive": true},
+    {"id": "mouse-up-final-target", "expectedExtentUsesUpTarget": true},
+    {"id": "word-reversal", "originWordRange": [6, 5], "extentBeforeOrigin": 0, "expectedOriginUpperBoundary": 11}
+  ]
+}

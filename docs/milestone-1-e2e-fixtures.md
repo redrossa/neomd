@@ -2,6 +2,14 @@
 
 #15 is completed via PR #54; its native/visual/AX criteria remain unverified. The adopted [dependency plan](milestone-1-dependency-plan.md) governs parallel #16–24 triage/implementation, documented holds and narrow catalog integration leases. #14 remains deferred/open. No reviewer or UI/E2E/manual scripted interactions, prototypes or event/host substitutes. Later gates are Debug build and inspected relevant non-interaction units only. Triage stages unique per-story entries with hashes; do not replace this catalog from stale snapshots. Preserve all entries and #36/#38 failures/deferrals. Combined business acceptance remains user-owned. Historical authority statements below are superseded for scheduling, not rewritten as passing evidence.
 
+## M1-P8 / #64 — continuous pointer selection and active highlights
+
+[Issue #64](https://github.com/redrossa/neomd/issues/64) · [validation and exact non-interaction allowlist](m1-p8-validation.md) · [inert geometry/gesture packet and deferred human matrix](fixtures/m1-p8-selection/README-fixture.md).
+
+Triage **ACCEPTED implementation readiness** at `1738b1d2e9e7f74411f0d63e4aab401c1522109b`, verified `openai-codex/gpt-6-astra/high`. This priority bug repairs user-observed #16 behavior; it does not erase #16's historical evidence or claim a native pass. The owned leaf already has a custom drag/up tracking loop: `super.mouseDown` consumption is not the normal-path cause at this base. Source identifies unsafe unbounded visibleRect ranking and dictionary-order ties as a concrete cross-leaf targeting defect; actual user-event causality remains unconfirmed. Scope: clipped deterministic target selection, owner-scoped existing tracking lifetime/final endpoint, and shared active selection appearance across independent native leaves. Preserve Shift/Select All/plain Copy, #21 find temporary attributes, #22 reflow re-derivation, lazy roots/local overflow, quiet focus, context menus and Command-click. No renderer rewrite.
+
+Worker evidence: **UNRUN at triage**. Gates remain Debug build plus inspected non-interaction units only; record exact head, commands, nonzero counts/failures/skips and artifact corrections. No reviewer, native event/host substitutes or clipboard-mutating tests. Actual pointer/keyboard/clipboard/menu/link/visual/AX/lazy/reflow coverage is **DEFERRED/UNRUN**, not passed by model/API evidence. Preserve #14 deferred/open and #36/#38 failures/deferrals. User retains native testing and final milestone business acceptance.
+
 ## M1-18 / #18 — long documents stay responsive
 
 [Issue #18](https://github.com/redrossa/neomd/issues/18) · [validation/allowlist](m1-18-validation.md) · [small inert fixtures and deterministic generator recipe](fixtures/m1-18-performance/README-fixture.md).
