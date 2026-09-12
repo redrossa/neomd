@@ -79,6 +79,23 @@ nonisolated struct DocumentSelectionState: Sendable {
         return projection.slices(for: selection).first { $0.key == registration.key }?.range
     }
 
+    mutating func replaceProjection(_ next: DocumentTextProjection) {
+        guard next.presentation == scope.presentation else { return }
+        projection = next
+        if let selection, next.fragment(for: selection.anchor.key) == nil || next.fragment(for: selection.extent.key) == nil {
+            self.selection = nil
+        }
+    }
+
+    mutating func replaceDisplay(_ fragment: DocumentTextProjection.Fragment, scope: Scope, remap: (Int) -> Int) {
+        guard scope == self.scope, projection.fragment(for: fragment.key) != nil else { return }
+        func endpoint(_ endpoint: DocumentTextProjection.Endpoint) -> DocumentTextProjection.Endpoint {
+            endpoint.key == fragment.key ? .init(key: endpoint.key, offset: remap(endpoint.offset)) : endpoint
+        }
+        selection = selection.map { .init(anchor: endpoint($0.anchor), extent: endpoint($0.extent)) }
+        projection = projection.replacing(fragment)
+    }
+
     /// The mounted native adapter uses MarkdownCellDisplayProjection to remap an
     /// endpoint before publishing a genuine content replacement. Decoration-only
     /// changes have no reason to call this method.
@@ -87,12 +104,7 @@ nonisolated struct DocumentSelectionState: Sendable {
                           registration: Registration,
                           remap: (Int) -> Int) -> Bool {
         guard accepts(registration), registration.key == fragment.key else { return false }
-        func endpoint(_ endpoint: DocumentTextProjection.Endpoint) -> DocumentTextProjection.Endpoint {
-            guard endpoint.key == fragment.key else { return endpoint }
-            return .init(key: endpoint.key, offset: remap(endpoint.offset))
-        }
-        selection = selection.map { .init(anchor: endpoint($0.anchor), extent: endpoint($0.extent)) }
-        projection = projection.replacing(fragment)
+        replaceDisplay(fragment, scope: scope, remap: remap)
         return true
     }
 }

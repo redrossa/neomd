@@ -401,11 +401,19 @@ nonisolated final class CMarkBlockAdapter {
                 if let childID = ids[child] { parents[childID] = ids[index] }
             }
         }
+        var lists: [OpaquePointer: Int] = [:]
+        var listIDs: [Int: Int] = [:]
+        for (id, index) in order.enumerated() {
+            guard case .listItem = drafts[index].kind, let node = drafts[index].node,
+                  let list = cmark_node_parent(node) else { continue }
+            if lists[list] == nil { lists[list] = id }
+            listIDs[id] = lists[list]
+        }
         let nodes = order.enumerated().map { id, index in
             let draft = drafts[index]
             return MarkdownBlock(id: id, kind: draft.kind, text: draft.text,
                 childIDs: draft.children.compactMap { ids[$0] }, parentID: parents[id],
-                task: draft.task, anchors: draft.anchors)
+                task: draft.task, anchors: draft.anchors, listID: listIDs[id])
         }
         return MarkdownRenderDocument(nodes: nodes, rootIDs: roots.compactMap { ids[$0] })
     }

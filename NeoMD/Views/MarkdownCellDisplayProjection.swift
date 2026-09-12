@@ -1,9 +1,9 @@
 import Foundation
 
 /// Source/native UTF-16 correspondence for one cell, not a document selection owner.
-struct MarkdownCellDisplayProjection {
-    enum Kind: Equatable { case text, attachment, fallback }
-    struct Segment: Equatable {
+nonisolated struct MarkdownCellDisplayProjection {
+    enum Kind: Equatable, Sendable { case text, attachment, fallback }
+    struct Segment: Equatable, Sendable {
         let source: NSRange
         let display: NSRange
         let occurrence: String?

@@ -10,6 +10,7 @@ struct MarkdownContainerView: View {
     let keyboardFocus: FocusState<DocumentReaderFocusTarget?>.Binding
     let pageReader: (DocumentReaderPageDirection) -> Void
 
+    @Environment(\.documentSelection) private var selection
     @State private var decoration = MarkdownQuoteDecoration()
     @Environment(\.documentNavigationBridge) private var navigationBridge
     @Environment(\.documentNavigationGeneration) private var documentGeneration
@@ -20,6 +21,11 @@ struct MarkdownContainerView: View {
             ForEach(geometry.viewEntries, id: \.id) { entry in
                 let node = document[entry.id]
                 nodeView(node, entry: entry, budget: geometry.budget)
+                    .background {
+                        if node.listID == node.id, let store = selection?.accessibility {
+                            DocumentListAccessibilityHost(store: store, list: node.id)
+                        }
+                    }
                     .background(alignment: .topLeading) {
                         if !node.isLeaf, !node.anchors.isEmpty, let navigationBridge {
                             DocumentNavigationMarker(bridge: navigationBridge, id: node.id,
@@ -49,7 +55,9 @@ struct MarkdownContainerView: View {
             case .alert(let alert):
                 HStack(alignment: .firstTextBaseline, spacing: 6 * theme.scale) {
                     Image(systemName: alert.symbol).accessibilityHidden(true)
-                    Text(alert.label).fontWeight(.semibold)
+                    MarkdownLinkedImageText(input: .init(text: AttributedString(alert.label), states: [:], dark: false,
+                        width: entry.width, headingLevel: nil, scale: theme.scale))
+                        .environment(\.documentLeafID, node.id)
                 }
                 .font(theme.font())
                 .foregroundStyle(ReaderTheme.alertColor(alert))
@@ -61,11 +69,11 @@ struct MarkdownContainerView: View {
                 .accessibilityIdentifier("MarkdownAlert-\(alert.rawValue)-\(node.id)")
             case .blockQuote:
                 Group {
-                    if let caption = entry.caption { depthLabel(caption).padding(.leading, 4) }
+                    if let caption = entry.caption { depthLabel(caption, id: node.id).padding(.leading, 4) }
                     else { Color.clear.frame(height: 0) }
                 }
-                .allowsHitTesting(false)
-                .accessibilityElement(children: .ignore)
+                .allowsHitTesting(entry.caption != nil)
+                .accessibilityElement(children: .contain)
                 .accessibilityLabel(entry.caption ?? "Block quote")
                 .accessibilityHint(entry.compressed ? "All nested quotes and text are retained in source order. Indentation is compressed to preserve readable text width." : "")
                 .accessibilityIdentifier("MarkdownBlockQuote-\(node.id)")
@@ -74,7 +82,7 @@ struct MarkdownContainerView: View {
                 if let caption = entry.caption {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         MarkdownListMarker(block: node, marker: marker, scale: theme.scale).frame(width: 28 * theme.scale, alignment: .trailing)
-                        depthLabel(caption)
+                        depthLabel(caption, id: node.id)
                     }
                 } else {
                     MarkdownListMarker(block: node, marker: marker, scale: theme.scale).frame(width: 28 * theme.scale, alignment: .trailing)
@@ -82,7 +90,7 @@ struct MarkdownContainerView: View {
             case .footnote(let ordinal):
                 HStack(alignment: .top, spacing: 8) {
                     Text("\(ordinal).").font(theme.font()).accessibilityHidden(true).frame(width: 28 * theme.scale, alignment: .trailing)
-                    if let caption = entry.caption { depthLabel(caption) }
+                    if let caption = entry.caption { depthLabel(caption, id: node.id) }
                 }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(entry.caption ?? "Footnote \(ordinal)")
@@ -93,8 +101,13 @@ struct MarkdownContainerView: View {
         }
     }
 
-    private func depthLabel(_ caption: String) -> some View {
-        Text(caption).font(.system(size: NSFont.preferredFont(forTextStyle: .caption1).pointSize * theme.scale)).foregroundStyle(.secondary)
+    private func depthLabel(_ caption: String, id: Int) -> some View {
+        MarkdownLinkedImageText(input: .init(text: AttributedString(caption), states: [:], dark: false,
+            width: width, headingLevel: nil, scale: theme.scale))
+            .environment(\.documentLeafID, id)
+            .environment(\.documentTextPart, -10)
+            .environment(\.documentFindHighlight, nil)
+            .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityHint("Indentation is compressed to preserve readable text width. All content is retained in source order.")
@@ -116,6 +129,7 @@ struct MarkdownListMarker: View {
                     .foregroundStyle(.primary)
                     .accessibilityLabel(task == .complete ? "Completed task" : "Incomplete task")
                     .accessibilityIdentifier("MarkdownTaskMarker-\(block.id)")
+                    .accessibilityHidden(true)
             }
         }
         .font(ReaderTheme(scale: scale).font())

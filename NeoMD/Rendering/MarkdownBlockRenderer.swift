@@ -79,10 +79,12 @@ nonisolated struct MarkdownBlock: Identifiable, Sendable {
     let parentID: Int?
     let task: MarkdownTaskState?
     let anchors: [String]
+    /// Final-arena first-item identity of the owning list, not a parser pointer.
+    let listID: Int?
 
     init(id: Int, kind: Kind, text: AttributedString,
          childIDs: [Int] = [], parentID: Int? = nil,
-         task: MarkdownTaskState? = nil, anchors: [String] = []) {
+         task: MarkdownTaskState? = nil, anchors: [String] = [], listID: Int? = nil) {
         self.id = id
         self.kind = kind
         self.text = text
@@ -90,6 +92,7 @@ nonisolated struct MarkdownBlock: Identifiable, Sendable {
         self.parentID = parentID
         self.task = task
         self.anchors = anchors
+        self.listID = listID
     }
 
     var isTable: Bool {

@@ -148,12 +148,10 @@ struct MarkdownBlockView: View {
             MarkdownImageParagraph(id: block.id, text: text, availableWidth: availableWidth,
                                    headingLevel: imageHeadingLevel, quoted: quoted, scale: theme.scale,
                                    tableCell: tableCell)
-        } else if tableCell != nil || MarkdownLinkedImageText.requiresNativeText(text) {
+        } else {
             MarkdownLinkedImageText(input: .init(text: text, states: [:], dark: colorScheme == .dark,
                 width: availableWidth, headingLevel: imageHeadingLevel, quoted: quoted, scale: theme.scale,
                 tableCell: tableCell))
-        } else {
-            Text(findHighlight?.applying(to: text, leafID: block.id) ?? text)
         }
     }
 
@@ -216,8 +214,9 @@ private struct MarkdownCodeBlockView: View {
         DocumentFocusEffect { inheritedEffectEnabled in
             ScrollView(.horizontal) {
                 let text = theme.presentationText(for: block.text)
-                Text(findHighlight?.applying(to: text, leafID: block.id) ?? text)
-                    .font(.system(size: NSFont.preferredFont(forTextStyle: .callout).pointSize * theme.scale, design: .monospaced))
+                MarkdownLinkedImageText(input: .init(text: text, states: [:], dark: false,
+                    width: codeWidth, headingLevel: nil, scale: theme.scale, code: true))
+                    .frame(width: codeWidth)
                     .fixedSize(horizontal: true, vertical: true)
                     .padding(12)
                     .environment(\.isFocusEffectEnabled, inheritedEffectEnabled)
@@ -262,6 +261,11 @@ private struct MarkdownCodeBlockView: View {
                 handleKeyPress(keyPress)
             }
         }
+    }
+
+    private var codeWidth: CGFloat {
+        let font = NSFont.monospacedSystemFont(ofSize: NSFont.preferredFont(forTextStyle: .callout).pointSize * theme.scale, weight: .regular)
+        return max(1, (String(block.text.characters) as NSString).size(withAttributes: [.font: font]).width + 1)
     }
 
     private func handleKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {

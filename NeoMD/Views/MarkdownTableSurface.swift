@@ -47,6 +47,7 @@ nonisolated struct MarkdownTableScrollCommand: Equatable, Sendable {
     var keyboardOpenURL: OpenURLAction?
     var pointerOpenURL: ((URL, DocumentLinkActivation) -> Void)?
     var findHighlight: DocumentFindHighlight? = nil
+    var selection: DocumentSelectionController? = nil
 }
 
 /// One table cell, hosted in its own native cell host.
@@ -71,6 +72,7 @@ struct MarkdownTableCellHost: View {
             .environment(\.documentNavigationBridge, environment.bridge)
             .environment(\.documentNavigationGeneration, environment.generation)
             .environment(\.documentFindHighlight, environment.findHighlight)
+            .environment(\.documentSelection, environment.selection)
             .environment(\.colorScheme, environment.colorScheme)
             .environment(\.isFocusEffectEnabled, environment.focusEffectEnabled)
             .environment(\.openURL, environment.openURL)

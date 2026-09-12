@@ -15,18 +15,21 @@ nonisolated struct DocumentTextProjection: Sendable {
         /// Native attachment positions participate in selection, but never invent alt
         /// text in Copy. Fallback labels are ordinary text, not attachments.
         var attachments: [NSRange] = []
+        var sourceSegments: [MarkdownCellDisplayProjection.Segment] = []
         /// Exact underlying content and structural context, without presentation IDs.
         let identity: Identity
         /// The separator *before* this fragment; ignored for the first fragment.
         var separator: String = "\n\n"
 
         init(key: Key, text: String, attachments: [NSRange] = [],
-             identity: Identity? = nil, separator: String = "\n\n") {
+             identity: Identity? = nil, separator: String = "\n\n",
+             sourceSegments: [MarkdownCellDisplayProjection.Segment] = []) {
             self.key = key
             self.text = text
             self.attachments = attachments
             self.identity = identity ?? Identity(source: text, role: "text", context: [])
             self.separator = separator
+            self.sourceSegments = sourceSegments
         }
 
         func copiedText(in range: NSRange) -> String {
@@ -164,6 +167,7 @@ nonisolated struct DocumentTextProjection: Sendable {
             let displayText: String
             let attachments: [NSRange]
             let offset: Int
+            let sourceOffset: Int?
             let previous: Identity?
             let next: Identity?
         }
@@ -178,6 +182,9 @@ nonisolated struct DocumentTextProjection: Sendable {
             return .init(identity: fragment.identity, displayText: fragment.text,
                          attachments: fragment.attachments,
                          offset: min(max(0, endpoint.offset), fragment.text.utf16.count),
+                         sourceOffset: fragment.sourceSegments.isEmpty ? nil : MarkdownCellDisplayProjection(
+                            source: fragment.identity.source, content: NSAttributedString(string: fragment.text),
+                            segments: fragment.sourceSegments).sourceRange(for: NSRange(location: endpoint.offset, length: 0)).location,
                          previous: index > 0 ? fragments[index - 1].identity : nil,
                          next: index + 1 < fragments.count ? fragments[index + 1].identity : nil)
         }
@@ -188,8 +195,9 @@ nonisolated struct DocumentTextProjection: Sendable {
     func resolve(_ descriptor: RefreshDescriptor) -> Selection? {
         func endpoint(_ boundary: RefreshDescriptor.Boundary) -> Endpoint? {
             var candidates = fragments.indices.filter {
-                fragments[$0].identity == boundary.identity && fragments[$0].text == boundary.displayText &&
-                    fragments[$0].attachments == boundary.attachments
+                fragments[$0].identity == boundary.identity &&
+                    ((fragments[$0].text == boundary.displayText && fragments[$0].attachments == boundary.attachments) ||
+                     (boundary.sourceOffset != nil && !fragments[$0].sourceSegments.isEmpty))
             }
             if candidates.count > 1 {
                 candidates = candidates.filter { index in
@@ -200,7 +208,13 @@ nonisolated struct DocumentTextProjection: Sendable {
             }
             guard candidates.count == 1, let index = candidates.first else { return nil }
             let fragment = fragments[index]
-            return Endpoint(key: fragment.key, offset: boundary.offset)
+            let offset: Int
+            if fragment.text != boundary.displayText, let sourceOffset = boundary.sourceOffset {
+                offset = MarkdownCellDisplayProjection(source: fragment.identity.source,
+                    content: NSAttributedString(string: fragment.text), segments: fragment.sourceSegments)
+                    .displayRange(for: NSRange(location: sourceOffset, length: 0)).location
+            } else { offset = boundary.offset }
+            return Endpoint(key: fragment.key, offset: offset)
         }
         guard let anchor = endpoint(descriptor.anchor), let extent = endpoint(descriptor.extent) else { return nil }
         return Selection(anchor: anchor, extent: extent)

@@ -39,20 +39,11 @@ struct MarkdownImageParagraph: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            if tableCell != nil || MarkdownLinkedImageText.requiresNativeText(text) {
+            if true {
                 MarkdownLinkedImageText(input: .init(text: text,
                     states: store.states.filter { urls.contains($0.key) }, dark: colorScheme == .dark,
                     width: availableWidth, headingLevel: headingLevel, quoted: quoted, scale: scale,
                     tableCell: tableCell))
-            } else if imageOnly {
-                composedText
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityAddTraits(.isImage)
-                    .accessibilityLabel(label)
-                    .accessibilityValue(status)
-                    .accessibilityIdentifier("MarkdownImageBlock-\(id)")
-            } else {
-                composedText
             }
             if urls.contains(where: { store.states[$0] == .unavailable(.inaccessible) }) {
                 Text("Check file permissions in Finder and NeoMD’s access in System Settings > Privacy & Security.")

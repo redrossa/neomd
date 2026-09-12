@@ -68,6 +68,18 @@ nonisolated struct DocumentFindCommand: Equatable, Sendable {
     var isFindPresented = false
     var findQuery = ""
     @ObservationIgnored private var findSerial = 0
+    @ObservationIgnored var selectionOwner: DocumentSelectionController?
+    @ObservationIgnored private var selectionCapture: (UUID, DocumentTextProjection.RefreshDescriptor?)?
+    @ObservationIgnored private var selectionTransfer: DocumentSelectionTransfer?
+
+    func recordSelection(_ descriptor: DocumentTextProjection.RefreshDescriptor?, presentation: UUID) {
+        guard isOpen, prepared?.id == presentation else { return }
+        selectionCapture = (presentation, descriptor)
+    }
+
+    func takeSelection(for presentation: UUID) -> DocumentTextProjection.RefreshDescriptor? {
+        selectionTransfer?.take(for: presentation)
+    }
 
     func requestFind(_ kind: DocumentFindCommand.Kind) {
         guard isOpen, prepared != nil else { return }
@@ -125,6 +137,9 @@ nonisolated struct DocumentFindCommand: Equatable, Sendable {
         refreshStatus = nil
         readingPosition = nil
         capture = nil
+        selectionCapture = nil
+        selectionTransfer = nil
+        selectionOwner = nil
         isFindPresented = false
         findQuery = ""
         findCommand = nil
@@ -189,6 +204,11 @@ nonisolated struct DocumentFindCommand: Equatable, Sendable {
               ticket.generation == generation, prepared?.id == ticket.presentation,
               task == nil, section == nil, !isUserBusy else { return false }
         restorationSerial += 1
+        if let capture = selectionCapture, capture.0 == ticket.presentation {
+            selectionTransfer = DocumentSelectionTransfer(presentation: input.id, descriptor: capture.1)
+        } else { selectionTransfer = nil }
+        selectionCapture = nil
+        selectionOwner = nil
         prepared = input
         refreshStatus = nil
         capture = nil
