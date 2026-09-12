@@ -16,6 +16,7 @@ struct DocumentReaderView: View {
     let openingCoordinator: DocumentOpeningCoordinator
     let minimumSize: CGSize
     private let readingSize: ReadingSizePreference
+    private let restoresInitialFindPosition: Bool
     @State private var sizeReflow: ReadingSizeReflow
     private var appliedSize: ReadingSize { sizeReflow.applied }
     @State private var sizeRestoration = false
@@ -71,6 +72,7 @@ struct DocumentReaderView: View {
         self.session = session
         self.openingCoordinator = openingCoordinator
         self.minimumSize = minimumSize
+        restoresInitialFindPosition = session.isFindPresented
         let preference = openingCoordinator.readingSize
         readingSize = preference
         var initialSize = preference.size
@@ -493,7 +495,7 @@ struct DocumentReaderView: View {
         findCursor = nil
         // An inactive find task must not cancel ordinary opening/navigation.
         guard session.isFindPresented else { return }
-        let preservesInitialPosition = initialFindSearch
+        let preservesInitialPosition = initialFindSearch && restoresInitialFindPosition
         beginInteraction(cancelRestoration: !preservesInitialPosition)
         defer { endInteraction() }
         traversalTask?.cancel()
@@ -600,7 +602,10 @@ struct DocumentReaderView: View {
     }
 
     private func beginInteraction(cancelRestoration: Bool = true) {
-        if cancelRestoration { session.cancelReadingPosition() }
+        if cancelRestoration {
+            session.cancelReadingPosition()
+            resizeRestoration.invalidate()
+        }
         interactiveWork += 1
         syncReadingActivity()
     }
