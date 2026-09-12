@@ -40,6 +40,7 @@ import SwiftUI
         guard let mount = mounts[key], mount.view === view else { return }
         state.unregister(mount.token)
         mounts.removeValue(forKey: key)
+        invalidateSelectionActivity()
     }
 
     func update(_ view: MarkdownLinkedImageTextView, key: Key, projection: MarkdownCellDisplayProjection,
@@ -50,9 +51,12 @@ import SwiftUI
         let fragment = DocumentTextProjection.Fragment(key: key, text: projection.content.string,
             attachments: projection.segments.filter { $0.kind == .attachment }.map(\.display),
             identity: old.identity, separator: old.separator, sourceSegments: projection.segments)
-        _ = state.replace(fragment, registration: mount.token) { offset in
+        let remap: (Int) -> Int = { offset in
             guard let previous else { return min(offset, projection.content.length) }
             return projection.remap(NSRange(location: offset, length: 0), from: previous).location
+        }
+        if state.replace(fragment, registration: mount.token, remap: remap) {
+            pointer?.remap(key: key, offset: remap)
         }
         sync()
     }
@@ -111,11 +115,13 @@ import SwiftUI
         pointer = .init(operation: operation, origin: event.locationInWindow, initial: initial,
                         extending: event.modifierFlags.contains(.shift), activation: activation, link: link)
         defer { finish(operation) }
-        while pointer?.isCurrent(operation: state.operation, ownerCurrent: !detached,
+        while state.operation == operation,
+              pointer?.isCurrent(operation: state.operation, ownerCurrent: !detached,
                 windowCurrent: window.isKeyWindow && window.isVisible && bridge?.owner?.window === window) == true {
             let next = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp],
                 until: Date(timeIntervalSinceNow: 0.04), inMode: .eventTracking, dequeue: true)
-            guard state.operation == operation else { break }
+            guard state.operation == operation, !detached, window.isKeyWindow, window.isVisible,
+                  bridge?.owner?.window === window else { break }
             let point = next?.locationInWindow ?? window.mouseLocationOutsideOfEventStream
             if pointer?.sample(point, operation: operation) == true { drag(at: point, window: window) }
             if next?.type == .leftMouseUp {
@@ -150,7 +156,9 @@ import SwiftUI
     private func clippedRect(_ view: MarkdownLinkedImageTextView, window: NSWindow) -> NSRect? {
         guard view.window === window, !view.isHiddenOrHasHiddenAncestor,
               registration(for: view) != nil, let viewport = bridge?.owner?.contentView,
-              viewport.window === window else { return nil }
+              viewport.window === window, view.isDescendant(of: viewport),
+              DocumentSelectionTargeting.valid(view.bounds),
+              DocumentSelectionTargeting.valid(view.visibleRect) else { return nil }
         var clips = [viewport.convert(viewport.bounds, to: nil)]
         var ancestor = view.superview
         while let current = ancestor {
@@ -279,9 +287,11 @@ import SwiftUI
             if fragment.text == text && fragment.sourceSegments == segments { continue }
             let next = DocumentTextProjection.Fragment(key: key, text: text,
                 attachments: segments.filter { $0.kind == .attachment }.map(\.display), identity: fragment.identity, separator: fragment.separator, sourceSegments: segments)
-            state.replaceDisplay(next, scope: state.scope) { offset in
+            let remap: (Int) -> Int = { offset in
                 previous.map { projection.remap(NSRange(location: offset, length: 0), from: $0).location } ?? min(offset, text.utf16.count)
             }
+            state.replaceDisplay(next, scope: state.scope, remap: remap)
+            pointer?.remap(key: key, offset: remap)
         }
         sync()
     }

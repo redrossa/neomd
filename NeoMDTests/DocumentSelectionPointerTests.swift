@@ -87,6 +87,11 @@ import Testing
         let finished = state.finishOperation(pointer.operation)
         #expect(finished)
         #expect(state.operation == nil)
+        var remapped = gesture(&state, range: NSRange(location: 6, length: 5))
+        remapped.remap(key: a) { $0 - 5 }
+        #expect(remapped.initial.anchor.offset == 1 && remapped.initial.extent.offset == 6)
+        remapped.remap(key: b) { _ in 99 }
+        #expect(remapped.initial.anchor.offset == 1 && remapped.initial.extent.offset == 6)
     }
 
     @Test func clickThresholdShiftCommandAndCancellationEffects() {

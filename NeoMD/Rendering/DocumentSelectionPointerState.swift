@@ -56,7 +56,7 @@ nonisolated enum DocumentSelectionTargeting {
 nonisolated struct DocumentSelectionPointerState {
     let operation: DocumentSelectionState.Operation
     let origin: CGPoint
-    let initial: DocumentTextProjection.Selection
+    private(set) var initial: DocumentTextProjection.Selection
     let extending: Bool
     let activation: DocumentLinkActivation
     let link: URL?
@@ -79,6 +79,13 @@ nonisolated struct DocumentSelectionPointerState {
         guard !finished, self.operation == operation else { return nil }
         finished = true
         return !cancelled && !moved && !extending ? link : nil
+    }
+
+    mutating func remap(key: DocumentTextProjection.Key, offset: (Int) -> Int) {
+        func endpoint(_ value: DocumentTextProjection.Endpoint) -> DocumentTextProjection.Endpoint {
+            value.key == key ? .init(key: key, offset: offset(value.offset)) : value
+        }
+        initial = .init(anchor: endpoint(initial.anchor), extent: endpoint(initial.extent))
     }
 
     func selection(key: DocumentTextProjection.Key, range: NSRange,
