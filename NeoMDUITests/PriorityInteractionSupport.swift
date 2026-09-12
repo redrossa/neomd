@@ -186,7 +186,7 @@ final class PriorityInteractionSupport {
         while !queue.isEmpty && result.count < 4096 {
             let current = queue.removeLast()
             result.append(current)
-            queue += attribute(current, kAXChildrenAttribute) as? [AXUIElement] ?? []
+            queue += (attribute(current, kAXChildrenAttribute) as? [AXUIElement] ?? []).reversed()
         }
         return result
     }
@@ -307,6 +307,12 @@ final class PriorityInteractionSupport {
 
     @discardableResult
     func assertSelection(_ a: Point, _ b: Point, fragments: [Fragment], window: Window) throws -> [String] {
+        let tree = descendants(window.ax)
+        let literalOrder = try fragments.map { fragment in
+            let native = try leaf(fragment.text, in: window)
+            return try XCTUnwrap(tree.firstIndex { CFEqual($0, native) })
+        }
+        XCTAssertEqual(literalOrder, literalOrder.sorted(), "Native AX leaves must retain independently authored metadata/table row-major order")
         let forward = a.fragment < b.fragment || (a.fragment == b.fragment && a.offset <= b.offset)
         let start = forward ? a : b, end = forward ? b : a
         var observed: [String] = []

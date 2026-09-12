@@ -212,12 +212,18 @@ final class PrioritySelectionUITests: XCTestCase {
         XCTAssertEqual(support.app.windows.count, count)
         try support.checkpoint(window, "ordinary-fragment")
         let additional = try support.endpoint("links", offset: 20, fragments: fragments, window: window)
-        let beforeSelection = try fragments.map { try support.selected(support.leaf($0.text, in: window)).1 }
+        func selectionSnapshot() throws -> [String] {
+            try fragments.map {
+                let (range, text) = try support.selected(support.leaf($0.text, in: window))
+                return "\(range):\(text.debugDescription)"
+            }
+        }
+        let beforeSelection = try selectionSnapshot()
         let beforeY = support.rect(try support.leaf(headingText, in: window)).minY
         let target = try support.coordinate(additional.screen, in: window)
         XCUIElement.perform(withKeyModifiers: [.command]) { target.click() }
         try await support.wait { support.app.windows.count == count + 1 }
-        XCTAssertEqual(try fragments.map { try support.selected(support.leaf($0.text, in: window)).1 }, beforeSelection)
+        XCTAssertEqual(try selectionSnapshot(), beforeSelection)
         XCTAssertEqual(support.rect(try support.leaf(headingText, in: window)).minY, beforeY, accuracy: 2)
         try support.checkpoint(window, "command-click-source-preserved")
         let added = try support.windows().filter { !CFEqual($0, window.ax) }
