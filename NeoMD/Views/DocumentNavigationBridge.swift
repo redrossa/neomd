@@ -178,6 +178,12 @@ final class DocumentNavigationBridge {
         guard generation == self.generation, isOwned(view),
               textParts.contains(where: { $0.key.leafID == id && $0.value.view === view }),
               view.window?.firstResponder === view, let traverse else { return false }
+        let parts = textParts.filter { $0.key.leafID == id && $0.value.generation == generation }
+            .sorted { $0.key.part < $1.key.part }
+        if let index = parts.firstIndex(where: { $0.value.view === view }) {
+            let next = index + (reverse ? -1 : 1)
+            if parts.indices.contains(next), focusText(id, part: parts[next].key.part) { return true }
+        }
         traverse(.text(id), reverse)
         return true
     }
