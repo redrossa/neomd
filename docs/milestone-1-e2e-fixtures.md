@@ -2,6 +2,18 @@
 
 #15 is completed via PR #54; its native/visual/AX criteria remain unverified. The adopted [dependency plan](milestone-1-dependency-plan.md) governs parallel #16–24 triage/implementation, documented holds and narrow catalog integration leases. #14 remains deferred/open. No reviewer or UI/E2E/manual scripted interactions, prototypes or event/host substitutes. Later gates are Debug build and inspected relevant non-interaction units only. Triage stages unique per-story entries with hashes; do not replace this catalog from stale snapshots. Preserve all entries and #36/#38 failures/deferrals. Combined business acceptance remains user-owned. Historical authority statements below are superseded for scheduling, not rewritten as passing evidence.
 
+## M1-18 / #18 — long documents stay responsive
+
+[Issue #18](https://github.com/redrossa/neomd/issues/18) · [validation/allowlist](m1-18-validation.md) · [small inert fixtures and deterministic generator recipe](fixtures/m1-18-performance/README-fixture.md).
+
+Triage **ACCEPTED implementation readiness**, exact base `7217b46ac4d69b532dc67b944f2a45407e6f0570`, runtime `openai-codex/gpt-6-astra/high`. [Performance baseline APPROVED](https://github.com/redrossa/neomd/issues/18#issuecomment-5642959225) resolves the historical hold: this development Mac on macOS 26.2; ~1 MB first readable content within 1 s excluding remote downloads; #36/#38 deferrals extend only to overlapping no-freeze criteria, not repairs here. Actual triage host reports macOS 26.5.1 (25F80), so any results there must remain nonbaseline/informational until coordinator/user reconciliation.
+
+Existing foundations: detached parser/arena/content index, correctness-required cmark global lock, flat ownership/bounded geometry/lazy roots, large-code highlighting budget and asynchronous image fallbacks. Narrow residual scope: avoid the adapter's second leaf-render pass only when there are no reachable footnote occurrences; retain generated-anchor handling when needed. Add semantic regressions and deterministic 1,000,000/10,000,000-byte report/unbroken/code preparation measurements, not a native timing surrogate. No planned reader/native selection/opening/refresh/history edits, new whole-file cap or truncation. Successful full rendering is the selected stress path; a failing unit, new hang or resource failure blocks and requires escalation rather than an undocumented limit.
+
+Packet contains only small templates/controls, a declarative generation recipe and an original static local SVG. Worker implements the test helper; generated megabyte documents stay external/in memory, never committed. Missing remote assets use injected pending/failing completion in units, not real HTTP or a test server. Inspected exact non-interaction selectors and timing protocol are in the validation document. Whole NeoMDTests, native hosts/events, UI/E2E/manual scripted interactions are not authorized.
+
+Worker evidence: **UNRUN at triage**. Record exact-head Debug build, selected-unit nonzero counts/failures/skips, generated hashes and all stage/raw timing results. The 1 s preparation comparison is a documented soft diagnostic; consistent excessive preparation still requires investigation. Preparation measurements do not prove first readable content, scrolling, responsiveness or native offline rendering. Those remain **DEFERRED/UNRUN**; preserve #14 deferral and #36/#38 known failures unchanged. User owns final native/visual/AX testing and milestone business acceptance.
+
 ## M1-21 / #21 — find text in the document
 
 [Issue #21](https://github.com/redrossa/neomd/issues/21) · [complete criteria/validation map](m1-21-validation.md) · [inert find packet](fixtures/m1-21-find/README-fixture.md).

@@ -59,6 +59,8 @@ nonisolated final class CMarkBlockAdapter {
                 drafts[index].anchors.insert(slugger.slug(for: rendered.text), at: 0)
             }
         }
+        // Without reachable references, the first pass already contains final leaf text.
+        guard !occurrences.isEmpty else { return materialize() }
         allocateAnchors()
         // Re-render using the exact allocations. Never reconstruct a generated URL.
         for index in drafts.indices {
