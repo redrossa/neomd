@@ -12,7 +12,8 @@ nonisolated enum DocumentSelectionTargeting {
     }
 
     static func valid(_ rect: CGRect) -> Bool {
-        !rect.isNull && !rect.isEmpty && [rect.minX, rect.minY, rect.maxX, rect.maxY].allSatisfy(\.isFinite)
+        !rect.isNull && !rect.isInfinite && !rect.isEmpty &&
+            [rect.origin.x, rect.origin.y, rect.width, rect.height, rect.maxX, rect.maxY].allSatisfy(\.isFinite)
     }
 
     static func clipped(bounds: CGRect, visible: CGRect, clips: [CGRect]) -> CGRect? {
