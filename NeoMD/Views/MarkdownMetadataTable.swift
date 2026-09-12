@@ -5,6 +5,16 @@ import SwiftUI
 struct MarkdownMetadataTable: View {
     let content: MarkdownFrontMatter.Content
     let theme: ReaderTheme
+    var highlight: DocumentFindHighlight? = nil
+
+    private func text(_ string: String, offset: Int) -> Text {
+        let local: NSRange?
+        if let range = highlight?.range, range.location >= offset,
+           NSMaxRange(range) <= offset + string.utf16.count {
+            local = NSRange(location: range.location - offset, length: range.length)
+        } else { local = nil }
+        return Text(DocumentFindHighlight.applying(local, to: AttributedString(string)))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -12,15 +22,19 @@ struct MarkdownMetadataTable: View {
             case .formatted(let metadata):
                 ForEach(metadata.rows.indices, id: \.self) { index in
                     let row = metadata.rows[index]
+                    let offset = metadata.rows.prefix(index).reduce(0) {
+                        $0 + $1.key.utf16.count + 2 + $1.value.utf16.count + 1
+                    }
                     ViewThatFits(in: .horizontal) {
                         HStack(alignment: .top, spacing: 16) {
-                            Text(verbatim: row.key).fontWeight(.semibold)
+                            text(row.key, offset: offset).fontWeight(.semibold)
                                 .frame(maxWidth: 200, alignment: .leading)
-                            Text(verbatim: row.value).frame(maxWidth: .infinity, alignment: .leading)
+                            text(row.value, offset: offset + row.key.utf16.count + 2)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(verbatim: row.key).fontWeight(.semibold)
-                            Text(verbatim: row.value)
+                            text(row.key, offset: offset).fontWeight(.semibold)
+                            text(row.value, offset: offset + row.key.utf16.count + 2)
                         }
                     }
                     .fixedSize(horizontal: false, vertical: true)
@@ -35,7 +49,7 @@ struct MarkdownMetadataTable: View {
                 Text(verbatim: MarkdownFrontMatter.Content.explanation)
                     .foregroundStyle(.secondary)
                     .padding(.bottom, 8)
-                Text(verbatim: String(source))
+                text(String(source), offset: 0)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }

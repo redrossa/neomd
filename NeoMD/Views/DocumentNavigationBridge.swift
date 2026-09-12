@@ -84,9 +84,9 @@ final class DocumentNavigationBridge {
     /// Makes a target visible in every scroller that clips it, so a focused table
     /// cell is revealed along its own local horizontal extent as well as the
     /// reader's vertical row.
-    private func reveal(_ view: NSView, includingOwner: Bool) {
+    private func reveal(_ view: NSView, rect requestedRect: NSRect? = nil, includingOwner: Bool) {
         var target: NSView = view
-        var rect = view.bounds
+        var rect = requestedRect ?? view.bounds
         for _ in 0..<4 {
             guard let scroll = target.enclosingScrollView else { return }
             if scroll === owner {
@@ -164,6 +164,13 @@ final class DocumentNavigationBridge {
         guard generation == self.generation, textLeaf(id) === view,
               view.window?.firstResponder === view, let traverse else { return false }
         traverse(.text(id), reverse)
+        return true
+    }
+
+    func revealText(_ id: Int, utf16Range: NSRange) -> Bool {
+        guard let view = textLeaf(id) as? MarkdownLinkedImageTextView,
+              let rect = view.findRect(forSourceRange: utf16Range) else { return false }
+        reveal(view, rect: rect, includingOwner: true)
         return true
     }
 
@@ -324,4 +331,5 @@ extension EnvironmentValues {
     @Entry var documentNavigationBridge: DocumentNavigationBridge? = nil
     @Entry var documentNavigationGeneration = 0
     @Entry var documentLeafID: Int? = nil
+    @Entry var documentFindHighlight: DocumentFindHighlight? = nil
 }

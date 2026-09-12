@@ -50,6 +50,12 @@ nonisolated struct RefreshTicket: Equatable, Sendable {
     let revision: UInt64
 }
 
+nonisolated struct DocumentFindCommand: Equatable, Sendable {
+    enum Kind: Equatable, Sendable { case show, next, previous }
+    let kind: Kind
+    let serial: Int
+}
+
 /// Request state is independent of native windows and can be tested without UI.
 @Observable final class DocumentReadSession {
     let id = UUID()
@@ -58,6 +64,22 @@ nonisolated struct RefreshTicket: Equatable, Sendable {
     var prepared: PreparedReadingDocument?
     var notice: String?
     var section: SectionRequest?
+    private(set) var findCommand: DocumentFindCommand?
+    var isFindPresented = false
+    var findQuery = ""
+    @ObservationIgnored private var findSerial = 0
+
+    func requestFind(_ kind: DocumentFindCommand.Kind) {
+        guard isOpen, prepared != nil else { return }
+        findSerial += 1
+        findCommand = DocumentFindCommand(kind: kind, serial: findSerial)
+    }
+
+    func takeFindCommand() -> DocumentFindCommand? {
+        defer { findCommand = nil }
+        guard isOpen, prepared != nil else { return nil }
+        return findCommand
+    }
     /// Quiet background-refresh status, deliberately separate from `notice` so a
     /// transient link or open message is never overwritten or announced again.
     private(set) var refreshStatus: String?
@@ -103,6 +125,9 @@ nonisolated struct RefreshTicket: Equatable, Sendable {
         refreshStatus = nil
         readingPosition = nil
         capture = nil
+        isFindPresented = false
+        findQuery = ""
+        findCommand = nil
         section = fragment.map { SectionRequest(presentation: input.id, serial: token, fragment: $0) }
         return true
     }

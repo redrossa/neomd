@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-final class DocumentWindowController: NSWindowController, NSWindowDelegate {
+final class DocumentWindowController: NSWindowController, NSWindowDelegate, NSUserInterfaceValidations {
     let session: DocumentReadSession
     private let coordinator: DocumentOpeningCoordinator
     private let readerMinimum: CGSize
@@ -58,6 +58,18 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) { coordinator.close(self) }
+
+    @objc func showFindBar(_ sender: Any?) { session.requestFind(.show) }
+    @objc func findNext(_ sender: Any?) { session.requestFind(.next) }
+    @objc func findPrevious(_ sender: Any?) { session.requestFind(.previous) }
+
+    func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+        switch item.action {
+        case #selector(showFindBar(_:)), #selector(findNext(_:)), #selector(findPrevious(_:)):
+            return session.isOpen && session.prepared != nil
+        default: return true
+        }
+    }
 
     @objc func revealDocument(_ sender: Any?) {
         guard let url = session.prepared?.fileURL else { return }

@@ -18,6 +18,7 @@ struct MarkdownBlockView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
     @Environment(\.documentKeyboardOpenURL) private var keyboardOpenURL
+    @Environment(\.documentFindHighlight) private var findHighlight
     @State private var selectedLink = 0
     @Environment(\.documentNavigationBridge) private var navigationBridge
     @Environment(\.documentNavigationGeneration) private var documentGeneration
@@ -102,7 +103,8 @@ struct MarkdownBlockView: View {
     private var blockContent: some View {
         switch block.kind {
         case .metadata(let content):
-            MarkdownMetadataTable(content: content, theme: theme)
+            MarkdownMetadataTable(content: content, theme: theme,
+                                  highlight: findHighlight?.leafID == block.id ? findHighlight : nil)
 
         case .paragraph:
             inlineContent
@@ -151,7 +153,7 @@ struct MarkdownBlockView: View {
                 width: availableWidth, headingLevel: imageHeadingLevel, quoted: quoted, scale: theme.scale,
                 tableCell: tableCell))
         } else {
-            Text(text)
+            Text(findHighlight?.applying(to: text, leafID: block.id) ?? text)
         }
     }
 
@@ -204,6 +206,7 @@ private struct MarkdownCodeBlockView: View {
     let keyboardFocus: FocusState<DocumentReaderFocusTarget?>.Binding
     let pageReader: (DocumentReaderPageDirection) -> Void
 
+    @Environment(\.documentFindHighlight) private var findHighlight
     @State private var scrollPosition = ScrollPosition(edge: .leading)
     @State private var scrollMetrics = CodeBlockScrollMetrics.zero
     @Environment(\.documentNavigationBridge) private var navigationBridge
@@ -212,7 +215,8 @@ private struct MarkdownCodeBlockView: View {
     var body: some View {
         DocumentFocusEffect { inheritedEffectEnabled in
             ScrollView(.horizontal) {
-                Text(theme.presentationText(for: block.text))
+                let text = theme.presentationText(for: block.text)
+                Text(findHighlight?.applying(to: text, leafID: block.id) ?? text)
                     .font(.system(size: NSFont.preferredFont(forTextStyle: .callout).pointSize * theme.scale, design: .monospaced))
                     .fixedSize(horizontal: true, vertical: true)
                     .padding(12)

@@ -41,6 +41,15 @@ final class NativeReaderMenus: NSObject, NSMenuDelegate {
         let edit = menu("Edit")
         add("Copy", #selector(NSText.copy(_:)), key: "c", to: edit)
         add("Select All", #selector(NSText.selectAll(_:)), key: "a", to: edit)
+        edit.addItem(.separator())
+        let find = NSMenu(title: "Find")
+        let findItem = NSMenuItem(title: "Find", action: nil, keyEquivalent: "")
+        findItem.submenu = find
+        edit.addItem(findItem)
+        add("Find…", #selector(DocumentWindowController.showFindBar(_:)), key: "f", to: find)
+        add("Find Next", #selector(DocumentWindowController.findNext(_:)), key: "g", to: find)
+        add("Find Previous", #selector(DocumentWindowController.findPrevious(_:)), key: "g",
+            modifiers: [.command, .shift], to: find)
         let window = menu("Window")
         add("Minimize", #selector(NSWindow.performMiniaturize(_:)), key: "m", to: window)
         add("Zoom", #selector(NSWindow.performZoom(_:)), to: window)
