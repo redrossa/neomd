@@ -1,0 +1,29 @@
+{
+  "format": 1,
+  "status": "PLANNED ORACLES; NOT EXECUTED",
+  "coordinate_system": "UTF-16 half-open fragment-local offsets; normalize nonempty selections to composed-character boundaries",
+  "cases": [
+    {"id":"three-fragment-partial", "fragments":["Alpha bold", "    code\n", "Omega tail"], "separators":["\n\n","\n\n"], "anchor":[0,6], "extent":[2,5], "expected":"bold\n\n    code\n\n\nOmega", "reverse_has_same_text":true},
+    {"id":"table-full", "fixture":"table-order.md", "selection":"entire first table, excluding surrounding blocks", "expected":"H1\tH2\tH3\nA1\tA2\tA3\nB1\t\tB3"},
+    {"id":"table-partial-reverse", "fixture":"table-order.md", "anchor_cell":[2,2], "anchor_offset":1, "extent_cell":[1,1], "extent_offset":1, "expected":"2\tA3\nB1\t\tB"},
+    {"id":"metadata", "fixture":"mixed.md", "selection":"entire formatted metadata block", "expected":"title\tSelection café\nowner\tReader"},
+    {"id":"code-whitespace", "fixture":"mixed.md", "selection":"entire Swift code fragment only", "expected":"\n    let  x = 1  \n\tprint(x)\n\n"},
+    {"id":"hidden-vs-literal", "fixture":"mixed.md", "excluded":"SELECTION-HIDDEN-SENTINEL", "required_literal":"<!--LITERAL-CODE-COMMENT-->", "required_escaped":"*stars*"},
+    {"id":"literal-recovery", "fixture":"recovery.md", "selection":"metadata literal source fragment only", "expected":"---\nbroken: [unterminated\nliteral: \"<!--RECOVERY-LITERAL--> [not a link](nearby.md)\"\n---\n", "note":"Visible explanation is a separate preceding fragment; its exact text comes from the existing recovery presentation, not from Markdown parsing."},
+    {"id":"native-image-states", "source":"before ![alt](absent.png) after", "loading":"before alt (Image loading) after", "unavailable":"before alt (Image unavailable) after", "loaded_copy":"before  after", "note":"Loaded attachment remains one atomic selectable position and contributes zero copy characters. Standalone-image fallback must use its actual view string, not assume native inline status spelling."},
+    {"id":"unicode", "fragments":["e\u0301 日本語 \ud83d\udc69\ud83c\udffd\u200d\ud83d\udcbb tail"], "assertions":["Do not split combining sequence, surrogate pair or ZWJ sequence", "No Unicode normalization or source character rewrite"]},
+    {"id":"refresh-surviving", "before":"refresh-before.md", "after":"refresh-after.md", "selection":"from start of Start endpoint alpha. through end of Cell endpoint omega.", "assertions":["Fresh fragment IDs and table addresses are resolved in the new presentation", "New interior paragraph participates", "No stale callback may set a range in the replacement owner", "No selection state is persisted to reading history"]},
+    {"id":"refresh-missing-or-ambiguous", "recipe":"Use copied before/after strings; delete the endpoint cell or duplicate it with indistinguishable context", "expected":"Clear unresolvable selection; no nearest-reading-position substitution"},
+    {"id":"two-readers-and-unmounted", "recipe":"Two independent pure range states over the same fragment values, with disjoint sets of fake mounted registration records", "assertions":["Changing one range never changes the other", "Copy uses all logical fragments, not only registered leaves", "Remount reprojects the selected slice", "Stale presentation registration is rejected"]}
+  ],
+  "lazy_document_recipe": {
+    "status":"Inert data recipe, not an executable script or an interaction permission",
+    "encoding":"UTF-8 LF",
+    "prefix":"# Lazy selection\n\n",
+    "paragraph_count":256,
+    "paragraph_template":"Passage {n}: selectable alpha, beta and gamma. This deliberately repeated readable paragraph supplies enough document height to leave many lazy roots unmounted.\n\n",
+    "n":"decimal 1 through 256 inclusive",
+    "suffix":"# Lazy end\n\nFinal endpoint.\n",
+    "oracle":"Select between unique Passage 2 and Passage 255 endpoints in the pure projection while only endpoint-neighbour fake records are mounted; all intervening passages remain in extraction. Actual scrolling/highlighting remains deferred."
+  }
+}
