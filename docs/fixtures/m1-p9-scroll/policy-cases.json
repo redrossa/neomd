@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 2,
+  "base": "445ed2b897934d339eb01b750d37b03edf392dce",
+  "predecessorBase": "1738b1d2e9e7f74411f0d63e4aab401c1522109b",
+  "purpose": "Declarative app-policy inputs, not native momentum physics or a proven reproduction",
+  "cases": [
+    {
+      "id": "upward-extent-shrink",
+      "phase": "decelerating",
+      "old": { "viewport": [480, 600], "visibleY": 2400, "contentHeight": 6000 },
+      "new": { "viewport": [480, 600], "visibleY": 2180, "contentHeight": 5400 },
+      "highlight": false,
+      "expected": { "storeLatest": true, "automaticRestore": false, "existingFindReveal": false, "passiveClamp": false }
+    },
+    {
+      "id": "upward-extent-growth",
+      "phase": "decelerating",
+      "old": { "viewport": [480, 600], "visibleY": 1100, "contentHeight": 5400 },
+      "new": { "viewport": [480, 600], "visibleY": 850, "contentHeight": 6200 },
+      "highlight": true,
+      "expected": { "storeLatest": true, "automaticRestore": false, "existingFindReveal": false, "passiveClamp": false }
+    },
+    {
+      "id": "viewport-changes-after-user-takeover",
+      "phase": "decelerating",
+      "old": { "viewport": [480, 600], "visibleY": 850, "contentHeight": 6200 },
+      "new": { "viewport": [480, 564], "visibleY": 740, "contentHeight": 6200 },
+      "highlight": true,
+      "expected": { "storeLatest": true, "automaticRestore": false, "existingFindReveal": false, "replayPreGestureAnchorAtIdle": false }
+    },
+    {
+      "id": "idle-resize",
+      "phase": "idle",
+      "old": { "viewport": [900, 600], "visibleY": 850, "contentHeight": 6200 },
+      "new": { "viewport": [480, 600], "visibleY": 850, "contentHeight": 8200 },
+      "highlight": false,
+      "expected": { "storeLatest": true, "automaticRestoreEligible": true, "preservePreResizeAnchor": true }
+    },
+    {
+      "id": "idle-find-bar-inset",
+      "phase": "idle",
+      "old": { "viewport": [480, 600], "visibleY": 850, "contentHeight": 6200 },
+      "new": { "viewport": [480, 564], "visibleY": 850, "contentHeight": 6200 },
+      "highlight": true,
+      "sizeOwnsRestoration": false,
+      "expected": { "storeLatest": true, "existingFindRevealEligible": true }
+    },
+    {
+      "id": "top-overscroll",
+      "phase": "interacting",
+      "old": { "viewport": [480, 600], "visibleY": 25, "contentHeight": 6200 },
+      "new": { "viewport": [480, 600], "visibleY": -12, "contentHeight": 6200 },
+      "highlight": false,
+      "expected": { "storeLatest": true, "automaticRestore": false, "passiveClamp": false }
+    }
+  ],
+  "continuationCases": [
+    {
+      "id": "first-observed-deceleration",
+      "phase": "decelerating",
+      "previousUserPhaseObserved": false,
+      "viewportChanged": true,
+      "expected": { "userOwnsViewport": true, "automaticRestore": false, "existingFindReveal": false, "invalidateOlderAuthority": true }
+    },
+    {
+      "id": "old-find-result-after-scroll-idle",
+      "phase": "idle",
+      "capturedIntentGeneration": 4,
+      "currentIntentGeneration": 5,
+      "newerIntent": "user-scroll",
+      "queryUnchanged": true,
+      "presentationCurrent": true,
+      "expected": { "mayPublishValidResults": true, "staleReveal": false, "replayAtIdle": false }
+    },
+    {
+      "id": "old-restoration-after-scroll-idle",
+      "phase": "idle",
+      "capturedIntentGeneration": 4,
+      "currentIntentGeneration": 5,
+      "newerIntent": "user-scroll",
+      "expected": { "materializeOldTarget": false, "correctOldAnchor": false, "completeOldRestoration": false }
+    },
+    {
+      "id": "fresh-explicit-find-after-idle",
+      "phase": "idle",
+      "capturedIntentGeneration": 6,
+      "currentIntentGeneration": 6,
+      "intent": "explicit-find-next",
+      "presentationCurrent": true,
+      "selectionDragging": false,
+      "expected": { "explicitRevealEligible": true, "laterUserTakeoverCancels": true }
+    },
+    {
+      "id": "same-generation-replaced-presentation",
+      "phase": "idle",
+      "capturedIntentGeneration": 6,
+      "currentIntentGeneration": 6,
+      "presentationCurrent": false,
+      "expected": { "automaticRestore": false, "staleReveal": false, "completeOldRestoration": false }
+    },
+    {
+      "id": "scroll-idle-does-not-finish-selection",
+      "phase": "idle",
+      "selectionDragging": true,
+      "selectionOperationCurrent": true,
+      "originMounted": false,
+      "interactiveWork": 1,
+      "sizeQueued": true,
+      "viewportChanged": true,
+      "expected": { "automaticRestore": false, "existingFindReveal": false, "readerBusy": true, "consumeQueuedSize": false, "finishSelection": false }
+    },
+    {
+      "id": "selection-finished-and-all-work-drained",
+      "phase": "idle",
+      "selectionDragging": false,
+      "interactiveWork": 0,
+      "sizeQueued": true,
+      "presentationCurrent": true,
+      "sessionOpen": true,
+      "sectionPending": false,
+      "expected": { "reconcileLatestQueuedSizeOnce": true, "captureLatestUserAnchorBeforeReflow": true, "replayPreGestureAnchor": false }
+    }
+  ],
+  "ownershipOracles": {
+    "userOwned": ["tracking", "interacting", "decelerating"],
+    "notUserTakeover": ["idle", "animating"],
+    "staleRestorationAfterUserTakeover": "invalid even after idle",
+    "selectionBusy": "independent of scroll phase; keep owner operation and aggregate busy semantics",
+    "findContinuation": "valid results do not grant stale scrolling authority",
+    "explicitCommands": "fresh intent remains functional; later user takeover invalidates delayed scrolling",
+    "presentation": "closed or replaced presentation never owns a delayed scroll",
+    "capture": "observation only; never creates a ReadingPositionRequest",
+    "duplicateSnapshot": "no duplicate cache work or automatic command"
+  }
+}
