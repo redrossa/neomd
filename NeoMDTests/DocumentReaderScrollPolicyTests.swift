@@ -86,6 +86,32 @@ import Testing
         #expect(DocumentReaderScrollMetrics.zero.clampedVerticalOffset(10) == 0)
     }
 
+    @Test func selectionBusySurvivesScrollIdle() {
+        let preference = ReadingSizePreference()
+        var reflow = ReadingSizeReflow(preference: preference)
+        let cache = DocumentReaderScrollObservation()
+        cache.policy.observe(.decelerating)
+        preference.apply(.increase)
+        preference.apply(.increase)
+        cache.policy.observe(.idle)
+        var captures: [DocumentReadingAnchor] = []
+        for (work, dragging) in [(1, true), (0, true), (1, false)] {
+            let busy = DocumentReaderScrollPolicy.hasReadingActivity(isScrolling: false,
+                interactiveWork: work, selectionDragging: dragging)
+            reflow.reconcile(preference, eligible: !busy) { captures.append(.top) }
+            #expect(busy && reflow.isQueued(preference) && captures.isEmpty)
+        }
+        // Production captures this before draining queued requests, not the old anchor.
+        cache.anchor = .block(id: 4, fraction: 0.7)
+        let busy = DocumentReaderScrollPolicy.hasReadingActivity(isScrolling: false,
+            interactiveWork: 0, selectionDragging: false)
+        for _ in 0..<2 {
+            reflow.reconcile(preference, eligible: !busy) { captures.append(cache.anchor ?? .top) }
+        }
+        #expect(captures == [.block(id: 4, fraction: 0.7)])
+        #expect(reflow.applied == .largest && !reflow.isQueued(preference))
+    }
+
     @Test func captureNeverRequestsRestoration() throws {
         let text = "# Title\n\nBody"
         let input = PreparedReadingDocument(text: text, fileURL: URL(fileURLWithPath: "/tmp/p9-value.md"),

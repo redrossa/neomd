@@ -321,7 +321,8 @@ struct DocumentReaderView: View {
     private var theme: ReaderTheme { ReaderTheme(scale: appliedSize.rawValue) }
 
     private var hasReadingActivity: Bool {
-        isScrolling || interactiveWork > 0 || selection.dragging
+        DocumentReaderScrollPolicy.hasReadingActivity(isScrolling: isScrolling,
+            interactiveWork: interactiveWork, selectionDragging: selection.dragging)
     }
 
     /// Capture before publishing scale: the pending locator owns geometry until
@@ -521,8 +522,9 @@ struct DocumentReaderView: View {
         findCursor = nil
         // An inactive find task must not cancel ordinary opening/navigation.
         guard session.isFindPresented else { return }
-        let intent = scrollObservation.policy.explicitIntent()
         let preservesInitialPosition = initialFindSearch && restoresInitialFindPosition
+        let intent = preservesInitialPosition ? scrollObservation.policy.generation
+            : scrollObservation.policy.explicitIntent()
         beginInteraction(cancelRestoration: !preservesInitialPosition)
         defer { endInteraction() }
         traversalTask?.cancel()
@@ -570,7 +572,6 @@ struct DocumentReaderView: View {
     }
 
     private func dismissFind() {
-        scrollObservation.policy.invalidate()
         session.isFindPresented = false
         findMatches = []
         findCursor = nil

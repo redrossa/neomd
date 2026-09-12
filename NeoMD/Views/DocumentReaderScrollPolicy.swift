@@ -31,4 +31,8 @@ nonisolated struct DocumentReaderScrollPolicy {
     func permitsAutomatic(viewportChanged: Bool, selectionDragging: Bool) -> Bool {
         viewportChanged && !userOwnsViewport && !selectionDragging
     }
+
+    static func hasReadingActivity(isScrolling: Bool, interactiveWork: Int, selectionDragging: Bool) -> Bool {
+        isScrolling || interactiveWork > 0 || selectionDragging
+    }
 }
