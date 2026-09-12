@@ -7,12 +7,15 @@ import Testing
     @Test func userPhasesRejectAutomaticViewportRestoration() {
         for phase: ScrollPhase in [.tracking, .interacting, .decelerating] {
             var policy = DocumentReaderScrollPolicy()
-            #expect(policy.observe(phase)) // Includes a first-observed deceleration.
+            let takeover = policy.observe(phase) // Includes a first-observed deceleration.
+            #expect(takeover)
             #expect(!policy.permitsAutomatic(viewportChanged: true, selectionDragging: false))
-            #expect(!policy.observe(phase))
+            let repeated = policy.observe(phase)
+            #expect(!repeated)
         }
         var policy = DocumentReaderScrollPolicy()
-        #expect(!policy.observe(.animating))
+        let animationTakeover = policy.observe(.animating)
+        #expect(!animationTakeover)
         #expect(policy.permitsAutomatic(viewportChanged: true, selectionDragging: false))
         #expect(!policy.permitsAutomatic(viewportChanged: true, selectionDragging: true))
         #expect(!policy.permitsAutomatic(viewportChanged: false, selectionDragging: false))
