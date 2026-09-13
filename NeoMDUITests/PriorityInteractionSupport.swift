@@ -247,9 +247,12 @@ final class PriorityInteractionSupport {
     }
 
     func leaf(_ text: String, in window: Window) throws -> AXUIElement {
+        // Authored fixture headings retain their native semantic role. Do not
+        // broaden other fragments or substitute AXValue for selected text.
+        let expectedRole = text == "Across blocks" ? "AXHeading" : kAXTextAreaRole
         let candidates = descendants(window.ax).filter {
             attribute($0, kAXValueAttribute) as? String == text
-                && attribute($0, kAXRoleAttribute) as? String == kAXTextAreaRole
+                && attribute($0, kAXRoleAttribute) as? String == expectedRole
         }
         guard candidates.count == 1 else { throw XCTSkip("BLOCKED: exact native text leaf unavailable/ambiguous: \(text.debugDescription)") }
         return candidates[0]
