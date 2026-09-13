@@ -117,6 +117,42 @@ import Testing
         #expect(cancelledLink == nil && cancelled.finished)
     }
 
+    @Test func additionalClickPreservesNilCollapsedAndDirectionalSource() {
+        let selections: [Projection.Selection?] = [nil,
+            .init(anchor: .init(key: a, offset: 2), extent: .init(key: a, offset: 2)),
+            .init(anchor: .init(key: a, offset: 2), extent: .init(key: b, offset: 5)),
+            .init(anchor: .init(key: b, offset: 5), extent: .init(key: a, offset: 2))]
+        for selection in selections {
+            var state = DocumentSelectionState(reader: UUID(), generation: 0, projection: model())
+            _ = state.setSelection(selection, scope: state.scope)
+            var pointer = gesture(&state, activation: .additionalReader)
+            #expect(DocumentSelectionPointerState.defersSelection(extending: false, activation: pointer.activation, link: pointer.link))
+            let completion = pointer.sourceCompletion(operation: state.operation, cancelled: false, selection: state.selection)
+            #expect(completion == .preserve(selection))
+            if case .preserve(let source) = completion { _ = state.setSelection(source, scope: state.scope) }
+            #expect(state.selection == selection)
+            #expect(pointer.finish(operation: state.operation, cancelled: false) != nil)
+            #expect(pointer.sourceCompletion(operation: state.operation, cancelled: false, selection: selection) == .unchanged)
+        }
+    }
+
+    @Test func preservationRejectsDragShiftOrdinaryCancellationAndStaleScopes() {
+        var state = DocumentSelectionState(reader: UUID(), generation: 0, projection: model())
+        for kind in 0..<6 {
+            var pointer = gesture(&state, shift: kind == 1, activation: kind == 2 ? .ordinary : .additionalReader)
+            if kind == 0 { _ = pointer.sample(CGPoint(x: 4, y: 0), operation: state.operation) }
+            if kind == 4 { state.beginOperation() }
+            let current = kind == 5 ? DocumentSelectionState.Operation(
+                scope: .init(reader: UUID(), presentation: UUID(), generation: 1), token: pointer.operation.token) : state.operation
+            #expect(pointer.sourceCompletion(operation: current, cancelled: kind == 3, selection: nil) == .unchanged)
+            let opened = pointer.finish(operation: current, cancelled: kind == 3)
+            #expect((opened != nil) == (kind == 2))
+        }
+        #expect(!DocumentSelectionPointerState.defersSelection(extending: true, activation: .additionalReader, link: URL(string: "file:///example.md")))
+        #expect(!DocumentSelectionPointerState.defersSelection(extending: false, activation: .ordinary, link: URL(string: "file:///example.md")))
+        #expect(!DocumentSelectionPointerState.defersSelection(extending: false, activation: .additionalReader, link: nil))
+    }
+
     @Test func unmountAndStaleTokensDoNotFinishSuccessor() throws {
         var state = DocumentSelectionState(reader: UUID(), generation: 0, projection: model())
         let registered = state.register(a, scope: state.scope)

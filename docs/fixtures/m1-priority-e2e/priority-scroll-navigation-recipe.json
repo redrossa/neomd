@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "kind": "inert triage-owned fixture composition; not executable test code",
+  "destination": "docs/fixtures/m1-priority-e2e/priority-scroll-navigation.md",
+  "destinationBase": "ABSENT; refuse overwrite",
+  "source": "docs/fixtures/m1-p9-scroll/mixed-heights.md",
+  "sourceBytes": 4150,
+  "sourceSHA256": "ff0d21cba1dcc4ec45bff23a6a5cc74dbdd263ab0c1d1a12f8d795e8c8c62ea1",
+  "composition": {
+    "copies": 8,
+    "separatorHex": "0a",
+    "prefixHex": "",
+    "suffixHex": "",
+    "encoding": "preserve source UTF-8 bytes, including its final LF",
+    "baselineBytes": 33207,
+    "baselineSHA256": "09c556b41d3dafdf4d2bf1f6f5dcf48e45993ccff29903a35ca1a7138236e1f8"
+  },
+  "amendmentsBeforeJoining": [
+    {
+      "zeroBasedCopy": 0,
+      "oldUTF8": "AMBER",
+      "newUTF8": "[AMBER](#p9-top-4)",
+      "requiredMatchCountWithinCopy": 1
+    },
+    {
+      "zeroBasedCopy": 4,
+      "oldUTF8": "AMBER",
+      "newUTF8": "AMBER P9-FIFTH-ONLY",
+      "requiredMatchCountWithinCopy": 1
+    }
+  ],
+  "equivalentPatchAfterJoining": "priority-scroll-navigation.patch",
+  "applyRecipeOrPatchNotBoth": true,
+  "outputBytes": 33234,
+  "outputSHA256": "88f03d5174bff5835947df57964fbad1bffe23c471427520f3bf1ae83adfde09",
+  "independentOracles": {
+    "targetFragment": "p9-top-4",
+    "targetOneBasedCopy": 5,
+    "targetHeadingText": "P9 top",
+    "targetHeadingZeroBasedByteOffset": 16617,
+    "targetHeadingOneBasedLine": 365,
+    "uniqueSentinel": "P9-FIFTH-ONLY",
+    "uniqueSentinelCount": 1,
+    "targetFollowingParagraph": "AMBER P9-FIFTH-ONLY is the top sentinel. This is a read-only, local, mixed-height scrolling corpus. End sentinel is an explicit navigation control, not a scrolling trigger. The document contains no images or background network activity.",
+    "launchLinkLabel": "AMBER",
+    "launchLinkLabelUTF16Range": [0, 5],
+    "launchLinkCount": 1,
+    "initialParagraph": "AMBER is the top sentinel. This is a read-only, local, mixed-height scrolling corpus. End sentinel is an explicit navigation control, not a scrolling trigger. The document contains no images or background network activity.",
+    "scrollbarFractionExclusive": [0.3, 0.7],
+    "allEightP9TopHeadingsUnchanged": true,
+    "allOriginalEndAndTopLinkDestinationsUnchanged": true
+  }
+}

@@ -38,7 +38,6 @@ struct DocumentFindBar: View {
         }
         .padding(8)
         .background(.bar)
-        .accessibilityIdentifier("DocumentFindBar")
         .onExitCommand(perform: dismiss)
     }
 }

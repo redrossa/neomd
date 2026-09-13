@@ -85,7 +85,37 @@ User-owned observations after an implementation build (not a worker script):
 
 No source/unit result proves smooth native deceleration or resolves the earlier reported “OnScrollGeometryChange multiple updates” warning. If the symptom persists, return original/sanitized reproduction details and observed geometry/phase/request evidence for new triage; do not silently broaden this repair. #65 must not be declared fixed from model gates alone. #14/#36/#38 deferrals and all historical failed/incomplete evidence are unchanged; no new waiver is granted.
 
-## Worker evidence slot
+## Final worker freeze and bounded evidence
+
+Coordinator authorized the seven exact P8/P9 methods in `m1-priority-e2e-plan.md`, the staged fixture/setup amendments, selection repairs, and the UI-test target's two Debug Apple Development/team settings. This narrow exception supersedes the historical interaction prohibition above only for these checks. Worker runtime: `openai-codex/gpt-6-astra/low`; integration base remains `445ed2b897934d339eb01b750d37b03edf392dce` (PR #66 merged). PR #67 uses Refs #65; coordinator alone integrates and closes issues.
+
+Pre-freeze evidence at `/tmp/neomd-priority-bounded-completion/` records Debug/build-for-testing, seven individually selected UI methods (7 passed, 0 failed/skipped), and 51 inspected units (51 passed, 0 failed/skipped). These were dirty-tree development results, NOT final clean-head gates. All 478 files in its `validated-source-hashes.json` matched before this documentation update. Final evidence is produced after committing this document, without a self-hash follow-up commit: `/tmp/neomd-priority-final-head/` holds commands, exact HEAD, source/product hashes, signature/entitlement checks, results, attachments and process inventories; `/tmp/neomd-priority-final-head-handoff.md` and PR #67 record the resulting exact SHA and actual pass/fail status. Final clean-head execution is **pending at document freeze**, never implied by the earlier pass.
+
+### Repairs and oracle corrections
+
+- Additional-reader plain Command-click defers responder/selection/interactive publication until drag intent; token-bound completion preserves the current source selection, including nil/collapsed/directional selections. A real drag still acquires normal ownership. Window key-status observation invalidates native shared-selection appearance, with weak ownership, generation guards and removal on detach/deinit.
+- Native New menu validation enables the existing picker path except during termination. Removing the find-bar container identifier leaves its actual field/status identities individually exposed. No clipboard action, global appearance mutation, Release telemetry or scrolling architecture was added.
+- Readiness checks reacquire actual owned reader/window/document and visible glyphs rather than trusting existence. Virtual table-cell accessibility ancestry is resolved without inventing geometry or replacing authored text/range oracles. Inactive selection screenshots use owned nonactivating capture; foreground companion placement is a setup correction, not relaxed highlight tolerances.
+- The link-only fixture adds trailing extent while preserving the original selection prefix, link targets and 35 pt landing criterion; see `m1-priority-link-fixture-repair.md`. P9's static eight-copy fixture adds only its internal AMBER link and fifth-copy sentinel; see `m1-p9-internal-navigation-setup.md`. Internal activation replaces external fragment delivery that dropped the fragment. The adopted placement oracle transfers pre-click first-heading/glyph geometry minus the source-defined 32 pt outer padding, with unchanged 2 pt residual and strict interior-fraction gates; it is not a relaxed 40-to-50 pt bound.
+- P9 setup completion now has one bounded 250 ms completion interval after a valid placement sample to establish the same surviving semantic leaf. It does not restart failed setup, change measured input/settle thresholds, or supply guessed offset/height/phase telemetry. Trial two uses a fresh URL in the same reader and therefore does not prove retained warm lazy materialization.
+
+### Frozen-head execution protocol
+
+Use stable DerivedData `NeoMD-65-AXStable`, the existing approved certificate requirements/entitlements, one Xcode invocation and one graphical owner. Run Debug `build build-for-testing`, then each selector once serially with `test-without-building`, `-parallel-testing-enabled NO`, 90 s test allowance and a 240 s command bound:
+
+- `PrioritySelectionUITests/testCrossBlockForwardReverseAndShiftSelection`
+- `PrioritySelectionUITests/testSharedSelectionActiveAndInactiveLight`
+- `PrioritySelectionUITests/testSharedSelectionActiveAndInactiveDark`
+- `PrioritySelectionUITests/testFindHighlightCoexistsWithCrossBlockSelection`
+- `PrioritySelectionUITests/testLinkClickVersusDragAndCommandClick`
+- `PriorityScrollUITests/testGenericUpwardScrollDoesNotSnapBack`
+- `PriorityScrollUITests/testGenericScrollCancelsPendingRestoration`
+
+The 51-unit gate selects only `DocumentReaderLayoutTests`, `ReadingSizeRestorationTests`, `DocumentRefreshCommitTests`, `ReadingHistorySessionTests`, `DocumentReaderScrollPolicyTests`, `DocumentSelectionPointerTests`, `PriorityScrollFixtureTests`, `SelectionWindowActivityObservationTests`, `MarkdownDocumentControllerMenuValidationTests`, and `DocumentFindSessionTests`. Inspect executed trees/nonzero counts, screenshots and range/pixel/geometry attachments, source bytes and mtime after owned Quit, exact binary/PID/window provenance, signatures/entitlements and no surviving owned processes. No broad suites or blind retries; any failed gate blocks a passing-head/push claim.
+
+Historical compile, ownership, readiness, AX/virtual-table, placement and behavior failures remain retained in external evidence and prior handoffs; the final run never reclassifies them as passes. Generic XCUI scrolling does **not** prove physical trackpad momentum, warning disappearance, natural feel or the original symptom resolved. Native phase/clip-offset channels unavailable to the AX-only checks remain unobserved. Physical trackpad trials, other manual/VoiceOver/native coverage, #14/#20/#36/#38 deferrals and final milestone business acceptance remain user-owned and unverified.
+
+## Historical triage worker evidence slot
 
 - Exact tested head / integration base: **UNRUN**.
 - Debug command/log/result: **UNRUN**.

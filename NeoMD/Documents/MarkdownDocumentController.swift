@@ -28,6 +28,13 @@ final class MarkdownDocumentController: NSDocumentController {
         showPicker(newWindow: true)
     }
 
+    override func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(NSDocumentController.newDocument(_:)) {
+            return !openingCoordinator.isTerminating
+        }
+        return super.validateMenuItem(menuItem)
+    }
+
     func scheduleStartupPicker() {
         guard !startupConsumed else { return }
         startupConsumed = true
