@@ -100,8 +100,9 @@ import SwiftUI
     private func finish(_ operation: DocumentSelectionState.Operation) {
         guard state.finishOperation(operation) else { return }
         pointer = nil
+        let wasDragging = dragging
         dragging = false
-        interaction?(false)
+        if wasDragging { interaction?(false) }
     }
 
     func track(event: NSEvent, view: MarkdownLinkedImageTextView, key: Key, window: NSWindow,
@@ -109,11 +110,24 @@ import SwiftUI
                activation: DocumentLinkActivation, open: @escaping (URL, DocumentLinkActivation) -> Void) {
         guard !detached, registration(for: view) != nil else { return }
         finish()
-        window.makeFirstResponder(view)
-        begin(key: key, range: range, extending: event.modifierFlags.contains(.shift), granularity: granularity)
-        guard let operation = state.operation, let initial = state.selection else { return }
+        let extending = event.modifierFlags.contains(.shift)
+        let deferred = DocumentSelectionPointerState.defersSelection(extending: extending, activation: activation, link: link)
+        let initial: DocumentTextProjection.Selection
+        if deferred {
+            // No responder/selection publication or interaction invalidation for a
+            // plain additional-reader click. The token still rejects late events.
+            state.beginOperation()
+            initial = .init(anchor: .init(key: key, offset: range.location),
+                            extent: .init(key: key, offset: NSMaxRange(range)))
+        } else {
+            window.makeFirstResponder(view)
+            begin(key: key, range: range, extending: extending, granularity: granularity)
+            guard let selection = state.selection else { return }
+            initial = selection
+        }
+        guard let operation = state.operation else { return }
         pointer = .init(operation: operation, origin: event.locationInWindow, initial: initial,
-                        extending: event.modifierFlags.contains(.shift), activation: activation, link: link)
+                        extending: extending, activation: activation, link: link)
         defer { finish(operation) }
         while state.operation == operation,
               pointer?.isCurrent(operation: state.operation, ownerCurrent: !detached,
@@ -123,8 +137,28 @@ import SwiftUI
             guard state.operation == operation, !detached, window.isKeyWindow, window.isVisible,
                   bridge?.owner?.window === window else { break }
             let point = next?.locationInWindow ?? window.mouseLocationOutsideOfEventStream
-            if pointer?.sample(point, operation: operation) == true { drag(at: point, window: window) }
+            if pointer?.sample(point, operation: operation) == true {
+                if deferred && !dragging {
+                    guard registration(for: view) != nil else { break }
+                    dragging = true // Reuse this exact operation; never mint a successor.
+                    interaction?(true)
+                    window.makeFirstResponder(view)
+                    guard state.operation == operation, !detached,
+                          bridge?.owner?.window === window else { return }
+                    begin(key: key, range: range, extending: false, granularity: granularity)
+                }
+                drag(at: point, window: window)
+            }
             if next?.type == .leftMouseUp {
+                guard operation.scope == state.scope, state.operation == operation, !detached else { return }
+                if case .preserve(let source) = pointer?.sourceCompletion(operation: state.operation,
+                    cancelled: false, selection: state.selection) {
+                    // Source was never replaced. Publish synchronously before open;
+                    // current display remaps are retained, not rolled back snapshots.
+                    select(source)
+                }
+                guard state.operation == operation, !detached,
+                      window.isKeyWindow, window.isVisible, bridge?.owner?.window === window else { return }
                 let destination = pointer?.finish(operation: operation, cancelled: false)
                 let intent = pointer?.activation ?? activation
                 finish(operation) // A link may replace this presentation synchronously.

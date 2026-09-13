@@ -79,6 +79,7 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
     var open: (URL) -> Void = { _ in }
     var pointerOpen: ((URL, DocumentLinkActivation) -> Void)?
     private let pointerScope = DocumentLinkPointerScope()
+    private let windowActivityObservation = SelectionWindowActivityObservation()
 
     private(set) weak var selectionOwner: DocumentSelectionController?
     private(set) var selectionKey: DocumentTextProjection.Key?
@@ -263,6 +264,10 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        windowActivityObservation.bind(window) { [weak self] in
+            self?.selectionOwner?.invalidateSelectionActivity()
+        }
+        selectionOwner?.invalidateSelectionActivity()
         if input?.code == true { traversalBridge?.registerCodeScroller(for: self, generation: traversalGeneration) }
     }
 
@@ -377,6 +382,7 @@ final class MarkdownLinkedImageTextView: NSTextView, NSTextViewDelegate {
     }
 
     func detach() {
+        windowActivityObservation.stop()
         bindSelection(nil, key: nil)
         applyFindHighlight(range: nil)
         bindTraversal(bridge: nil, id: nil, generation: -1)

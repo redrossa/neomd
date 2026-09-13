@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "status": "UNRUN; independent authored strings, not extracted from the app",
+  "fixture": "selection.md",
+  "indexUnit": "UTF-16; offsets must land on complete grapheme boundaries",
+  "fragments": [
+    {"id": "metadata-title-key", "text": "title", "separatorBefore": ""},
+    {"id": "metadata-title-value", "text": "Selection bridge", "separatorBefore": "\t"},
+    {"id": "metadata-owner-key", "text": "owner", "separatorBefore": "\n"},
+    {"id": "metadata-owner-value", "text": "Reader", "separatorBefore": "\t"},
+    {"id": "heading", "text": "Across blocks", "separatorBefore": "\n\n"},
+    {"id": "alpha", "text": "Alpha bravo charlie.", "separatorBefore": "\n\n"},
+    {"id": "delta", "text": "Delta echo foxtrot.", "separatorBefore": "\n\n"},
+    {"id": "code", "text": "    indented lantern\n\tliteral tab\n", "separatorBefore": "\n\n"},
+    {"id": "table-header-left", "text": "Left", "separatorBefore": "\n\n"},
+    {"id": "table-header-right", "text": "Right", "separatorBefore": "\t"},
+    {"id": "table-row-one-left", "text": "one lantern", "separatorBefore": "\n"},
+    {"id": "table-row-one-right", "text": "two", "separatorBefore": "\t"},
+    {"id": "table-row-two-left", "text": "three", "separatorBefore": "\n"},
+    {"id": "table-row-two-right", "text": "four", "separatorBefore": "\t"},
+    {"id": "links", "text": "Local target and additional reader.", "separatorBefore": "\n\n"},
+    {"id": "omega", "text": "Omega final passage with é and 👩🏽‍💻.", "separatorBefore": "\n\n"}
+  ],
+  "cases": [
+    {
+      "id": "whole-span-forward-and-reverse",
+      "anchor": {"fragment": "metadata-title-value", "offset": 0},
+      "extent": {"fragment": "omega", "offset": "utf16-end"},
+      "expected": "Selection bridge\nowner\tReader\n\nAcross blocks\n\nAlpha bravo charlie.\n\nDelta echo foxtrot.\n\n    indented lantern\n\tliteral tab\n\n\nLeft\tRight\none lantern\ttwo\nthree\tfour\n\nLocal target and additional reader.\n\nOmega final passage with é and 👩🏽‍💻.",
+      "note": "Geometric endpoint feasibility is a precondition, not inferred from post-action selected ranges. If boundary pixels are ambiguous, record pre-action AX insertion indices and independently slice the literal fragments; require all intervening leaves fully selected. Reverse the SAME endpoints."
+    },
+    {
+      "id": "shift-click-alpha-to-four",
+      "anchor": {"fragment": "alpha", "offset": 2},
+      "extent": {"fragment": "table-row-two-right", "offset": 2},
+      "expected": "pha bravo charlie.\n\nDelta echo foxtrot.\n\n    indented lantern\n\tliteral tab\n\n\nLeft\tRight\none lantern\ttwo\nthree\tfo"
+    },
+    {
+      "id": "shift-reverse-before-alpha",
+      "anchor": {"fragment": "alpha", "offset": 2},
+      "extent": {"fragment": "heading", "offset": 7},
+      "expected": "blocks\n\nAl"
+    }
+  ],
+  "limits": [
+    "No Copy or clipboard calls. Aggregate text assembled from independently observed native leaf selections is an observation of ranges, NOT proof of Copy action.",
+    "AX denial/unsupported nonfocused selection attributes is a coverage gap, never a pass from whole-value text.",
+    "Code terminal newline is literal; the following paragraph separator adds two further LF characters.",
+    "Each new run uses its own source copy; both source bytes and mtime must remain unchanged."
+  ]
+}

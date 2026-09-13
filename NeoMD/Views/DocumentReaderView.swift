@@ -35,11 +35,26 @@ struct DocumentReaderView: View {
     // The default Never ID type avoids continuous row-ID tracking; explicit
     // navigation and resize restoration still issue their point/ID requests.
     @State private var scrollPosition = ScrollPosition()
-    @State private var scrollMetrics = DocumentReaderScrollMetrics.zero
-    @State private var blockFrames: [Int: CGRect] = [:]
+    @State private var scrollObservation = DocumentReaderScrollObservation()
+    private var scrollMetrics: DocumentReaderScrollMetrics {
+        get { scrollObservation.metrics }
+        nonmutating set { scrollObservation.metrics = newValue }
+    }
+    private var blockFrames: [Int: CGRect] {
+        get { scrollObservation.frames }
+        nonmutating set { scrollObservation.frames = newValue }
+    }
     @State private var navigationBridge = DocumentNavigationBridge()
     @State private var documentGeneration = 0
-    @State private var readingAnchor: DocumentReadingAnchor?
+    private var readingAnchor: DocumentReadingAnchor? {
+        get { scrollObservation.anchor }
+        nonmutating set { scrollObservation.anchor = newValue }
+    }
+
+    private func permitsScroll(_ intent: Int) -> Bool {
+        scrollObservation.policy.permits(intent, selectionDragging: selection.dragging,
+            presentationCurrent: session.isOpen && session.prepared?.id == prepared.id)
+    }
     @State private var resizeRestoration = DocumentReaderResizeRestoration()
     @FocusState private var keyboardFocus: DocumentReaderFocusTarget?
     @State private var traversalTask: Task<Void, Never>?
@@ -201,6 +216,7 @@ struct DocumentReaderView: View {
             selection.interaction = { active in
                 guard session.prepared?.id == prepared.id else { return }
                 if active {
+                    scrollObservation.policy.invalidate()
                     traversalTask?.cancel()
                     navigationGeneration += 1
                     navigationBridge.cancel()
@@ -209,6 +225,7 @@ struct DocumentReaderView: View {
                 } else { endInteraction() }
             }
             selection.acquire = { key in
+                let intent = scrollObservation.policy.explicitIntent()
                 traversalTask?.cancel()
                 navigationGeneration += 1
                 navigationBridge.cancel()
@@ -219,7 +236,7 @@ struct DocumentReaderView: View {
                     defer { endInteraction() }
                     for _ in 0..<12 {
                         guard !Task.isCancelled, generation == navigationGeneration,
-                              session.prepared?.id == prepared.id else { return }
+                              permitsScroll(intent) else { return }
                         if navigationBridge.focusText(key.leafID, part: key.part) { return }
                         scrollPosition.scrollTo(id: renderedDocument.lazyRootIDs[key.leafID], anchor: .center)
                         try? await Task.sleep(for: .milliseconds(40))
@@ -237,6 +254,7 @@ struct DocumentReaderView: View {
         .onDisappear {
             // This presentation no longer owns the viewport; never leave a stale busy
             // flag behind that would block every later refresh of this viewer.
+            scrollObservation.policy.invalidate()
             selection.detach()
             if session.selectionOwner === selection { session.selectionOwner = nil }
             if session.prepared?.id == prepared.id { session.isUserBusy = false }
@@ -303,7 +321,8 @@ struct DocumentReaderView: View {
     private var theme: ReaderTheme { ReaderTheme(scale: appliedSize.rawValue) }
 
     private var hasReadingActivity: Bool {
-        isScrolling || interactiveWork > 0 || selection.dragging
+        DocumentReaderScrollPolicy.hasReadingActivity(isScrolling: isScrolling,
+            interactiveWork: interactiveWork, selectionDragging: selection.dragging)
     }
 
     /// Capture before publishing scale: the pending locator owns geometry until
@@ -348,6 +367,7 @@ struct DocumentReaderView: View {
     }
 
     private func scrollReaderPage(_ direction: DocumentReaderPageDirection) {
+        scrollObservation.policy.explicitIntent()
         traversalTask?.cancel()
         navigationGeneration += 1
         navigationBridge.cancel()
@@ -373,14 +393,17 @@ struct DocumentReaderView: View {
         from oldMetrics: DocumentReaderScrollMetrics,
         to newMetrics: DocumentReaderScrollMetrics
     ) {
+        guard newMetrics != scrollMetrics else { return }
         let viewportChanged = oldMetrics.viewportSize != newMetrics.viewportSize
-        if viewportChanged {
+        let automaticAllowed = scrollObservation.policy.permitsAutomatic(
+            viewportChanged: viewportChanged, selectionDragging: selection.dragging) && interactiveWork == 0
+        if automaticAllowed {
             traversalTask?.cancel()
             navigationGeneration += 1
             navigationBridge.cancel()
         }
 
-        if viewportChanged, !resizeRestoration.isPending {
+        if automaticAllowed, !resizeRestoration.isPending {
             resizeRestoration.beginIfNeeded(
                 at: readingAnchor
                     ?? DocumentReaderLayout.readingAnchor(
@@ -394,17 +417,18 @@ struct DocumentReaderView: View {
 
         scrollMetrics = newMetrics
 
-        if ReadingSizeReflow.shouldRevealExistingFind(viewportChanged: viewportChanged,
+        if ReadingSizeReflow.shouldRevealExistingFind(viewportChanged: automaticAllowed,
             hasHighlight: currentFindHighlight != nil,
             sizeOwnsRestoration: sizeRestoration && resizeRestoration.isPending) {
             // The find bar changes the viewport too. Reacquire after that layout
             // instead of cancelling the initial reveal and restoring the old spot.
-            revealCurrentFindMatch(cancelRestoration: false)
-        } else if viewportChanged, let generation = resizeRestoration.schedule() {
+            revealCurrentFindMatch(cancelRestoration: false, intent: scrollObservation.policy.generation)
+        } else if automaticAllowed, let generation = resizeRestoration.schedule() {
             syncReadingActivity()
+            let intent = scrollObservation.policy.generation
             Task { @MainActor in
                 try? await Task.sleep(for: Self.resizeRestorationDelay)
-                await restoreReadingPosition(for: generation)
+                await restoreReadingPosition(for: generation, intent: intent)
                 syncReadingActivity()
             }
         } else if !resizeRestoration.isPending {
@@ -414,17 +438,20 @@ struct DocumentReaderView: View {
 
     private func handleScrollPhaseChange(_ phase: ScrollPhase) {
         isScrolling = phase != .idle
-        if phase == .interacting {
+        if scrollObservation.policy.observe(phase) {
             session.cancelReadingPosition()
             traversalTask?.cancel()
             traversalStartID = nil
             navigationGeneration += 1
             navigationBridge.cancel()
             resizeRestoration.cancelForUserScroll()
-        } else if phase == .idle, !resizeRestoration.isPending {
-            updateReadingAnchor()
         }
-        if phase == .idle { reconcileReadingSize(); consumeReadingPosition() }
+        if phase == .idle {
+            // Capture the user's final point before applying the latest queued size.
+            if !resizeRestoration.isPending { updateReadingAnchor() }
+            reconcileReadingSize()
+            consumeReadingPosition()
+        }
         syncReadingActivity()
     }
 
@@ -496,6 +523,8 @@ struct DocumentReaderView: View {
         // An inactive find task must not cancel ordinary opening/navigation.
         guard session.isFindPresented else { return }
         let preservesInitialPosition = initialFindSearch && restoresInitialFindPosition
+        let intent = preservesInitialPosition ? scrollObservation.policy.generation
+            : scrollObservation.policy.explicitIntent()
         beginInteraction(cancelRestoration: !preservesInitialPosition)
         defer { endInteraction() }
         traversalTask?.cancel()
@@ -514,7 +543,8 @@ struct DocumentReaderView: View {
         } onCancel: {
             search.cancel()
         }
-        guard !Task.isCancelled, session.isFindPresented, session.findQuery == query else { return }
+        guard !Task.isCancelled, session.isOpen, session.prepared?.id == prepared.id,
+              session.isFindPresented, session.findQuery == query else { return }
         findIndex = index
         findMatches = matches
         var leaf: Int?
@@ -526,7 +556,7 @@ struct DocumentReaderView: View {
             AccessibilityNotification.Announcement("Not found").post()
         }
         if !preservesInitialPosition || anchor == nil {
-            revealCurrentFindMatch(cancelRestoration: !preservesInitialPosition)
+            revealCurrentFindMatch(cancelRestoration: !preservesInitialPosition, intent: intent)
         }
     }
 
@@ -552,8 +582,9 @@ struct DocumentReaderView: View {
         keyboardFocus = .reader
     }
 
-    private func revealCurrentFindMatch(cancelRestoration: Bool = true) {
-        guard !selection.dragging, let highlight = currentFindHighlight else { return }
+    private func revealCurrentFindMatch(cancelRestoration: Bool = true, intent suppliedIntent: Int? = nil) {
+        let intent = suppliedIntent ?? scrollObservation.policy.explicitIntent()
+        guard permitsScroll(intent), let highlight = currentFindHighlight else { return }
         traversalTask?.cancel()
         navigationGeneration += 1
         navigationBridge.cancel()
@@ -568,7 +599,7 @@ struct DocumentReaderView: View {
             var stablePasses = 0
             for _ in 0..<12 {
                 guard !Task.isCancelled, generation == navigationGeneration,
-                      request == navigationBridge.request else { return }
+                      request == navigationBridge.request, permitsScroll(intent) else { return }
                 if let frame = blockFrames[highlight.leafID] {
                     if navigationBridge.revealText(highlight.leafID, utf16Range: highlight.range) {
                         stablePasses += 1
@@ -585,7 +616,8 @@ struct DocumentReaderView: View {
                 }
                 try? await Task.sleep(for: .milliseconds(50))
             }
-            guard !Task.isCancelled, generation == navigationGeneration else { return }
+            guard !Task.isCancelled, generation == navigationGeneration,
+                  permitsScroll(intent) else { return }
             updateReadingAnchor()
         }
     }
@@ -631,9 +663,10 @@ struct DocumentReaderView: View {
         readingAnchor = request.anchor
         syncReadingActivity()
         guard let generation = resizeRestoration.schedule() else { return }
+        let intent = scrollObservation.policy.generation
         Task { @MainActor in
             try? await Task.sleep(for: Self.resizeRestorationDelay)
-            await restoreReadingPosition(for: generation)
+            await restoreReadingPosition(for: generation, intent: intent)
             syncReadingActivity()
         }
     }
@@ -656,6 +689,7 @@ struct DocumentReaderView: View {
     }
 
     private func navigate(to id: Int?, keyboardDriven: Bool) {
+        let intent = scrollObservation.policy.explicitIntent()
         traversalTask?.cancel()
         traversalStartID = id.flatMap {
             renderedDocument.nodes.indices.contains($0) ? renderedDocument.firstLeafIDs[$0] : nil
@@ -669,20 +703,21 @@ struct DocumentReaderView: View {
         beginInteraction()
         Task { @MainActor in
             defer { endInteraction() }
-            guard generation == navigationGeneration else { return }
+            guard generation == navigationGeneration, permitsScroll(intent) else { return }
             if let id { scrollPosition.scrollTo(id: lazyRoot(for: id), anchor: .top) }
             else { scrollPosition.scrollTo(edge: .top) }
             try? await Task.sleep(for: .milliseconds(100))
             var stablePasses = 0
             for _ in 0..<12 {
-                guard generation == navigationGeneration, !Task.isCancelled else { return }
+                guard generation == navigationGeneration, !Task.isCancelled,
+                      permitsScroll(intent) else { return }
                 if let error = navigationBridge.position(id: id, request: request) {
                     stablePasses = abs(error) <= 1 ? stablePasses + 1 : 0
                     if stablePasses >= 3 { break }
                 } else { stablePasses = 0 }
                 try? await Task.sleep(for: .milliseconds(50))
             }
-            guard generation == navigationGeneration else { return }
+            guard generation == navigationGeneration, permitsScroll(intent) else { return }
             updateReadingAnchor()
             // A Tab press can already have moved focus while lazy layout settles.
             // Never overwrite that newer user choice with the initial reader focus.
@@ -703,6 +738,7 @@ struct DocumentReaderView: View {
     }
 
     private func traverse(from origin: DocumentReaderFocusTarget?, reverse: Bool) {
+        let intent = scrollObservation.policy.explicitIntent()
         traversalTask?.cancel()
         navigationGeneration += 1
         navigationBridge.cancel()
@@ -725,7 +761,7 @@ struct DocumentReaderView: View {
             var index = start
             while candidates.indices.contains(index) {
                 guard !Task.isCancelled, documentGeneration == generation,
-                      navigationBridge.request == request else { return }
+                      navigationBridge.request == request, permitsScroll(intent) else { return }
                 let target = candidates[index]
                 navigationBridge.prepareTraversal(to: target)
                 guard let id = target.leafID else { return }
@@ -735,7 +771,7 @@ struct DocumentReaderView: View {
                 // A bounded acquisition wait, not a success inferred from FocusState.
                 for _ in 0..<12 {
                     guard !Task.isCancelled, documentGeneration == generation,
-                          navigationBridge.request == request else { return }
+                          navigationBridge.request == request, permitsScroll(intent) else { return }
                     if case .text = target, navigationBridge.textLeaf(id) != nil { break }
                     if case .links = target, blockFrames[id] != nil { break }
                     if case .codeBlock = target, navigationBridge.codeOverflow(id) != nil { break }
@@ -743,7 +779,7 @@ struct DocumentReaderView: View {
                     try? await Task.sleep(for: .milliseconds(50))
                 }
                 guard !Task.isCancelled, documentGeneration == generation,
-                      navigationBridge.request == request else { return }
+                      navigationBridge.request == request, permitsScroll(intent) else { return }
                 if case .codeBlock = target, navigationBridge.codeOverflow(id) == false {
                     index += reverse ? -1 : 1
                     continue
@@ -756,7 +792,8 @@ struct DocumentReaderView: View {
                 if case .text = target {
                     keyboardFocus = nil
                     await Task.yield()
-                    guard !Task.isCancelled, navigationBridge.request == request else { return }
+                    guard !Task.isCancelled, navigationBridge.request == request,
+                          permitsScroll(intent) else { return }
                     if navigationBridge.focusText(id) {
                         traversalStartID = id
                     } else {
@@ -769,13 +806,16 @@ struct DocumentReaderView: View {
                     }
                     keyboardFocus = target
                     for _ in 0..<12 {
-                        guard !Task.isCancelled, navigationBridge.request == request else { return }
+                        guard !Task.isCancelled, navigationBridge.request == request,
+                              permitsScroll(intent) else { return }
                         if navigationBridge.hasActionFocus(target) {
                             traversalStartID = id
                             return
                         }
                         try? await Task.sleep(for: .milliseconds(50))
                     }
+                    guard !Task.isCancelled, navigationBridge.request == request,
+                          permitsScroll(intent) else { return }
                     restoreTraversalOrigin(origin)
                     showNotice("Keyboard focus could not reach this block. Try selecting it again.")
                 } else {
@@ -784,10 +824,12 @@ struct DocumentReaderView: View {
                 }
                 return
             }
-            guard !Task.isCancelled, navigationBridge.request == request else { return }
+            guard !Task.isCancelled, navigationBridge.request == request,
+                  permitsScroll(intent) else { return }
             keyboardFocus = nil
             await Task.yield()
-            guard !Task.isCancelled, navigationBridge.request == request else { return }
+            guard !Task.isCancelled, navigationBridge.request == request,
+                  permitsScroll(intent) else { return }
             if !navigationBridge.leaveDocument(reverse: reverse) {
                 // A failed native-control handoff must not silently wrap into the document.
                 restoreTraversalOrigin(origin)
@@ -837,12 +879,14 @@ struct DocumentReaderView: View {
     }
 
     private func updateReadingAnchor() {
-        readingAnchor = DocumentReaderLayout.readingAnchor(
+        let anchor = DocumentReaderLayout.readingAnchor(
             in: blockFrames,
             visibleRect: scrollMetrics.visibleRect,
             isAtTop: scrollMetrics.isAtTop,
             isAtBottom: scrollMetrics.isAtBottom
         )
+        guard anchor != readingAnchor else { return }
+        readingAnchor = anchor
         // Copy the position as content identity, never as this rendering's integer
         // IDs: the next rendering renumbers every node after an insertion.
         guard let readingAnchor,
@@ -853,8 +897,8 @@ struct DocumentReaderView: View {
 
     /// Repositions the semantic point that was at the middle of the viewport before
     /// a resize. Waiting briefly coalesces live-resize and full-screen animation steps.
-    private func restoreReadingPosition(for generation: Int) async {
-        guard let anchor = resizeRestoration.pendingAnchor(
+    private func restoreReadingPosition(for generation: Int, intent: Int) async {
+        guard permitsScroll(intent), !Task.isCancelled, let anchor = resizeRestoration.pendingAnchor(
             for: generation
         ) else { return }
 
@@ -863,7 +907,8 @@ struct DocumentReaderView: View {
         // settled, while bounding the work so restoration cannot form a feedback loop.
         var stablePassCount = 0
         for _ in 0..<12 {
-            guard resizeRestoration.pendingAnchor(for: generation) == anchor else {
+            guard permitsScroll(intent), !Task.isCancelled,
+                  resizeRestoration.pendingAnchor(for: generation) == anchor else {
                 return
             }
 
@@ -903,7 +948,7 @@ struct DocumentReaderView: View {
             try? await Task.sleep(for: .milliseconds(50))
         }
 
-        guard resizeRestoration.complete(
+        guard permitsScroll(intent), !Task.isCancelled, resizeRestoration.complete(
             anchor: anchor,
             for: generation
         ) else { return }
@@ -1077,7 +1122,16 @@ nonisolated struct DocumentReaderResizeRestoration: Equatable, Sendable {
     }
 }
 
-private nonisolated struct DocumentReaderScrollMetrics: Equatable, Sendable {
+/// Passive geometry does not publish SwiftUI state; only this object's identity is retained.
+@MainActor
+final class DocumentReaderScrollObservation {
+    var metrics = DocumentReaderScrollMetrics.zero
+    var frames: [Int: CGRect] = [:]
+    var anchor: DocumentReadingAnchor?
+    var policy = DocumentReaderScrollPolicy()
+}
+
+nonisolated struct DocumentReaderScrollMetrics: Equatable, Sendable {
     static let zero = DocumentReaderScrollMetrics(
         contentHeight: 0,
         viewportSize: .zero,
@@ -1106,7 +1160,7 @@ private nonisolated struct DocumentReaderScrollMetrics: Equatable, Sendable {
         isAtBottom = geometry.visibleRect.maxY >= geometry.contentSize.height - 1
     }
 
-    private init(
+    init(
         contentHeight: CGFloat,
         viewportSize: CGSize,
         visibleRect: CGRect,

@@ -65,6 +65,23 @@ nonisolated struct DocumentSelectionPointerState {
 
     static func handles(primary: Bool, control: Bool) -> Bool { primary && !control }
 
+    /// Reserve pointer identity without changing the source reader until drag intent.
+    static func defersSelection(extending: Bool, activation: DocumentLinkActivation, link: URL?) -> Bool {
+        !extending && activation == .additionalReader && link != nil
+    }
+
+    enum SourceCompletion: Equatable {
+        case unchanged
+        case preserve(DocumentTextProjection.Selection?)
+    }
+
+    func sourceCompletion(operation: DocumentSelectionState.Operation?, cancelled: Bool,
+                          selection: DocumentTextProjection.Selection?) -> SourceCompletion {
+        guard !finished, self.operation == operation, !cancelled, !moved,
+              Self.defersSelection(extending: extending, activation: activation, link: link) else { return .unchanged }
+        return .preserve(selection)
+    }
+
     func isCurrent(operation: DocumentSelectionState.Operation?, ownerCurrent: Bool, windowCurrent: Bool) -> Bool {
         !finished && self.operation == operation && ownerCurrent && windowCurrent
     }
